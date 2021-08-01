@@ -1,7 +1,11 @@
+import torch
+import numpy
+from PIL import Image
 from torchvision import models
 from efficientnet_pytorch import EfficientNet
 
 PRETRAINED_MODELS = {
+"image": {
   "efficientnet_from_name": EfficientNet.from_name,
   "efficientnet_pretrained": EfficientNet.from_pretrained,
   "alexnet": models.alexnet,
@@ -41,20 +45,71 @@ PRETRAINED_MODELS = {
   "mnasnet0-75": models.mnasnet0_75,
   "mnasnet1-0": models.mnasnet1_0,
   "mnasnet1-3": models.mnasnet1_3
+  },
+"video": {
+  
+  }
 }
+
+class Processing:
+  # Define processing methods for different input types, eg video, images,
+  # text, etc... so they can be called later in the Models class in the
+  # __call__ method.
+
+  # Probably also add something like transformation from torchvision.transforms
+  @staticmethod
+  def image_processing(input_path):
+    img = Image.open(input_path).convert('RGB')
+    img = torch.tensor(numpy.asarray(img))
+    img = img.permute(2, 0, 1).unsqueeze(0)
+    return img.float()
+ 
+class Model:
+
+  def __init__(self, model: torch.nn.Module, dtype: str = None):
+    self.model = model
+    self.dtype = dtype
+
+  def data_type(self):
+    return self.dtype
+
+  def available_dtypes(self):
+    """
+    Returns a dict of available data types as keys and the respective
+    processing method as value.
+    """
+    return {'image': Processing.image_processing}
+
+  def get_model(self):
+    return self.model
+
+  def __call__(self, input_path):
+    # Somehow determine input_type as image, video, text, etc...
+    # Kept as image for testing.
+    input_type = "image"
+    assert input_type == self.dtype, "Given {} file, this model only supports {}" \
+      "files.".format(input_type, dtype)
+    input_processor = self.available_dtypes().get(self.dtype, None)
+    input_tensor = input_processor(input_path)
+    return self.model(input_tensor)
+
 
 def load(model: str, pretrained: bool = False, **kwargs):
   if model.split("-")[0] == "efficientnet":
     if pretrained:
-      model_builder = PRETRAINED_MODELS.get("efficientnet_from_pretrained")
-      return model_builder(model, **kwargs)
+      model_builder = PRETRAINED_MODELS["image"].get(
+          "efficientnet_from_pretrained")
+      return Model(model_builder(model, **kwargs), "image")
 
-    model_builder = PRETRAINED_MODELS.get("efficientnet_from_name")
-    return model_builder(model, **kwargs)
+    model_builder = PRETRAINED_MODELS["image"].get("efficientnet_from_name")
+    return Model(model_builder(model, **kwargs), "image")
 
   else:
-    model_builder = PRETRAINED_MODELS.get(model, None)
+    for data_type in PRETRAINED_MODELS.keys():
+      # Assumes there are no two same keys even in two different dtype dicts.
+      model_builder = PRETRAINED_MODELS[data_type].get(model, None)
+      if model_builder != None:
+        break
     if model_builder == None:
       raise KeyError("Model not found in the list")
-
-    return model_builder(pretrained, **kwargs)
+    return Model(model_builder(pretrained, **kwargs), data_type)
