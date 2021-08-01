@@ -1,5 +1,5 @@
 import aibox
 
-model = aibox.load("vgg11-bn")
-print(type(model))
-print(model)
+model = aibox.load("mobilenetv2")
+out = model("./nimblebox.png")
+print(out)
