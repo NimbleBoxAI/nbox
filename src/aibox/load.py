@@ -106,7 +106,7 @@ def load(model: str, pretrained: bool = False, **kwargs):
 
   else:
     for data_type in PRETRAINED_MODELS.keys():
-      # Assumes there are no two same keys even in two different dtype dicts.
+      # Picks the first ket incase of two duplicates
       model_builder = PRETRAINED_MODELS[data_type].get(model, None)
       if model_builder != None:
         break
