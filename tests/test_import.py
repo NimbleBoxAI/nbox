@@ -20,7 +20,7 @@ class ImportTest(unittest.TestCase):
     def test_mobilenetv2_filepath(self):
         import os
         model = aibox.load("mobilenetv2")
-        image = os.path.join(utils.folder(utils.folder(__file__)), "assets", "cat.jpg")
+        image = r"./assets/cat.jpg"
         out = model(image)
 
 if __name__ == '__main__':

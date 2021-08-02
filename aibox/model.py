@@ -1,28 +1,8 @@
-import torch
+import torch 
 from PIL import Image
-import numpy as np
 
+from .processing import Processing
 from aibox import utils
-
-class Processing:
-    # Define processing methods for different input types, eg video, images,
-    # text, etc... so they can be called later in the Models class in the
-    # __call__ method.
-
-    # Probably also add something like transformation from torchvision.transforms
-    @staticmethod
-    def image_processing(input_path):
-        img = Image.open(input_path).convert("RGB")
-        img = torch.tensor(np.asarray(img))
-        img = img.permute(2, 0, 1).unsqueeze(0)
-        return img.float()
-
-    @staticmethod
-    def totensor(image):
-        img = torch.tensor(np.asarray(image))
-        img = img.permute(2, 0, 1).unsqueeze(0)
-        return img.float()
-
 
 class Model:
     def __init__(self, model: torch.nn.Module, dtype: str = None):
@@ -69,4 +49,3 @@ class Model:
     def export(self):
         # creates a FastAPI / Flask folder with all the things required to serve this model
         raise NotImplementedError()
-

@@ -4,10 +4,6 @@ A library that makes using a host of models provided by the opensource community
 
 > The entire purpose of this package is to make inference chill.
 
-# Changelog
-
-- 01/09/2021: Adding pretrained models from `transformers` and add relevant tests in a new branch called `nlp`
-
 ## Things for Repo
 
 - Using [`poetry`](https://python-poetry.org/) for proper package management as @cshubhamrao says.
