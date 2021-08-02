@@ -1,5 +1,4 @@
 import aibox
 
 model = aibox.load("mobilenetv2")
-out = model("./nimblebox.png")
-print(out)
+out = model('./tests/assets/cat.jpg')
