@@ -1,6 +1,6 @@
 # this is too much code, quickly iterate and simplify the process!
 
-from aibox import Model
+from nbox import Model
 
 def is_available(package: str):
     import importlib

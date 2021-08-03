@@ -1,8 +1,8 @@
 import torch 
 from PIL import Image
 
-from aibox import processing
-from aibox import utils
+from nbox import processing
+from nbox import utils
 
 class Model:
     """Nbox.Model class designed for inference"""
