@@ -1,8 +1,8 @@
 import unittest
-import aibox
+import nbox
 from torchvision import models
 
-from aibox import utils
+from nbox import utils
 
 class ImportTest(unittest.TestCase):
 
@@ -13,13 +13,13 @@ class ImportTest(unittest.TestCase):
         print(out)
 
     def test_mobilenetv2_url(self):
-        model = aibox.load("mobilenetv2")
+        model = nbox.load("mobilenetv2")
         image = utils.get_image("https://media.newyorker.com/photos/590971712179605b11ad7a88/16:9/w_1999,h_1124,c_limit/Jabr-AreCatsDomesticated.jpg")
         out = model(image)
 
     def test_mobilenetv2_filepath(self):
         import os
-        model = aibox.load("mobilenetv2")
+        model = nbox.load("mobilenetv2")
         image = r"./assets/cat.jpg"
         out = model(image)
 

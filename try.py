@@ -1,4 +1,5 @@
-import aibox
+import nbox
 
-model = aibox.load("mobilenetv2")
+model = nbox.load("mobilenetv2")
 out = model('./tests/assets/cat.jpg')
+print(out)

@@ -1,7 +1,7 @@
 import transformers
 from efficientnet_pytorch import EfficientNet
 
-from aibox import Model
+from nbox import Model
 
 # --- functions
 

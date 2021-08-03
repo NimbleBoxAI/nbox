@@ -1,8 +1,9 @@
 [tool.poetry]
-name = "aibox"
+name = "nbox"
 version = "0.1.0"
-description = ""
-authors = ["yashbonde <bonde.yash97@gmail.com>"]
+description = "Makes using a host of opensource deep learning algorithms easier"
+authors = ["yashbonde <bonde.yash97@gmail.com>",
+           "Aakash-Kaushik <kaushikaakash7539@gmail.com>"]
 
 [tool.poetry.dependencies]
 python = "^3.9"

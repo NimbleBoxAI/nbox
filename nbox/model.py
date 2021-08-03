@@ -2,7 +2,7 @@ import torch
 from PIL import Image
 
 from .processing import Processing
-from aibox import utils
+from nbox import utils
 
 class Model:
     def __init__(self, model: torch.nn.Module, dtype: str = None):
