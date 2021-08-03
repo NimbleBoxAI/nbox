@@ -1,9 +1,6 @@
-import transformers
-from efficientnet_pytorch import EfficientNet
+# this is too much code, quickly iterate and simplify the process!
 
 from aibox import Model
-
-# --- import checkers
 
 def is_available(package: str):
     import importlib
@@ -13,19 +10,18 @@ def is_available(package: str):
     except ImportError as e:
         return False
 
-# these are the global variables that will be used everywhere
-
-_is_torch_available = is_available("torch")
-_is_tf_available = is_available("tensorflow")
-_is_hfTransformers_available = is_available("transformers")
-
-
-# --- functions
-
+# --- model loader functions: add your things here
 # guide: all models are indexed as follows
 # {
 #   "key": (builder_function, "category")
 # }
+
+def load_efficientnet_pytorch_models():
+    import efficientnet_pytorch
+    return {
+        "efficientnet_pytorch/efficientnet_from_name": (efficientnet_pytorch.EfficientNet.from_name, "image"),
+        "efficientnet_pytorch/efficientnet_pretrained": (efficientnet_pytorch.EfficientNet.from_pretrained, "image"),
+    }
 
 
 def load_torchvision_models():
@@ -86,41 +82,63 @@ def load_torchvision_models():
     }
 
 
-def hf_model_builder(name_or_filepath, **kwargs):
-    # this function takes in the items for generation from user and builds the model
-    return name_or_filepath
-
-def load_hfTransformers_models():
+def hf_model_builder(model, **kwargs):
+    # get the required keys
     import transformers
-    return (hf_model_builder, "transformer")
+    _auto_loaders = {
+        x: getattr(transformers, x) for x in dir(transformers)
+        if x[:4] == "Auto" and x != "AutoConfig"
+    }
+    auto_model_type = model.split("/")[-1]
+    model, auto_model_type, task = model.split("::")
 
+    assert task in ["generation", "masked_lm"], "For now only the following are supported: `generation`, `masked_lm`"
 
+    # initliase the model and tokenizer object
+    tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
+    model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
+    return model, tokenizer, task
 
-### ----- pretrained models master caller
+### ----- pretrained models master index
+# add code based on conditionals, best way is to only include those that
+# have proper model building code like transformers, torchvision, etc.
 
-PRETRAINED_MODELS = {
-    "efficientnet_from_name": (EfficientNet.from_name, "image"),
-    "efficientnet_pretrained": (EfficientNet.from_pretrained, "image"),
-}
+PRETRAINED_MODELS = {}
 
-# load models based on some conditionals like available packages, versions, etc.
-# check out how transformers does not require any package to instantiate
+if is_available("efficientnet_pytorch"):
+    PRETRAINED_MODELS.update(load_efficientnet_pytorch_models())
+
 if is_available("torchvision"):
     PRETRAINED_MODELS.update(load_torchvision_models())
 
 if is_available("transformers"):
-    PRETRAINED_MODELS["transformers"] = load_hfTransformers_models()
-
-# ----
+    PRETRAINED_MODELS["transformers"] = (hf_model_builder, "transformer")
 
 
-def load(model: str, pretrained: bool = False, **kwargs):
-    model_meta = PRETRAINED_MODELS.get(model, None)
-    if model_meta is None:
-        raise IndexError(f"Model: {model} not found in storage!")
-    model_fn, model_type = model_meta
-    return Model(
-        model_fn(pretrained = pretrained),
-        model_type
-    )
+def get_image_models():
+    return {k:v for k,v in list(filter(
+        lambda x: x[1] == "image", PRETRAINED_MODELS
+    ))}
+
+# ---- load function has to manage everything and return Model object properly initialised
+
+def load(model: str, **loader_kwargs):
+    if model.startswith("transformers/"):
+        # remove the leading text 'transformers/'
+        model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)
+        out = Model(
+            model = model,
+            dtype = "transformers",
+            nl_task = task,
+            tokenizer = tokenizer
+        )
+
+    else:
+        model_meta = PRETRAINED_MODELS.get(model, None)
+        if model_meta is None:
+            raise IndexError(f"Model: {model} not found in storage!")
+        
+        out = Model(model, "image")
+    
+    return out
 
