@@ -4,6 +4,12 @@ A library that makes using a host of models provided by the opensource community
 
 > The entire purpose of this package is to make inference chill.
 
+## Installation
+The library is pip installable so just run this and you should be good to go.
+```bash
+pip install nbox
+```
+
 ## Things for Repo
 
 - Using [`poetry`](https://python-poetry.org/) for proper package management as @cshubhamrao says.
