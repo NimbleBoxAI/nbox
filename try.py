@@ -7,3 +7,6 @@ model = nbox.load("mobilenetv2")
 # model = nbox.load("mobilenetv2". pretrained=True)
 out = model('./tests/assets/cat.jpg')
 print(out)
+
+# To access the underlying model, it could be pytorch or tensorflow depending on the model.
+underlying_model = model.get_model()
