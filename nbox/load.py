@@ -96,6 +96,8 @@ def hf_model_builder(model, **kwargs):
 
     # initliase the model and tokenizer object
     tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
+    if not tokenizer.pad_token_id:
+        tokenizer.pad_token = "<|endoftext|>"
     model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
     return model, tokenizer, task
 
@@ -128,8 +130,7 @@ def load(model: str, **loader_kwargs):
         model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)
         out = Model(
             model = model,
-            category = "transformers",
-            nl_task = task,
+            category = "text",
             tokenizer = tokenizer
         )
 
