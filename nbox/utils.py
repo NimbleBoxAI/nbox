@@ -6,12 +6,15 @@ import logging
 from PIL import Image
 
 logging.basicConfig(level="INFO")
-
+def info(x: str, *args):
+  x = str(x)
+  for y in args:
+    x += " " + str(y)
+  logging.info(x)
 
 def fetch(url):
     # efficient loading of URLS
     import os, tempfile, hashlib, requests
-
     fp = os.path.join(tempfile.gettempdir(), hashlib.md5(url.encode("utf-8")).hexdigest())
     if os.path.isfile(fp) and os.stat(fp).st_size > 0:
         with open(fp, "rb") as f:
@@ -23,24 +26,13 @@ def fetch(url):
         os.rename(fp + ".tmp", fp)
     return dat
 
-
 def get_image(file_path_or_url):
     if os.path.exists(file_path_or_url):
         return Image.open(file_path_or_url)
     else:
         return Image.open(io.BytesIO(fetch(file_path_or_url)))
 
-
 def folder(x):
     # get the folder of this file path
     import os
-
     return os.path.split(os.path.abspath(x))[0]
-
-
-def info(x: str, *args):
-  x = str(x)
-  for y in args:
-    x += " " + str(y)
-  logging.info(x)
-

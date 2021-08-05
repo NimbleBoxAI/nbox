@@ -154,10 +154,9 @@ class Model:
                 input_tensor = torch.cat(_t, axis = 0)
             else:
                 pil_img = self.image_parser(input_object)[0]
-                input_tensor = processing.totensor(pil_img)
+                input_tensor = processing.totensor(pil_img)            
+            out =  self.model(input_tensor) # call the model
 
-            # call the model
-            out =  self.model(input_tensor)
         elif self.category == "text":
             # perform parsing for text and pass to the model
             input_dict = self.text_parser(input_object, self.tokenizer)

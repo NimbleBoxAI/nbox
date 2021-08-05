@@ -13,7 +13,10 @@ def is_available(package: str):
 # --- model loader functions: add your things here
 # guide: all models are indexed as follows
 # {
-#   "key": (builder_function, "task_type", "source", "pre", "task", "post")
+#   "key": (builder_function, "category")
+#
+#   # to be moved to
+#   # "key": (builder_function, "task_type", "source", "pre", "task", "post")
 # }
 
 def load_efficientnet_pytorch_models():
@@ -96,6 +99,8 @@ def hf_model_builder(model, **kwargs):
 
     # initliase the model and tokenizer object
     tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
+
+    # TODO: @yashbonde remove GPT hardcoded dependency
     if not tokenizer.pad_token_id:
         tokenizer.pad_token = "<|endoftext|>"
     model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
