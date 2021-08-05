@@ -11,6 +11,6 @@ def image_processing(input_path):
 
 
 def totensor(image):
-    img = torch.tensor(np.asarray(image))
+    img = torch.tensor(np.array(image))
     img = img.permute(2, 0, 1).unsqueeze(0)
     return img.float()

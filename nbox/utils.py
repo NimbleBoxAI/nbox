@@ -2,7 +2,10 @@
 
 import os
 import io
+import logging
 from PIL import Image
+
+logging.basicConfig(level="INFO")
 
 
 def fetch(url):
@@ -33,3 +36,11 @@ def folder(x):
     import os
 
     return os.path.split(os.path.abspath(x))[0]
+
+
+def info(x: str, *args):
+  x = str(x)
+  for y in args:
+    x += " " + str(y)
+  logging.info(x)
+

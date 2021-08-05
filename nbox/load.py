@@ -13,7 +13,7 @@ def is_available(package: str):
 # --- model loader functions: add your things here
 # guide: all models are indexed as follows
 # {
-#   "key": (builder_function, "category")
+#   "key": (builder_function, "task_type", "source", "pre", "task", "post")
 # }
 
 def load_efficientnet_pytorch_models():
@@ -128,7 +128,7 @@ def load(model: str, **loader_kwargs):
         model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)
         out = Model(
             model = model,
-            dtype = "transformers",
+            category = "transformers",
             nl_task = task,
             tokenizer = tokenizer
         )
@@ -137,8 +137,11 @@ def load(model: str, **loader_kwargs):
         model_meta = PRETRAINED_MODELS.get(model, None)
         if model_meta is None:
             raise IndexError(f"Model: {model} not found in storage!")
-        
-        out = Model(model, "image")
+        model_fn, model_meta = model_meta
+        out = Model(
+            model = model_fn(pretrained = True),
+            category = "image"
+        )
     
     return out
 
