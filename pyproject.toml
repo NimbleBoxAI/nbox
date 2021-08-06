@@ -4,7 +4,8 @@ version = "0.1.1"
 description = "Makes using a host of opensource deep learning algorithms easier"
 authors = [
             "Yash Bonde <bonde.yash97@gmail.com>",
-            "Aakash Kaushik <kaushikaakash7539@gmail.com>"
+            "Aakash Kaushik <kaushikaakash7539@gmail.com>",
+            "NBX Research <research@nimblebox.ai>"
           ]
 
 [tool.poetry.dependencies]

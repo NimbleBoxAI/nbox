@@ -5,9 +5,30 @@ A library that makes using a host of models provided by the opensource community
 > The entire purpose of this package is to make inference chill.
 
 ## Installation
+
 The library is pip installable so just run this and you should be good to go.
+
 ```bash
 pip install nbox
+```
+
+## Usage
+
+```python
+import nbox
+
+# As all these models come from the popular frameworks you use such as 
+# torchvision, efficient_pytorch or hf.transformers
+model = nbox.load("torchvision/mobilenetv2", pretrained=False)
+
+# nbox makes inference the priority so you can
+out = model('cat.jpg')                       # pass it image path
+out = model(Image.open('cat.jpg'))           # pass it PIL.Image
+out = model(np.array(Image.open('cat.jpg'))) # pass it numpy arrays
+out = model(['cat.jpg', 'cat.jpg'])          # pass it a list for batch inference
+
+# To access the underlying framework dependent model
+underlying_model = model.get_model()
 ```
 
 ## Things for Repo
