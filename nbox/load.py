@@ -2,13 +2,16 @@
 
 from nbox import Model
 
+
 def is_available(package: str):
     import importlib
+
     try:
         importlib.import_module(package)
         return True
     except ImportError as e:
         return False
+
 
 # --- model loader functions: add your things here
 # guide: all models are indexed as follows
@@ -19,8 +22,10 @@ def is_available(package: str):
 #   # "key": (builder_function, "task_type", "source", "pre", "task", "post")
 # }
 
+
 def load_efficientnet_pytorch_models():
     import efficientnet_pytorch
+
     return {
         "efficientnet_pytorch/efficientnet_from_name": (efficientnet_pytorch.EfficientNet.from_name, "image"),
         "efficientnet_pytorch/efficientnet_pretrained": (efficientnet_pytorch.EfficientNet.from_pretrained, "image"),
@@ -29,6 +34,7 @@ def load_efficientnet_pytorch_models():
 
 def load_torchvision_models():
     import torchvision
+
     return {
         "torchvision/alexnet": (torchvision.models.alexnet, "image"),
         "torchvision/resnet18": (torchvision.models.resnet18, "image"),
@@ -67,8 +73,14 @@ def load_torchvision_models():
         "torchvision/mnasnet0-75": (torchvision.models.mnasnet0_75, "image"),
         "torchvision/mnasnet1-0": (torchvision.models.mnasnet1_0, "image"),
         "torchvision/mnasnet1-3": (torchvision.models.mnasnet1_3, "image"),
-        "torchvision/fasterrcnn_mobilenet_v3_large_fpn": (torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn, "image"),
-        "torchvision/fasterrcnn_mobilenet_v3_large_320_fpn": (torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn, "image"),
+        "torchvision/fasterrcnn_mobilenet_v3_large_fpn": (
+            torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn,
+            "image",
+        ),
+        "torchvision/fasterrcnn_mobilenet_v3_large_320_fpn": (
+            torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn,
+            "image",
+        ),
         "torchvision/fasterrcnn_resnet50_fpn": (torchvision.models.detection.fasterrcnn_resnet50_fpn, "image"),
         "torchvision/maskrcnn_resnet50_fpn": (torchvision.models.detection.maskrcnn_resnet50_fpn, "image"),
         "torchvision/keypointrcnn_resnet50_fpn": (torchvision.models.detection.keypointrcnn_resnet50_fpn, "image"),
@@ -76,7 +88,10 @@ def load_torchvision_models():
         "torchvision/mc3_18": (torchvision.models.video.mc3_18, "image"),
         "torchvision/r3d_18": (torchvision.models.video.r3d_18, "image"),
         "torchvision/r2plus1d_18": (torchvision.models.video.r2plus1d_18, "image"),
-        "torchvision/deeplabv3_mobilenet_v3_large": (torchvision.models.segmentation.deeplabv3_mobilenet_v3_large, "image"),
+        "torchvision/deeplabv3_mobilenet_v3_large": (
+            torchvision.models.segmentation.deeplabv3_mobilenet_v3_large,
+            "image",
+        ),
         "torchvision/deeplabv3_resnet101": (torchvision.models.segmentation.deeplabv3_resnet101, "image"),
         "torchvision/deeplabv3_resnet50": (torchvision.models.segmentation.deeplabv3_resnet50, "image"),
         "torchvision/fcn_resnet50": (torchvision.models.segmentation.fcn_resnet50, "image"),
@@ -88,10 +103,8 @@ def load_torchvision_models():
 def hf_model_builder(model, **kwargs):
     # get the required keys
     import transformers
-    _auto_loaders = {
-        x: getattr(transformers, x) for x in dir(transformers)
-        if x[:4] == "Auto" and x != "AutoConfig"
-    }
+
+    _auto_loaders = {x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"}
     auto_model_type = model.split("/")[-1]
     model, auto_model_type, task = model.split("::")
 
@@ -105,6 +118,7 @@ def hf_model_builder(model, **kwargs):
         tokenizer.pad_token = "<|endoftext|>"
     model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
     return model, tokenizer, task
+
 
 ### ----- pretrained models master index
 # add code based on conditionals, best way is to only include those that
@@ -123,31 +137,23 @@ if is_available("transformers"):
 
 
 def get_image_models():
-    return {k:v for k,v in list(filter(
-        lambda x: x[1] == "image", PRETRAINED_MODELS
-    ))}
+    return {k: v for k, v in list(filter(lambda x: x[1] == "image", PRETRAINED_MODELS))}
+
 
 # ---- load function has to manage everything and return Model object properly initialised
+
 
 def load(model: str, **loader_kwargs):
     if model.startswith("transformers/"):
         # remove the leading text 'transformers/'
         model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)
-        out = Model(
-            model = model,
-            category = "text",
-            tokenizer = tokenizer
-        )
+        out = Model(model=model, category="text", tokenizer=tokenizer)
 
     else:
         model_meta = PRETRAINED_MODELS.get(model, None)
         if model_meta is None:
             raise IndexError(f"Model: {model} not found in storage!")
         model_fn, model_meta = model_meta
-        out = Model(
-            model = model_fn(pretrained = True),
-            category = "image"
-        )
-    
-    return out
+        out = Model(model=model_fn(pretrained=True), category="image")
 
+    return out

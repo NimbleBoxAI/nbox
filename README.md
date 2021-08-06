@@ -17,9 +17,9 @@ pip install nbox
 ```python
 import nbox
 
-# As all these models come from the popular frameworks you use
-# such as torchvision, efficient_pytorch or hf.transformers
-model = nbox.load("mobilenetv2", pretrained=False) # set pretrained=True to use the pre-trained files
+# As all these models come from the popular frameworks you use such as 
+# torchvision, efficient_pytorch or hf.transformers
+model = nbox.load("torchvision/mobilenetv2", pretrained=False)
 
 # nbox makes inference the priority so you can
 out = model('cat.jpg')                       # pass it image path

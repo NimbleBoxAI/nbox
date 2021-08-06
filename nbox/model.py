@@ -11,6 +11,7 @@ from nbox.utils import info
 # These objects are mux, they consume and streamline the output
 # Don't know what mux are? Study electronics.
 
+
 class ImageParser:
     # single unified Image parser that returns PIL.Image objects by
     # consuming multiple differnet data-types
@@ -25,7 +26,8 @@ class ImageParser:
     def handle_numpy(self, obj):
         if obj.dtype == np.float32 or obj.dtype == np.float64:
             info(" - ImageParser - (C)")
-            obj *= 122.5; obj += 122.5
+            obj *= 122.5
+            obj += 122.5
         info(" - ImageParser - (C2)")
         if obj.dtype != np.uint8:
             obj = obj.astype(np.uint8)
@@ -49,18 +51,18 @@ class TextParser:
     # Unified Text parsing engine, returns a list of dictionaries
     def handle_string(self, x, tokenizer):
         info(" - TextParser - (A)")
-        return {k:v.numpy() for k,v in tokenizer(x, return_tensors = "pt").items()}
+        return {k: v.numpy() for k, v in tokenizer(x, return_tensors="pt").items()}
 
-    def handle_numpy(self, x, tokenizer = None):
+    def handle_numpy(self, x, tokenizer=None):
         info(" - TextParser - (B)")
         if x.dtype != np.int32 and x.dtype != np.int64:
             raise ValueError(f"Incorrect datatype for np.array: {x.dtype} | {x.dtype == np.int64}")
         return {"input_ids": x}
 
-    def handle_dict(self, x, tokenizer = None):
+    def handle_dict(self, x, tokenizer=None):
         _x = {}
         info(" - TextParser - (C)")
-        for k,v in x.items():
+        for k, v in x.items():
             if isinstance(v, (list, tuple)) and isinstance(v[0], (list, tuple)):
                 # list of lists -> batch processing
                 info(" - TextParser - (C1)")
@@ -74,7 +76,7 @@ class TextParser:
                 raise ValueError("Cannot parse dict items")
         return _x
 
-    def handle_list_tuples(self, x, tokenizer = None):
+    def handle_list_tuples(self, x, tokenizer=None):
         info(" - TextParser - (D)")
         if isinstance(x[0], int):
             info(" - TextParser - (D1)")
@@ -86,13 +88,13 @@ class TextParser:
             info(" - TextParser - (D3)")
             if tokenizer == None:
                 raise ValueError("tokenizer cannot be None when string input")
-            tokens = tokenizer(x, padding = "longest", return_tensors = "pt")
-            return {k:v.numpy().astype(np.int32) for k,v in tokens.items()}
+            tokens = tokenizer(x, padding="longest", return_tensors="pt")
+            return {k: v.numpy().astype(np.int32) for k, v in tokens.items()}
         else:
             raise ValueError(f"Cannot parse list of item: {type(x[0])}")
         return {"input_ids": np.array(x).astype(np.int32)}
 
-    def __call__(self, x, tokenizer = None):
+    def __call__(self, x, tokenizer=None):
         if isinstance(x, str):
             if tokenizer is None:
                 raise ValueError("tokenizer cannot be None when string input")
@@ -111,22 +113,18 @@ class TextParser:
 
 class Model:
     """Nbox.Model class designed for inference"""
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        category,
-        tokenizer = None
-    ):
+
+    def __init__(self, model: torch.nn.Module, category, tokenizer=None):
         self.model = model
         self.category = category
 
         # initialise all the parsers, like WTH, how bad would it be
         self.image_parser = ImageParser()
         self.text_parser = TextParser()
-        
+
         if self.category not in ["image", "text"]:
             raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
-        
+
         if self.category == "text":
             assert tokenizer != None, "tokenizer cannot be none for a text model!"
             self.tokenizer = tokenizer
@@ -140,8 +138,8 @@ class Model:
         should understand the different usecases and manage accordingly.
 
         The current idea is that what ever the input, based on the category (image, text, audio, smell)
-        it will be parsed through dedicated parsers that can make ingest anything. 
-        
+        it will be parsed through dedicated parsers that can make ingest anything.
+
         The entire purpose of this package is to make inference chill."""
 
         if self.category == "image":
@@ -151,16 +149,16 @@ class Model:
                 for item in input_object:
                     pil_img = self.image_parser(item)[0]
                     _t.append(processing.totensor(pil_img))
-                input_tensor = torch.cat(_t, axis = 0)
+                input_tensor = torch.cat(_t, axis=0)
             else:
                 pil_img = self.image_parser(input_object)[0]
-                input_tensor = processing.totensor(pil_img)            
-            out =  self.model(input_tensor) # call the model
+                input_tensor = processing.totensor(pil_img)
+            out = self.model(input_tensor)  # call the model
 
         elif self.category == "text":
             # perform parsing for text and pass to the model
             input_dict = self.text_parser(input_object, self.tokenizer)
-            input_dict = {k:torch.from_numpy(v) for k,v in input_dict.items()}
+            input_dict = {k: torch.from_numpy(v) for k, v in input_dict.items()}
             out = self.model(**input_dict)
 
         return out
