@@ -6,10 +6,10 @@ import logging
 from PIL import Image
 
 logging.basicConfig(level="INFO")
-def info(x: str, *args):
-  x = str(x)
-  for y in args:
-    x += " " + str(y)
+def info(x, *args):
+  # because logging.info requires formatted strings
+  x = repr(x)
+  x = " ".join([x] + [repr(y) for y in args])
   logging.info(x)
 
 def fetch(url):

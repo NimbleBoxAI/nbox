@@ -12,8 +12,7 @@ from nbox.utils import info
 
 
 class ImageParser:
-    # single unified Image parser that returns PIL.Image objects by
-    # consuming multiple differnet data-types
+    """single unified Image parser that returns PIL.Image objects by consuming multiple differnet data-types"""
     def handle_string(self, x):
         if os.path.exists(x):
             info(" - ImageParser - (A)")
@@ -47,7 +46,7 @@ class ImageParser:
 
 
 class TextParser:
-    # Unified Text parsing engine, returns a list of dictionaries
+    """Unified Text parsing engine, returns a list of dictionaries"""
     def handle_string(self, x, tokenizer):
         info(" - TextParser - (A)")
         return {k: v.numpy() for k, v in tokenizer(x, return_tensors="pt").items()}
