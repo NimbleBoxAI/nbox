@@ -39,7 +39,6 @@ class ImportTest(unittest.TestCase):
         )
         out = model(np.random.randint(low = 0, high = 100, size = (12,)))
 
-
     def test_hf_string_batch(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok = True)
@@ -48,7 +47,6 @@ class ImportTest(unittest.TestCase):
             cache_dir = cache_dir
         )
         out = model(["Hello world", "my foot"])
-
 
     # def test_hf_generation(self):
     #     cache_dir = os.path.join(utils.folder(__file__), "__ignore/")

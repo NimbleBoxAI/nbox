@@ -2,7 +2,6 @@ import os
 import torch
 import numpy as np
 from PIL import Image
-from functools import partial
 
 from nbox import processing
 from nbox.utils import info
