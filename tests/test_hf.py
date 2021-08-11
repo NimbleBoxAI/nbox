@@ -27,7 +27,13 @@ class ImportTest(unittest.TestCase):
             "transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation",
             cache_dir = cache_dir
         )
+        model.eval()
         out = model("Hello world")
+
+        self.assertEqual(
+            out.logits.topk(4).indices.tolist(),
+            [[[16046, 17192, 38361, 43423], [16046, 17192, 38361, 43423]]]
+        )
 
     def test_hf_numpy(self):
         import numpy as np

@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 
 from nbox import processing
-from nbox.utils import info
+from nbox.utils import info, is_available
 
 # ----- parsers
 # These objects are mux, they consume and streamline the output
@@ -26,6 +26,19 @@ class ImageParser:
             info(" - ImageParser - (C)")
             obj *= 122.5
             obj += 122.5
+        info(" - ImageParser - (C2)")
+        if obj.dtype != np.uint8:
+            obj = obj.astype(np.uint8)
+        return [Image.fromarray(obj)]
+
+    def handle_torch_tensor(self, obj):
+        if obj.dtype == torch.float:
+            info(" - ImageParser - (C)")
+            obj *= 122.5
+            obj += 122.5
+            obj = obj.numpy()
+        else:
+            raise ValueError(f"Incorrect datatype for torch.tensor: {obj.dtype}")
         info(" - ImageParser - (C2)")
         if obj.dtype != np.uint8:
             obj = obj.astype(np.uint8)
@@ -92,6 +105,11 @@ class TextParser:
             raise ValueError(f"Cannot parse list of item: {type(x[0])}")
         return {"input_ids": np.array(x).astype(np.int32)}
 
+    def handle_torch_tensor(self, x, tokenizer = None):
+        info(" - Text Parser - (F)")
+        assert x.dtype == torch.long, f"Incorrect datatype for torch.tensor: {x.dtype}"
+        return {"input_ids": x}
+
     def __call__(self, x, tokenizer=None):
         if isinstance(x, str):
             if tokenizer is None:
@@ -103,6 +121,8 @@ class TextParser:
             proc_fn = self.handle_dict
         elif isinstance(x, (list, tuple)):
             proc_fn = self.handle_list_tuples
+        elif is_available("torch") and isinstance(x, torch.Tensor):
+            proc_fn = self.handle_torch_tensor
         else:
             info(" - ImageParser - (E)")
             raise ValueError(f"Cannot process item of dtype: {type(x)}")
@@ -160,6 +180,12 @@ class Model:
             out = self.model(**input_dict)
 
         return out
+
+    def eval(self):
+        self.model.eval()
+
+    def train(self):
+        self.model.train()
 
     def deploy(self, nbx_api_key, machine_id):
         # this is a part of one-click to NBX

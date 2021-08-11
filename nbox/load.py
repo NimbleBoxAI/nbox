@@ -1,17 +1,8 @@
 # this is too much code, quickly iterate and simplify the process!
 
-from nbox import Model
-from nbox import NBXApi
-
-
-def is_available(package: str):
-    import importlib
-
-    try:
-        importlib.import_module(package)
-        return True
-    except ImportError as e:
-        return False
+from nbox.model import Model
+from nbox.api import NBXApi
+from nbox.utils import info, is_available
 
 
 # --- model loader functions: add your things here
@@ -144,17 +135,12 @@ def get_image_models():
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(
-    model: str,
-    nbx_api_key: str = None,
-    cloud_infer: bool = False,
-    **loader_kwargs
-):
+def load(model: str, nbx_api_key: str = None, cloud_infer: bool = False, **loader_kwargs):
     if model.startswith("transformers/"):
         # remove the leading text 'transformers/'
         model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)
         if cloud_infer and nbx_api_key:
-            out = NBXApi(model_key = model, nbx_api_key = nbx_api_key)
+            out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
         else:
             out = Model(model=model, category="text", tokenizer=tokenizer)
 
@@ -164,8 +150,9 @@ def load(
             raise IndexError(f"Model: {model} not found in storage!")
         model_fn, model_meta = model_meta
         if cloud_infer and nbx_api_key:
-            out = NBXApi(model_key = model, nbx_api_key = nbx_api_key)
+            out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
         else:
-            out = Model(model=model_fn(pretrained=True), category="image")
+            model = model_fn(pretrained=True)
+            out = Model(model=model, category="image")
 
     return out
