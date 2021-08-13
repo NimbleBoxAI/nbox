@@ -147,7 +147,8 @@ def load(model: str, nbx_api_key: str = None, cloud_infer: bool = False, **loade
     else:
         model_meta = PRETRAINED_MODELS.get(model, None)
         if model_meta is None:
-            raise IndexError(f"Model: {model} not found in storage!")
+            src = model.split("/")[0]
+            raise IndexError(f"Model: {model} not found, is `{src}` installed")
         model_fn, model_meta = model_meta
         if cloud_infer and nbx_api_key:
             out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
