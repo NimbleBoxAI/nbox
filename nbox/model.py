@@ -150,6 +150,9 @@ class Model:
     def get_model(self):
         return self.model
 
+    def __repr__(self):
+        return f"<nbox.Model: {repr(self.model)} >"
+
     def __call__(self, input_object):
         """This is the most important part of this codebase. The `input_object` can be anything from
         a tensor, an image file, filepath as string, string to process as NLP model. This `__call__`
