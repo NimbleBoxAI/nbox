@@ -3,7 +3,7 @@
 from nbox.model import Model
 from nbox.api import NBXApi
 from nbox.utils import info, is_available
-
+from importlib import util
 
 # --- model loader functions: add your things here
 # guide: all models are indexed as follows
@@ -13,7 +13,6 @@ from nbox.utils import info, is_available
 #   # to be moved to
 #   # "key": (builder_function, "task_type", "source", "pre", "task", "post")
 # }
-
 
 def load_efficientnet_pytorch_models():
     import efficientnet_pytorch
@@ -111,20 +110,19 @@ def hf_model_builder(model, **kwargs):
     model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
     return model, tokenizer, task
 
-
 ### ----- pretrained models master index
 # add code based on conditionals, best way is to only include those that
 # have proper model building code like transformers, torchvision, etc.
 
 PRETRAINED_MODELS = {}
 
-if is_available("efficientnet_pytorch"):
+if util.find_spec("efficientnet_pytorch") is not None:
     PRETRAINED_MODELS.update(load_efficientnet_pytorch_models())
 
-if is_available("torchvision"):
+if util.find_spec("torchvision") is not None:
     PRETRAINED_MODELS.update(load_torchvision_models())
 
-if is_available("transformers"):
+if util.find_spec("transformers") is not None:
     PRETRAINED_MODELS["transformers"] = (hf_model_builder, "transformer")
 
 
@@ -132,7 +130,6 @@ PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
 
 
 # ---- load function has to manage everything and return Model object properly initialised
-
 
 def load(model: str = None, nbx_api_key: str = None, cloud_infer: bool = False, **loader_kwargs):
     """Returns nbox.Model from a model (key), can optionally setup a connection to
@@ -160,6 +157,10 @@ def load(model: str = None, nbx_api_key: str = None, cloud_infer: bool = False, 
     if model_src not in PT_SOURCES:
         raise ValueError(f"Model source: {model_src} not found. Is this package installed!")
 
+    pretrained = loader_kwargs.get("pretrained", False)
+    
+    # this is not the method we want to have, conditionals are horrible if every user has to
+    # this for including their new package.
     if model.startswith("transformers/"):
         # remove the leading text 'transformers/'
         model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)
@@ -168,16 +169,26 @@ def load(model: str = None, nbx_api_key: str = None, cloud_infer: bool = False, 
         else:
             out = Model(model=model, category="text", tokenizer=tokenizer)
 
+    elif model.startswith("efficientnet_pytorch/"):
+        model = model.split("/")[-1]
+        if pretrained:
+            model_meta = PRETRAINED_MODELS["efficientnet_pytorch/efficientnet_pretrained"]
+            model_fn, model_meta = model_meta
+            return Model(model_fn(model), category=model_meta)
+
+        model_meta = PRETRAINED_MODELS["efficientnet_pytorch/efficientnet_from_name"]
+        model_fn, model_meta = model_meta
+        return Model(model_fn(model), category=model_meta)
+
     else:
         model_meta = PRETRAINED_MODELS.get(model, None)
         if model_meta is None:
-            src = model.split("/")[0]
-            raise IndexError(f"Model: {model} not found, is `{src}` installed")
+            raise IndexError(f"Model: {model} not found")
         model_fn, model_meta = model_meta
         if cloud_infer and nbx_api_key:
             out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
         else:
-            model = model_fn(pretrained=True)
+            model = model_fn(pretrained=True if pretrained else False)
             out = Model(model=model, category="image")
 
     return out

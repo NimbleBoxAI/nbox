@@ -38,3 +38,11 @@ underlying_model = model.get_model()
   - When pushing to pypi just do `poetry build && poetry publish` this manages all the things around
 - Install `pytest` and then run `pytest tests/ -v`.
 - Using `black` for formatting, VSCode to the moon.
+
+# License
+
+The code in thist repo is licensed as [BSD 3-Clause](./LICENSE). Please check for individual repositories for licenses. Here are some of them:
+
+- [`torch`](https://github.com/pytorch/pytorch/blob/master/LICENSE)
+- [`transformers`](https://github.com/huggingface/transformers/blob/master/LICENSE)
+- [`efficientnet-pytorch`](https://github.com/lukemelas/EfficientNet-PyTorch/blob/master/LICENSE)
