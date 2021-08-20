@@ -128,14 +128,38 @@ if is_available("transformers"):
     PRETRAINED_MODELS["transformers"] = (hf_model_builder, "transformer")
 
 
-def get_image_models():
-    return {k: v for k, v in list(filter(lambda x: x[1] == "image", PRETRAINED_MODELS))}
+PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
 
 
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model: str, nbx_api_key: str = None, cloud_infer: bool = False, **loader_kwargs):
+def load(model: str = None, nbx_api_key: str = None, cloud_infer: bool = False, **loader_kwargs):
+    """Returns nbox.Model from a model (key), can optionally setup a connection to
+    cloud inference on a Nimblebox instance.
+
+    Args:
+        model (str, optional): key for which to load the model, the structure looks as follows:
+            ```
+            source/(source/key)::<pre::task::post>
+            ```
+            Defaults to None.
+        nbx_api_key (str, optional): Your Nimblebox API key. Defaults to None.
+        cloud_infer (bool, optional): If true uses Nimblebox deployed inference and logs in
+            using `nbx_api_key`. Defaults to False.
+
+    Raises:
+        ValueError: If `source` is not found
+        IndexError: If `source` is found but `source/key` is not found
+
+    Returns:
+        nbox.Model: when using local inference
+        nbox.NBXApi: when using cloud inference
+    """
+    model_src = model.split("/")[0]
+    if model_src not in PT_SOURCES:
+        raise ValueError(f"Model source: {model_src} not found. Is this package installed!")
+
     if model.startswith("transformers/"):
         # remove the leading text 'transformers/'
         model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)

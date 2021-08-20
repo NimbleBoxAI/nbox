@@ -130,9 +130,18 @@ class TextParser:
 
 
 class Model:
-    """Nbox.Model class designed for inference"""
+    def __init__(self, model: torch.nn.Module, category: str, tokenizer=None):
+        """Nbox.Model class designed for inference
 
-    def __init__(self, model: torch.nn.Module, category, tokenizer=None):
+        Args:
+            model (torch.nn.Module): Model to be wrapped
+            category (str): Catogory of the model task
+            tokenizer (optional): Tokenizer model if this is an NLP category. Defaults to None.
+
+        Raises:
+            ValueError: If the category is incorrect
+            AssertionError: When items required for the each category are not available
+        """
         self.model = model
         self.category = category
 
@@ -161,7 +170,14 @@ class Model:
         The current idea is that what ever the input, based on the category (image, text, audio, smell)
         it will be parsed through dedicated parsers that can make ingest anything.
 
-        The entire purpose of this package is to make inference chill."""
+        The entire purpose of this package is to make inference chill.
+
+        Args:
+            input_object (Any): input to be processed
+
+        Returns:
+            Any: currently this is output from the model, so if it is tensors and return dicts.
+        """
 
         if self.category == "image":
             # perform parsing for images
@@ -190,10 +206,25 @@ class Model:
     def train(self):
         self.model.train()
 
-    def deploy(self, nbx_api_key, machine_id):
-        # this is a part of one-click to NBX
+    def deploy(self, nbx_api_key: str, machine_id: str):
+        """Deploy the model on Nimblebox Cloud instance.
+
+        Args:
+            nbx_api_key (str): NBX-API from your profile
+            machine_id (str): machine on which to deploy this thing
+
+        Raises:
+            NotImplementedError
+        """
         raise NotImplementedError()
 
     def export(self, folder_path):
-        # creates a FastAPI / Flask folder with all the things required to serve this model
+        """Creates a FastAPI / Flask folder with all the things required to serve this model
+
+        Args:
+            folder_path (str): folder where to put things in
+
+        Raises:
+            NotImplementedError
+        """
         raise NotImplementedError()

@@ -7,8 +7,19 @@ from nbox.model import ImageParser, TextParser
 
 # main class that calls the NBX Server Models
 class NBXApi:
-    """NBXApi would call the NBX Inference API"""
-    def __init__(self, model_key, nbx_api_key):
+    def __init__(self, model_key: str, nbx_api_key: str):
+        """NBXApi would call the NBX Chill Inference API
+
+        Args:
+            model_key (str): model (str, optional): key for which to load the model, the structure looks as follows:
+                ```
+                source/(source/key)::<pre::task::post>
+                ```
+            nbx_api_key (str): Your Nimblebox API key
+
+        Raises:
+            NotImplementedError
+        """
         self.model_key = model_key
         self.nbx_api_key = nbx_api_key
 
@@ -24,7 +35,14 @@ class NBXApi:
     def __call__(self, input_object):
         """Just like nbox.Model this can consume any input object
 
-        The entire purpose of this package is to make inference chill."""    
+        The entire purpose of this package is to make inference chill.
+        
+        Args:
+            input_object (Any): input to be processed
+
+        Returns:
+            Any: Currently this is output from the API hit
+        """    
         if self.category == "image":
             # perform parsing for images
             if isinstance(input_object, (list, tuple)):
