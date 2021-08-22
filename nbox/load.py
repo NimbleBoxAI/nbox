@@ -184,20 +184,20 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
         nbox.NBXApi: when using cloud inference
     """
     # the input key can also contain instructions on how to run a particular models and so
-    model, src, src_key, model_instr = re.findall(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$", model_key)[0]
+    model_key, src, src_key, model_instr = re.findall(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$", model_key)[0]
     if src not in PT_SOURCES:
         raise ValueError(f"Model source: {src} not found. Is this package installed!")
-    model_fn, model_meta = PRETRAINED_MODELS.get(model, (None, None))
+    model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
     if model_meta is None:
         model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
         if model_meta is None:
-            raise IndexError(f"Model: {model} not found")
+            raise IndexError(f"Model: {model_key} not found")
 
     # load the model based on local infer or cloud infer
+    model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
     if cloud_infer and nbx_api_key:
         out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
     else:
-        model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
         out = Model(model=model, category=model_meta, **model_kwargs)
 
     return out
