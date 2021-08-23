@@ -161,9 +161,32 @@ class Model:
 
         return out
 
-    def deploy(self, nbx_api_key, machine_id):
-        # this is a part of one-click to NBX
-        raise NotImplementedError()
+    def eval(self):
+        self.model.eval()
+
+    def train(self):
+        self.model.train()
+
+    def deploy(self, username: str = None, password: str = None):
+        """Deploy the model on Nimblebox Cloud instance.
+
+        Args:
+            username (str): your NimbleBox.ai username
+            password (str): your NimbleBox.ai password
+
+        Raises:
+            NotImplementedError
+        """
+        # get the access tokens
+        
+
+        # upload the file to a S3
+
+        # trigger deploy on 
+
+        url_endpoint = f()
+
+        raise url_endpoint
 
     def export(self, folder_path):
         # creates a FastAPI / Flask folder with all the things required to serve this model
