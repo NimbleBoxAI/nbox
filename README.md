@@ -4,11 +4,7 @@ A library that makes using a host of models provided by the opensource community
 
 > The entire purpose of this package is to make inference chill.
 
-## Installation
-
-The library is pip installable so just run this and you should be good to go.
-
-```bash
+```
 pip install nbox
 ```
 
@@ -19,7 +15,7 @@ import nbox
 
 # As all these models come from the popular frameworks you use such as 
 # torchvision, efficient_pytorch or hf.transformers
-model = nbox.load("torchvision/mobilenetv2", pretrained=False)
+model = nbox.load("torchvision/mobilenetv2", pretrained = True)
 
 # nbox makes inference the priority so you can
 out = model('cat.jpg')                       # pass it image path
@@ -38,3 +34,11 @@ underlying_model = model.get_model()
   - When pushing to pypi just do `poetry build && poetry publish` this manages all the things around
 - Install `pytest` and then run `pytest tests/ -v`.
 - Using `black` for formatting, VSCode to the moon.
+
+# License
+
+The code in thist repo is licensed as [BSD 3-Clause](./LICENSE). Please check for individual repositories for licenses. Here are some of them:
+
+- [`torch`](https://github.com/pytorch/pytorch/blob/master/LICENSE)
+- [`transformers`](https://github.com/huggingface/transformers/blob/master/LICENSE)
+- [`efficientnet-pytorch`](https://github.com/lukemelas/EfficientNet-PyTorch/blob/master/LICENSE)

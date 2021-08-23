@@ -8,7 +8,7 @@ setuptools.setup(
     version="0.0.1",
     author="NimbleBox.ai",
     author_email="admin@nimblebox.ai",
-    description="Use community models more easily",
+    description="Make inference chill again!",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/NimbleBoxAI/nbox",

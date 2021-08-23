@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 
 from nbox import processing
-from nbox.utils import info
+from nbox.utils import info, is_available
 
 # ----- parsers
 # These objects are mux, they consume and streamline the output
@@ -26,6 +26,19 @@ class ImageParser:
             info(" - ImageParser - (C)")
             obj *= 122.5
             obj += 122.5
+        info(" - ImageParser - (C2)")
+        if obj.dtype != np.uint8:
+            obj = obj.astype(np.uint8)
+        return [Image.fromarray(obj)]
+
+    def handle_torch_tensor(self, obj):
+        if obj.dtype == torch.float:
+            info(" - ImageParser - (C)")
+            obj *= 122.5
+            obj += 122.5
+            obj = obj.numpy()
+        else:
+            raise ValueError(f"Incorrect datatype for torch.tensor: {obj.dtype}")
         info(" - ImageParser - (C2)")
         if obj.dtype != np.uint8:
             obj = obj.astype(np.uint8)
@@ -92,6 +105,11 @@ class TextParser:
             raise ValueError(f"Cannot parse list of item: {type(x[0])}")
         return {"input_ids": np.array(x).astype(np.int32)}
 
+    def handle_torch_tensor(self, x, tokenizer = None):
+        info(" - Text Parser - (F)")
+        assert x.dtype == torch.long, f"Incorrect datatype for torch.tensor: {x.dtype}"
+        return {"input_ids": x}
+
     def __call__(self, x, tokenizer=None):
         if isinstance(x, str):
             if tokenizer is None:
@@ -103,6 +121,8 @@ class TextParser:
             proc_fn = self.handle_dict
         elif isinstance(x, (list, tuple)):
             proc_fn = self.handle_list_tuples
+        elif is_available("torch") and isinstance(x, torch.Tensor):
+            proc_fn = self.handle_torch_tensor
         else:
             info(" - ImageParser - (E)")
             raise ValueError(f"Cannot process item of dtype: {type(x)}")
@@ -110,9 +130,18 @@ class TextParser:
 
 
 class Model:
-    """Nbox.Model class designed for inference"""
+    def __init__(self, model: torch.nn.Module, category: str, tokenizer=None):
+        """Nbox.Model class designed for inference
 
-    def __init__(self, model: torch.nn.Module, category, tokenizer=None):
+        Args:
+            model (torch.nn.Module): Model to be wrapped
+            category (str): Catogory of the model task
+            tokenizer (optional): Tokenizer model if this is an NLP category. Defaults to None.
+
+        Raises:
+            ValueError: If the category is incorrect
+            AssertionError: When items required for the each category are not available
+        """
         self.model = model
         self.category = category
 
@@ -130,6 +159,9 @@ class Model:
     def get_model(self):
         return self.model
 
+    def __repr__(self):
+        return f"<nbox.Model: {repr(self.model)} >"
+
     def __call__(self, input_object):
         """This is the most important part of this codebase. The `input_object` can be anything from
         a tensor, an image file, filepath as string, string to process as NLP model. This `__call__`
@@ -138,7 +170,14 @@ class Model:
         The current idea is that what ever the input, based on the category (image, text, audio, smell)
         it will be parsed through dedicated parsers that can make ingest anything.
 
-        The entire purpose of this package is to make inference chill."""
+        The entire purpose of this package is to make inference chill.
+
+        Args:
+            input_object (Any): input to be processed
+
+        Returns:
+            Any: currently this is output from the model, so if it is tensors and return dicts.
+        """
 
         if self.category == "image":
             # perform parsing for images
@@ -189,5 +228,12 @@ class Model:
         raise url_endpoint
 
     def export(self, folder_path):
-        # creates a FastAPI / Flask folder with all the things required to serve this model
+        """Creates a FastAPI / Flask folder with all the things required to serve this model
+
+        Args:
+            folder_path (str): folder where to put things in
+
+        Raises:
+            NotImplementedError
+        """
         raise NotImplementedError()

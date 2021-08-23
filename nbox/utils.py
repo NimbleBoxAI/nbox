@@ -36,3 +36,9 @@ def folder(x):
     # get the folder of this file path
     import os
     return os.path.split(os.path.abspath(x))[0]
+
+
+def is_available(package: str):
+    import importlib
+    spam_spec = importlib.util.find_spec(package)
+    return spam_spec is not None
