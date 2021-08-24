@@ -119,13 +119,17 @@ def load_transformers_models() -> Dict:
         _auto_loaders = {
             x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"
         }
-        auto_model_type = model.split("/")[-1]
-        auto_model_type, task = model_instr.split("::")
-
-        assert task in [
-            "generation",
-            "masked_lm",
-        ], "For now only the following are supported: `generation`, `masked_lm`"
+        
+        model_instr = model_instr.split("::")
+        if len(model_instr) == 1:
+            auto_model_type = model_instr[0]
+        else:
+            # if the task is given, validate that as well
+            auto_model_type, task = model_instr
+            assert task in [
+                "generation",
+                "masked_lm",
+            ], "For now only the following are supported: `generation`, `masked_lm`"
 
         # initliase the model and tokenizer object
         tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
@@ -199,6 +203,6 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
     if cloud_infer and nbx_api_key:
         out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
     else:
-        out = Model(model=model, category=model_meta, **model_kwargs)
+        out = Model(model=model, category=model_meta, model_key=model_key, **model_kwargs)
 
     return out

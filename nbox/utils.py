@@ -2,9 +2,12 @@
 
 import os
 import io
-import logging
+import hashlib
+import requests
+import tempfile
 from PIL import Image
 
+import logging
 logging.basicConfig(level="INFO")
 def info(x, *args):
   # because logging.info requires formatted strings
@@ -13,8 +16,7 @@ def info(x, *args):
   logging.info(x)
 
 def fetch(url):
-    # efficient loading of URLS
-    import os, tempfile, hashlib, requests
+    # efficient loading of URLs
     fp = os.path.join(tempfile.gettempdir(), hashlib.md5(url.encode("utf-8")).hexdigest())
     if os.path.isfile(fp) and os.stat(fp).st_size > 0:
         with open(fp, "rb") as f:
@@ -34,11 +36,20 @@ def get_image(file_path_or_url):
 
 def folder(x):
     # get the folder of this file path
-    import os
     return os.path.split(os.path.abspath(x))[0]
 
+def join(x, *args):
+    return os.path.join(x, *args)
 
 def is_available(package: str):
     import importlib
     spam_spec = importlib.util.find_spec(package)
     return spam_spec is not None
+
+def get_random_name():
+    import randomname
+    return randomname.generate()
+
+def hash_(item, fn = "md5"):
+    return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
+    
