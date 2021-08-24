@@ -2,9 +2,10 @@
 
 import re
 from typing import Dict
+
 from nbox.model import Model
 from nbox.api import NBXApi
-from importlib import util
+from nbox.utils import is_available
 
 # util functions
 def remove_kwargs(pop_list, **kwargs):
@@ -145,13 +146,13 @@ def load_transformers_models() -> Dict:
 
 PRETRAINED_MODELS = {}
 
-if util.find_spec("efficientnet_pytorch") is not None:
+if is_available("efficientnet_pytorch") is not None:
     PRETRAINED_MODELS.update(load_efficientnet_pytorch_models())
 
-if util.find_spec("torchvision") is not None:
+if is_available("torchvision") is not None:
     PRETRAINED_MODELS.update(load_torchvision_models())
 
-if util.find_spec("transformers") is not None:
+if is_available("transformers") is not None:
     PRETRAINED_MODELS.update(load_transformers_models())
 
 

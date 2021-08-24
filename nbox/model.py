@@ -1,10 +1,12 @@
 import os
 import torch
+import requests
 import numpy as np
 from PIL import Image
 
 from nbox import processing
 from nbox.utils import info, is_available
+from nbox import network
 
 # ----- parsers
 # These objects are mux, they consume and streamline the output
@@ -206,26 +208,38 @@ class Model:
     def train(self):
         self.model.train()
 
-    def deploy(self, username: str = None, password: str = None):
-        """Deploy the model on Nimblebox Cloud instance.
-
-        Args:
-            username (str): your NimbleBox.ai username
-            password (str): your NimbleBox.ai password
-
-        Raises:
-            NotImplementedError
-        """
+    def deploy(
+        self,
+        username: str = None,
+        password: str = None,
+        model_name = None
+    ):
         # get the access tokens
+        access_token = os.getenv("NBX_ACCESS_TOKEN", None)
+        if not access_token:
+            if not (username or password):
+                raise ValueError("No access token found and username and password not provided")
+            r = requests.post(
+                url = "https://nimblebox.ai/api/login",
+                json = {
+                    username: username,
+                    password: password
+                }
+            )
+            r.raise_for_status()
+            out = r.json()
+            access_token = out.get("access_token")
+            if access_token is None:
+                raise ValueError(f"Authentication Failed: {out['error']}")
+
+        # # export the model
+        # model_name = model_name if model_name is not None else 
+        # file_size = os.stat(filepath).st_size
+
         
 
-        # upload the file to a S3
 
-        # trigger deploy on 
-
-        url_endpoint = f()
-
-        raise url_endpoint
+        raise endpoint
 
     def export(self, folder_path):
         """Creates a FastAPI / Flask folder with all the things required to serve this model
