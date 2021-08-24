@@ -1,11 +1,11 @@
 import os
 import unittest
-from functools import cache
+from functools import lru_cache
 
 import nbox
 from nbox import utils
 
-@cache
+@lru_cache
 def get_model(*args, **kwargs):
     return nbox.load(*args, **kwargs)
 
@@ -44,8 +44,8 @@ class DeployTest(unittest.TestCase):
   #   # print(type(out), isinstance(out, dict))
   #   model.deploy(
   #     "hello world",
-  #     username = "bonde.yash97@gmail.com",
-  #     password = "Test@01",
+  #     username = "",
+  #     password = "",
   #     cache_dir = cache_dir,
   #     verbose = False
   #   )
@@ -56,13 +56,10 @@ class DeployTest(unittest.TestCase):
     os.makedirs(cache_dir, exist_ok = True)
     image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
     model = get_model(model_key)
-    # out = model("hello world")
-    # print(type(out), isinstance(out, dict))
-    model.deploy(
+    url = model.deploy(
       image,
       username = "",
       password = "",
       cache_dir = cache_dir,
-      model_name = "chlorohexadine",
       verbose = False
     )

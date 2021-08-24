@@ -4,9 +4,9 @@ import unittest
 import nbox
 from nbox import utils
 
-from functools import cache
+from functools import lru_cache
 
-@cache
+@lru_cache
 def get_model(*args, **kwargs):
     return nbox.load(*args, **kwargs)
 

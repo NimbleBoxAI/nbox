@@ -149,14 +149,13 @@ def load_transformers_models() -> Dict:
 # have proper model building code like transformers, torchvision, etc.
 
 PRETRAINED_MODELS = {}
-
-if is_available("efficientnet_pytorch") is not None:
+if is_available("efficientnet_pytorch"):
     PRETRAINED_MODELS.update(load_efficientnet_pytorch_models())
 
-if is_available("torchvision") is not None:
+if is_available("torchvision"):
     PRETRAINED_MODELS.update(load_torchvision_models())
 
-if is_available("transformers") is not None:
+if is_available("transformers"):
     PRETRAINED_MODELS.update(load_transformers_models())
 
 

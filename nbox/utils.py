@@ -6,6 +6,8 @@ import hashlib
 import requests
 import tempfile
 from PIL import Image
+from time import time
+from datetime import timedelta
 
 import logging
 logging.basicConfig(level="INFO")
@@ -53,3 +55,5 @@ def get_random_name():
 def hash_(item, fn = "md5"):
     return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
     
+def get_time_str(st):
+  return str(timedelta(seconds=int(time() - st)))[2:]

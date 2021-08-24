@@ -130,7 +130,7 @@ class TextParser:
         elif utils.is_available("torch") and isinstance(x, torch.Tensor):
             proc_fn = self.handle_torch_tensor
         else:
-            info(" - ImageParser - (E)")
+            utils.info(" - ImageParser - (E)")
             raise ValueError(f"Cannot process item of dtype: {type(x)}")
         return proc_fn(x, tokenizer)
 
