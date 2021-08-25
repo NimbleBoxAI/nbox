@@ -116,10 +116,8 @@ def load_transformers_models() -> Dict:
     import transformers
 
     def hf_model_builder(model, model_instr, **kwargs):
-        _auto_loaders = {
-            x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"
-        }
-        
+        _auto_loaders = {x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"}
+
         model_instr = model_instr.split("::")
         if len(model_instr) == 1:
             auto_model_type = model_instr[0]

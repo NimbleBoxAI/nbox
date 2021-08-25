@@ -29,20 +29,20 @@ class NBXApi:
         raise NotImplementedError("WIP")
 
     def call(self, data):
-        r = requests.post(self.url + ":predict", json = {"inputs": data})
+        r = requests.post(self.url + ":predict", json={"inputs": data})
         return r.json(), r.headers
 
     def __call__(self, input_object):
         """Just like nbox.Model this can consume any input object
 
         The entire purpose of this package is to make inference chill.
-        
+
         Args:
             input_object (Any): input to be processed
 
         Returns:
             Any: Currently this is output from the API hit
-        """    
+        """
         if self.category == "image":
             # perform parsing for images
             if isinstance(input_object, (list, tuple)):

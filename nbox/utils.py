@@ -10,12 +10,16 @@ from time import time
 from datetime import timedelta
 
 import logging
+
 logging.basicConfig(level="INFO")
+
+
 def info(x, *args):
-  # because logging.info requires formatted strings
-  x = repr(x)
-  x = " ".join([x] + [repr(y) for y in args])
-  logging.info(x)
+    # because logging.info requires formatted strings
+    x = repr(x)
+    x = " ".join([x] + [repr(y) for y in args])
+    logging.info(x)
+
 
 def fetch(url):
     # efficient loading of URLs
@@ -30,30 +34,39 @@ def fetch(url):
         os.rename(fp + ".tmp", fp)
     return dat
 
+
 def get_image(file_path_or_url):
     if os.path.exists(file_path_or_url):
         return Image.open(file_path_or_url)
     else:
         return Image.open(io.BytesIO(fetch(file_path_or_url)))
 
+
 def folder(x):
     # get the folder of this file path
     return os.path.split(os.path.abspath(x))[0]
 
+
 def join(x, *args):
     return os.path.join(x, *args)
 
+
 def is_available(package: str):
     import importlib
+
     spam_spec = importlib.util.find_spec(package)
     return spam_spec is not None
 
+
 def get_random_name():
     import randomname
+
     return randomname.generate()
 
-def hash_(item, fn = "md5"):
+
+def hash_(item, fn="md5"):
     return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
-    
+
+
 def get_time_str(st):
-  return str(timedelta(seconds=int(time() - st)))[2:]
+    return str(timedelta(seconds=int(time() - st)))[2:]

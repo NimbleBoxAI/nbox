@@ -197,7 +197,7 @@ class Model:
             input_dict = {k: torch.from_numpy(v) for k, v in input_dict.items()}
             return input_dict
 
-    def __call__(self, input_object: Any, return_inputs = False):
+    def __call__(self, input_object: Any, return_inputs=False):
         """This is the most important part of this codebase. The `input_object` can be anything from
         a tensor, an image file, filepath as string, string to process as NLP model. This `__call__`
         should understand the different usecases and manage accordingly.
@@ -221,36 +221,44 @@ class Model:
         else:
             assert isinstance(model_input, torch.Tensor)
             out = self.model(model_input)
-        
+
         if return_inputs:
             return out, model_input
         return out
 
     def deploy(
-        self,
-        input_object,
-        username: str = None,
-        password: str = None,
-        model_name: str = None,
-        cache_dir: str = None,
-        verbose: bool = False
-    ) -> Dict:
-        # user will always have to pass the input_object
-        self.eval() # covert to eval mode
-        model_output, model_input = self(input_object, return_inputs = True)
+        self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None
+    ):
+        """[summary]
 
-        # need to convert inputs and outputs to list / tuple 
-        dynamic_axes_dict = {0:'batch_size',}
+        Args:
+            input_object (Any): input to be processed
+            username (str, optional): your username, ignore if on NBX platform. Defaults to None.
+            password (str, optional): your password, ignore if on NBX platform. Defaults to None.
+            model_name (str, optional): custom model name for this model. Defaults to None.
+            cache_dir (str, optional): Custom caching directory. Defaults to None.
+
+        Returns:
+            (str, None): if deployment is successful then push then return the URL endpoint else return None
+        """
+        # user will always have to pass the input_object
+        self.eval()  # covert to eval mode
+        model_output, model_input = self(input_object, return_inputs=True)
+
+        # need to convert inputs and outputs to list / tuple
+        dynamic_axes_dict = {
+            0: "batch_size",
+        }
         if isinstance(model_input, dict):
             args = tuple(model_input.values())
             input_names = tuple(model_input.keys())
-            dynamic_axes = {i:dynamic_axes_dict for i in input_names}
+            dynamic_axes = {i: dynamic_axes_dict for i in input_names}
         elif isinstance(model_input, torch.Tensor):
             args = tuple([model_input])
             input_names = tuple(["input:0"])
             dynamic_axes = {"input:0": dynamic_axes_dict}
 
-        # need to convert inputs and outputs to list / tuple 
+        # need to convert inputs and outputs to list / tuple
         if isinstance(model_output, dict):
             output_names = tuple(model_output.keys())
         elif isinstance(model_output, (list, tuple)):
@@ -270,7 +278,7 @@ class Model:
             password,
             cache_dir,
             model_name,
-            verbose = False
+            verbose=False,
         )
 
         return out
