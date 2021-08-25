@@ -7,13 +7,13 @@ from datetime import timedelta
 from rich.console import Console
 
 class T:
-  clk = "deep_sky_blue1"   # timer
-  st = "bold dark_cyan"    # status + print
-  fail = "bold red"        # fail
-  inp = "bold yellow"      # in-progress
-  nbx = "bold grey0"       # text with NBX at top and bottom
-  rule = "dark_cyan"       # ruler at top and bottom
-  spinner = "moon"         # status theme
+  clk = "deep_sky_blue1"     # timer
+  st = "bold dark_cyan"      # status + print
+  fail = "bold red"          # fail
+  inp = "bold yellow"        # in-progress
+  nbx = "bold bright_black"  # text with NBX at top and bottom
+  rule = "dark_cyan"         # ruler at top and bottom
+  spinner = "weather"        # status theme
 
 # looking at all the colors might be annoying, but it is simplest way to debug and ensure
 # code is working as expected
@@ -57,12 +57,12 @@ console.print(f"[[{T.clk}]{str(timedelta(seconds=int(time() - st)))[2:]}[/{T.clk
 with console.status(f"[{T.st}]Polling while the model is being deployed ...[/{T.st}]", spinner = T.spinner) as status:
   status.update(f"[[{T.clk}]{str(timedelta(seconds=int(time() - st)))[2:]}[/{T.clk}]] Current Status: [{T.inp}]conversion.in-progress")
   sleep(3)
-  if random.random() > 0.2:
+  if random.random() > 0.0:
     console.print(f"[[{T.clk}]{str(timedelta(seconds=int(time() - st)))[2:]}[/{T.clk}]] [{T.st}]Conversion successful")
     sleep(1)
     status.update(f"[[{T.clk}]{str(timedelta(seconds=int(time() - st)))[2:]}[/{T.clk}]] Current Status: [{T.inp}]deployment.in-progress")
     sleep(3)
-    if random.random() > 0.2:
+    if random.random() > 0.0:
       console.print(f"[[{T.clk}]{str(timedelta(seconds=int(time() - st)))[2:]}[/{T.clk}]] [{T.st}]Model is deployed at URL:")
       console.print(f"[[{T.clk}]{str(timedelta(seconds=int(time() - st)))[2:]}[/{T.clk}]]     https://depl.nbx.ai/yashbonde/its-britney-bish")
     else:

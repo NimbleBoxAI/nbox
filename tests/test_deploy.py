@@ -58,8 +58,8 @@ class DeployTest(unittest.TestCase):
     model = get_model(model_key)
     url = model.deploy(
       image,
-      username = "",
-      password = "",
+      username = "prodigy",
+      password = "Test@02",
       cache_dir = cache_dir,
       verbose = False
     )
