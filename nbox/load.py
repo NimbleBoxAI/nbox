@@ -1,9 +1,17 @@
-# this is too much code, quickly iterate and simplify the process!
+# singluar loader file for all models in nbox
 
+import re
+from typing import Dict
 from nbox.model import Model
 from nbox.api import NBXApi
-from nbox.utils import info, is_available
 from importlib import util
+
+# util functions
+def remove_kwargs(pop_list, **kwargs):
+    for p in pop_list:
+        kwargs.pop(p)
+    return kwargs
+
 
 # --- model loader functions: add your things here
 # guide: all models are indexed as follows
@@ -13,102 +21,123 @@ from importlib import util
 #   # to be moved to
 #   # "key": (builder_function, "task_type", "source", "pre", "task", "post")
 # }
+#
+# Structure of each loader function looks as follows:
+# def loader_fn() -> <dict as above>
+#
+# Each model builder function looks as follows:
+# def model_builder() -> (model, model_kwargs)
 
-def load_efficientnet_pytorch_models():
+
+def load_efficientnet_pytorch_models(pop_kwargs=["model_instr"]) -> Dict:
     import efficientnet_pytorch
 
-    return {
-        "efficientnet_pytorch/efficientnet_from_name": (efficientnet_pytorch.EfficientNet.from_name, "image"),
-        "efficientnet_pytorch/efficientnet_pretrained": (efficientnet_pytorch.EfficientNet.from_pretrained, "image"),
-    }
+    def model_builder(pretrained=False, **kwargs):
+        if pretrained:
+            model_fn = efficientnet_pytorch.EfficientNet.from_pretrained
+        else:
+            model_fn = efficientnet_pytorch.EfficientNet.from_name
+
+        kwargs = remove_kwargs(pop_kwargs, **kwargs)
+        return model_fn(**kwargs), {}
+
+    return {"efficientnet_pytorch/efficientnet": (model_builder, "image")}
 
 
-def load_torchvision_models():
+def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
     import torchvision
 
-    return {
-        "torchvision/alexnet": (torchvision.models.alexnet, "image"),
-        "torchvision/resnet18": (torchvision.models.resnet18, "image"),
-        "torchvision/resnet34": (torchvision.models.resnet34, "image"),
-        "torchvision/resnet50": (torchvision.models.resnet50, "image"),
-        "torchvision/resnet101": (torchvision.models.resnet101, "image"),
-        "torchvision/resnet152": (torchvision.models.resnet152, "image"),
-        "torchvision/vgg11": (torchvision.models.vgg11, "image"),
-        "torchvision/vgg11-bn": (torchvision.models.vgg11_bn, "image"),
-        "torchvision/vgg13": (torchvision.models.vgg13, "image"),
-        "torchvision/vgg13-bn": (torchvision.models.vgg13_bn, "image"),
-        "torchvision/vgg16": (torchvision.models.vgg16, "image"),
-        "torchvision/vgg16-bn": (torchvision.models.vgg16_bn, "image"),
-        "torchvision/vgg19": (torchvision.models.vgg19, "image"),
-        "torchvision/vgg19-bn": (torchvision.models.vgg19_bn, "image"),
-        "torchvision/squeezenet1": (torchvision.models.squeezenet1_0, "image"),
-        "torchvision/squeezenet1-1": (torchvision.models.squeezenet1_1, "image"),
-        "torchvision/densenet121": (torchvision.models.densenet121, "image"),
-        "torchvision/densenet161": (torchvision.models.densenet161, "image"),
-        "torchvision/densenet169": (torchvision.models.densenet169, "image"),
-        "torchvision/densenet201": (torchvision.models.densenet201, "image"),
-        "torchvision/inceptionv3": (torchvision.models.inception_v3, "image"),
-        "torchvision/googlenet": (torchvision.models.googlenet, "image"),
-        "torchvision/shufflenetv2-0.5": (torchvision.models.shufflenet_v2_x0_5, "image"),
-        "torchvision/shufflenetv2-1.0": (torchvision.models.shufflenet_v2_x1_0, "image"),
-        "torchvision/shufflenetv2-1.5": (torchvision.models.shufflenet_v2_x1_5, "image"),
-        "torchvision/shufflenetv2-2.0": (torchvision.models.shufflenet_v2_x2_0, "image"),
-        "torchvision/mobilenetv2": (torchvision.models.mobilenet_v2, "image"),
-        "torchvision/mobilenetv3-small": (torchvision.models.mobilenet_v3_small, "image"),
-        "torchvision/mobilenetv3-large": (torchvision.models.mobilenet_v3_large, "image"),
-        "torchvision/resnext50": (torchvision.models.resnext50_32x4d, "image"),
-        "torchvision/resnext101": (torchvision.models.resnext101_32x8d, "image"),
-        "torchvision/wide-resnet50": (torchvision.models.wide_resnet50_2, "image"),
-        "torchvision/wide-resnet101": (torchvision.models.wide_resnet101_2, "image"),
-        "torchvision/mnasnet0-5": (torchvision.models.mnasnet0_5, "image"),
-        "torchvision/mnasnet0-75": (torchvision.models.mnasnet0_75, "image"),
-        "torchvision/mnasnet1-0": (torchvision.models.mnasnet1_0, "image"),
-        "torchvision/mnasnet1-3": (torchvision.models.mnasnet1_3, "image"),
-        "torchvision/fasterrcnn_mobilenet_v3_large_fpn": (
-            torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn,
-            "image",
-        ),
-        "torchvision/fasterrcnn_mobilenet_v3_large_320_fpn": (
-            torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn,
-            "image",
-        ),
-        "torchvision/fasterrcnn_resnet50_fpn": (torchvision.models.detection.fasterrcnn_resnet50_fpn, "image"),
-        "torchvision/maskrcnn_resnet50_fpn": (torchvision.models.detection.maskrcnn_resnet50_fpn, "image"),
-        "torchvision/keypointrcnn_resnet50_fpn": (torchvision.models.detection.keypointrcnn_resnet50_fpn, "image"),
-        "torchvision/retinanet_resnet50_fpn": (torchvision.models.detection.retinanet_resnet50_fpn, "image"),
-        "torchvision/mc3_18": (torchvision.models.video.mc3_18, "image"),
-        "torchvision/r3d_18": (torchvision.models.video.r3d_18, "image"),
-        "torchvision/r2plus1d_18": (torchvision.models.video.r2plus1d_18, "image"),
-        "torchvision/deeplabv3_mobilenet_v3_large": (
-            torchvision.models.segmentation.deeplabv3_mobilenet_v3_large,
-            "image",
-        ),
-        "torchvision/deeplabv3_resnet101": (torchvision.models.segmentation.deeplabv3_resnet101, "image"),
-        "torchvision/deeplabv3_resnet50": (torchvision.models.segmentation.deeplabv3_resnet50, "image"),
-        "torchvision/fcn_resnet50": (torchvision.models.segmentation.fcn_resnet50, "image"),
-        "torchvision/fcn_resnet101": (torchvision.models.segmentation.fcn_resnet101, "image"),
-        "torchvision/lraspp_mobilenet_v3_large": (torchvision.models.segmentation.lraspp_mobilenet_v3_large, "image"),
-    }
+    def model_builder(model, pretrained=False, **kwargs):
+        model_fn = {
+            "alexnet": torchvision.models.alexnet,
+            "resnet18": torchvision.models.resnet18,
+            "resnet34": torchvision.models.resnet34,
+            "resnet50": torchvision.models.resnet50,
+            "resnet101": torchvision.models.resnet101,
+            "resnet152": torchvision.models.resnet152,
+            "vgg11": torchvision.models.vgg11,
+            "vgg11-bn": torchvision.models.vgg11_bn,
+            "vgg13": torchvision.models.vgg13,
+            "vgg13-bn": torchvision.models.vgg13_bn,
+            "vgg16": torchvision.models.vgg16,
+            "vgg16-bn": torchvision.models.vgg16_bn,
+            "vgg19": torchvision.models.vgg19,
+            "vgg19-bn": torchvision.models.vgg19_bn,
+            "squeezenet1": torchvision.models.squeezenet1_0,
+            "squeezenet1-1": torchvision.models.squeezenet1_1,
+            "densenet121": torchvision.models.densenet121,
+            "densenet161": torchvision.models.densenet161,
+            "densenet169": torchvision.models.densenet169,
+            "densenet201": torchvision.models.densenet201,
+            "inceptionv3": torchvision.models.inception_v3,
+            "googlenet": torchvision.models.googlenet,
+            "shufflenetv2-0.5": torchvision.models.shufflenet_v2_x0_5,
+            "shufflenetv2-1.0": torchvision.models.shufflenet_v2_x1_0,
+            "shufflenetv2-1.5": torchvision.models.shufflenet_v2_x1_5,
+            "shufflenetv2-2.0": torchvision.models.shufflenet_v2_x2_0,
+            "mobilenetv2": torchvision.models.mobilenet_v2,
+            "mobilenetv3-small": torchvision.models.mobilenet_v3_small,
+            "mobilenetv3-large": torchvision.models.mobilenet_v3_large,
+            "resnext50": torchvision.models.resnext50_32x4d,
+            "resnext101": torchvision.models.resnext101_32x8d,
+            "wide-resnet50": torchvision.models.wide_resnet50_2,
+            "wide-resnet101": torchvision.models.wide_resnet101_2,
+            "mnasnet0-5": torchvision.models.mnasnet0_5,
+            "mnasnet0-75": torchvision.models.mnasnet0_75,
+            "mnasnet1-0": torchvision.models.mnasnet1_0,
+            "mnasnet1-3": torchvision.models.mnasnet1_3,
+            "fasterrcnn_mobilenet_v3_large_fpn": torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn,
+            "fasterrcnn_mobilenet_v3_large_320_fpn": torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn,
+            "fasterrcnn_resnet50_fpn": torchvision.models.detection.fasterrcnn_resnet50_fpn,
+            "maskrcnn_resnet50_fpn": torchvision.models.detection.maskrcnn_resnet50_fpn,
+            "keypointrcnn_resnet50_fpn": torchvision.models.detection.keypointrcnn_resnet50_fpn,
+            "retinanet_resnet50_fpn": torchvision.models.detection.retinanet_resnet50_fpn,
+            "mc3_18": torchvision.models.video.mc3_18,
+            "r3d_18": torchvision.models.video.r3d_18,
+            "r2plus1d_18": torchvision.models.video.r2plus1d_18,
+            "deeplabv3_mobilenet_v3_large": torchvision.models.segmentation.deeplabv3_mobilenet_v3_large,
+            "deeplabv3_resnet101": torchvision.models.segmentation.deeplabv3_resnet101,
+            "deeplabv3_resnet50": torchvision.models.segmentation.deeplabv3_resnet50,
+            "fcn_resnet50": torchvision.models.segmentation.fcn_resnet50,
+            "fcn_resnet101": torchvision.models.segmentation.fcn_resnet101,
+            "lraspp_mobilenet_v3_large": torchvision.models.segmentation.lraspp_mobilenet_v3_large,
+        }.get(model, None)
+        if model_fn == None:
+            raise IndexError(f"Model: {model} not found in torchvision")
+
+        kwargs = remove_kwargs(pop_kwargs, **kwargs)
+        return model_fn(pretrained=pretrained, **kwargs), {}
+
+    return {"torchvision": (model_builder, "image")}
 
 
-def hf_model_builder(model, **kwargs):
-    # get the required keys
+def load_transformers_models() -> Dict:
     import transformers
 
-    _auto_loaders = {x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"}
-    auto_model_type = model.split("/")[-1]
-    model, auto_model_type, task = model.split("::")
+    def hf_model_builder(model, model_instr, **kwargs):
+        _auto_loaders = {
+            x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"
+        }
+        auto_model_type = model.split("/")[-1]
+        auto_model_type, task = model_instr.split("::")
 
-    assert task in ["generation", "masked_lm"], "For now only the following are supported: `generation`, `masked_lm`"
+        assert task in [
+            "generation",
+            "masked_lm",
+        ], "For now only the following are supported: `generation`, `masked_lm`"
 
-    # initliase the model and tokenizer object
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
+        # initliase the model and tokenizer object
+        tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
 
-    # TODO: @yashbonde remove GPT hardcoded dependency
-    if not tokenizer.pad_token_id:
-        tokenizer.pad_token = "<|endoftext|>"
-    model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
-    return model, tokenizer, task
+        # TODO: @yashbonde remove GPT hardcoded dependency
+        if not tokenizer.pad_token_id:
+            tokenizer.pad_token = "<|endoftext|>"
+        model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
+        # ignoring task for now
+        return model, {"tokenizer": tokenizer}
+
+    return {"transformers": (hf_model_builder, "text")}
+
 
 ### ----- pretrained models master index
 # add code based on conditionals, best way is to only include those that
@@ -123,7 +152,7 @@ if util.find_spec("torchvision") is not None:
     PRETRAINED_MODELS.update(load_torchvision_models())
 
 if util.find_spec("transformers") is not None:
-    PRETRAINED_MODELS["transformers"] = (hf_model_builder, "transformer")
+    PRETRAINED_MODELS.update(load_transformers_models())
 
 
 PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
@@ -131,12 +160,13 @@ PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
 
 # ---- load function has to manage everything and return Model object properly initialised
 
-def load(model: str = None, nbx_api_key: str = None, cloud_infer: bool = False, **loader_kwargs):
+
+def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = False, **loader_kwargs):
     """Returns nbox.Model from a model (key), can optionally setup a connection to
     cloud inference on a Nimblebox instance.
 
     Args:
-        model (str, optional): key for which to load the model, the structure looks as follows:
+        model_key (str, optional): key for which to load the model, the structure looks as follows:
             ```
             source/(source/key)::<pre::task::post>
             ```
@@ -153,42 +183,21 @@ def load(model: str = None, nbx_api_key: str = None, cloud_infer: bool = False, 
         nbox.Model: when using local inference
         nbox.NBXApi: when using cloud inference
     """
-    model_src = model.split("/")[0]
-    if model_src not in PT_SOURCES:
-        raise ValueError(f"Model source: {model_src} not found. Is this package installed!")
-
-    pretrained = loader_kwargs.get("pretrained", False)
-    
-    # this is not the method we want to have, conditionals are horrible if every user has to
-    # this for including their new package.
-    if model.startswith("transformers/"):
-        # remove the leading text 'transformers/'
-        model, tokenizer, task = hf_model_builder(model[13:], **loader_kwargs)
-        if cloud_infer and nbx_api_key:
-            out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
-        else:
-            out = Model(model=model, category="text", tokenizer=tokenizer)
-
-    elif model.startswith("efficientnet_pytorch/"):
-        model = model.split("/")[-1]
-        if pretrained:
-            model_meta = PRETRAINED_MODELS["efficientnet_pytorch/efficientnet_pretrained"]
-            model_fn, model_meta = model_meta
-            return Model(model_fn(model), category=model_meta)
-
-        model_meta = PRETRAINED_MODELS["efficientnet_pytorch/efficientnet_from_name"]
-        model_fn, model_meta = model_meta
-        return Model(model_fn(model), category=model_meta)
-
-    else:
-        model_meta = PRETRAINED_MODELS.get(model, None)
+    # the input key can also contain instructions on how to run a particular models and so
+    model_key, src, src_key, model_instr = re.findall(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$", model_key)[0]
+    if src not in PT_SOURCES:
+        raise ValueError(f"Model source: {src} not found. Is this package installed!")
+    model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
+    if model_meta is None:
+        model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
         if model_meta is None:
-            raise IndexError(f"Model: {model} not found")
-        model_fn, model_meta = model_meta
-        if cloud_infer and nbx_api_key:
-            out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
-        else:
-            model = model_fn(pretrained=True if pretrained else False)
-            out = Model(model=model, category="image")
+            raise IndexError(f"Model: {model_key} not found")
+
+    # load the model based on local infer or cloud infer
+    model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
+    if cloud_infer and nbx_api_key:
+        out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
+    else:
+        out = Model(model=model, category=model_meta, **model_kwargs)
 
     return out
