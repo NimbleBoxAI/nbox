@@ -226,10 +226,8 @@ class Model:
             return out, model_input
         return out
 
-    def deploy(
-        self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None
-    ):
-        """[summary]
+    def deploy(self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None):
+        """OCD your model on NBX platform.
 
         Args:
             input_object (Any): input to be processed
@@ -268,17 +266,7 @@ class Model:
 
         # OCD baby!
         out = network.ocd(
-            self.model,
-            self.model_key,
-            args,
-            input_names,
-            output_names,
-            dynamic_axes,
-            username,
-            password,
-            cache_dir,
-            model_name,
-            verbose=False,
+            self.model_key, self.model, args, input_names, output_names, dynamic_axes, username, password, model_name, cache_dir
         )
 
         return out

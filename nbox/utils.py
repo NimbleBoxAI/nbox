@@ -8,6 +8,8 @@ import tempfile
 from PIL import Image
 from time import time
 from datetime import timedelta
+from rich.console import Console
+from types import SimpleNamespace
 
 import logging
 
@@ -68,5 +70,49 @@ def hash_(item, fn="md5"):
     return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
 
-def get_time_str(st):
-    return str(timedelta(seconds=int(time() - st)))[2:]
+class OCDConsole:
+    T = SimpleNamespace(
+        clk="deep_sky_blue1",  # timer
+        st="bold dark_cyan",  # status + print
+        fail="bold red",  # fail
+        inp="bold yellow",  # in-progress
+        nbx="bold bright_black",  # text with NBX at top and bottom
+        rule="dark_cyan",  # ruler at top and bottom
+        spinner="weather",  # status theme
+    )
+
+    def __init__(self):
+        self.c = Console()
+        self.st = time()
+        self._in_status = False
+
+    def rule(self):
+        self.c.rule(f"[{self.T.nbx}]NBX-OCD[/{self.T.nbx}]", style=self.T.rule)
+
+    def __call__(self, x, *y):
+        cont = " ".join([str(x)] + [str(_y) for _y in y])
+        if not self._in_status:
+            self._log(cont)
+        else:
+            self._update(cont)
+
+    def _log(self, x):
+        t = str(timedelta(seconds=int(time() - self.st)))[2:]
+        self.c.print(f"[[{self.T.clk}]{t}[/{self.T.clk}]] {x}")
+
+    def start(self, x="", *y):
+        cont = " ".join([str(x)] + [str(_y) for _y in y])
+        self.status = self.c.status(f"[{self.T.st}]{cont}[/{self.T.st}]", spinner=self.T.spinner)
+        self.status.start()
+        self._in_status = True
+
+    def _update(self, x, *y):
+        t = str(timedelta(seconds=int(time() - self.st)))[2:]
+        cont = " ".join([str(x)] + [str(_y) for _y in y])
+        self.status.update(f"[[{self.T.clk}]{t}[/{self.T.clk}]] [{self.T.st}]{cont}[/{self.T.st}]")
+
+    def stop(self, x):
+        self.status.stop()
+        del self.status
+        self._log(x)
+        self._in_status = False
