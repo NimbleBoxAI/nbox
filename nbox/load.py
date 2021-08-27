@@ -196,10 +196,10 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
             raise IndexError(f"Model: {model_key} not found")
 
     # load the model based on local infer or cloud infer
-    model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
     if cloud_infer and nbx_api_key:
-        out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
+        out = NBXApi(model_key_or_url=model_key, category=model_meta, nbx_api_key=nbx_api_key)
     else:
+        model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
         out = Model(model=model, category=model_meta, model_key=model_key, **model_kwargs)
 
     return out
