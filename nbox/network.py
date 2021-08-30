@@ -99,9 +99,14 @@ def ocd(
     console.start("Getting upload URL ...")
 
     # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
+    input = ",".join([f"{name}:{str(list(x.shape)).replace(',', ' ')}" for name, x in zip(input_names, args)])
+    # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
+    mean_values = [182, 178, 172]
+    scale_values = [28, 27, 27]
     convert_args = f"""--data_type=FP32 \
-        --input_shape={",".join([str(list(x.shape)) for x in args]).replace(" ", "")} \
-        --input={",".join(input_names)}"""
+        --input={input} \
+        --scale_values={scale_values} \
+        --mean_values={mean_values}"""
     convert_args = re.sub(r"\s+", "", convert_args)
     convert_args = convert_args.replace("--", " --").strip()
     file_size = os.stat(onnx_model_path).st_size // (1024 ** 3)

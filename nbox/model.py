@@ -18,10 +18,13 @@ from nbox import utils
 class ImageParser:
     """single unified Image parser that returns PIL.Image objects by consuming multiple differnet data-types"""
 
-    def handle_string(self, x):
+    def handle_string(self, x: str):
         if os.path.exists(x):
-            utils.info(" - ImageParser - (A)")
+            utils.info(" - ImageParser - (A1)")
             return [Image.open(x)]
+        elif x.startswith("http:") or x.startswith("https:"):
+            utils.info(" - ImageParser - (A2)")
+            return [utils.get_image(x)]
         else:
             utils.info(" - ImageParser - (B)")
             raise ValueError("Cannot process string that is not Image path")

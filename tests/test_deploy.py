@@ -21,7 +21,6 @@ class DeployTest(unittest.TestCase):
     #   model(image) # pass a file once
     #   print("Input Shape:", model._sample_input.shape)
     #   pt_model = model.model.eval()
-
     #   torch.onnx.export(
     #     pt_model,
     #     model._sample_input,
@@ -37,19 +36,33 @@ class DeployTest(unittest.TestCase):
     #   out = model("hello world")
     #   print(type(out), isinstance(out, dict))
 
-    def test_deploy_hf_bert(self):
-        model_key = "transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM"
-        cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
-        os.makedirs(cache_dir, exist_ok=True)
-        model = get_model(model_key, cache_dir=cache_dir)
-        # out = model("hello world")
-        # print(type(out), isinstance(out, dict))
-        url = model.deploy(
-            "hello world",
-            username=os.getenv("NBX_USERNAME"),
-            password=os.getenv("NBX_PASSWORD"),
-            cache_dir=cache_dir,
-        )
+    # def test_deploy_hf_bert(self):
+    #     model_key = "transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM"
+    #     cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
+    #     os.makedirs(cache_dir, exist_ok=True)
+    #     model = get_model(model_key, cache_dir=cache_dir)
+    #     # out = model("hello world")
+    #     # print(type(out), isinstance(out, dict))
+    #     url = model.deploy(
+    #         "hello world",
+    #         username=os.getenv("NBX_USERNAME"),
+    #         password=os.getenv("NBX_PASSWORD"),
+    #         cache_dir=cache_dir,
+    #     )
+
+    # def test_deploy_hf_bert_mid(self):
+    #     model_key = "transformers/bert-base-uncased::AutoModelForMaskedLM"
+    #     cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
+    #     os.makedirs(cache_dir, exist_ok=True)
+    #     model = get_model(model_key, cache_dir=cache_dir)
+    #     # out = model("hello world")
+    #     # print(type(out), isinstance(out, dict))
+    #     url = model.deploy(
+    #         "hello world",
+    #         username=os.getenv("NBX_USERNAME"),
+    #         password=os.getenv("NBX_PASSWORD"),
+    #         cache_dir=cache_dir,
+    #     )
 
     # def test_deploy_tv_resnet18(self):
     #   model_key = "torchvision/resnet18"
@@ -63,3 +76,5 @@ class DeployTest(unittest.TestCase):
     #     password=os.getenv("NBX_PASSWORD"),
     #     cache_dir = cache_dir,
     #   )
+
+    pass

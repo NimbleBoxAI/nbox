@@ -12,7 +12,7 @@ from pprint import pprint as peepee
 
 # main class that calls the NBX Server Models
 class NBXApi:
-    def __init__(self, model_key_or_url: str, nbx_api_key: str, category: str):
+    def __init__(self, model_key_or_url: str, nbx_api_key: str, category: str, verbose: bool = False):
         """NBXApi would call the NBX Chill Inference API
 
         Args:
@@ -28,29 +28,35 @@ class NBXApi:
         self.model_key_or_url = model_key_or_url
         self.nbx_api_key = nbx_api_key
         self.category = category
+        self.verbose = verbose
         self.is_url = model_key_or_url.startswith("https") or model_key_or_url.startswith("http")
         self.is_on_nbx = "api.nimblebox.ai" in model_key_or_url
 
         assert self.is_url, "Currently only URLs are accepted"
-        
+        assert self.nbx_api_key, "Invalid `nbx_api_key` found"
+
         if self.is_url:
-            r = requests.get(
-                url = self.model_key_or_url + "/metadata",
-                headers = {"NBX-KEY":self.nbx_api_key}
-            )
+            print(self.model_key_or_url + "/metadata")
+            r = requests.get(url=self.model_key_or_url + "/metadata", headers={"NBX-KEY": self.nbx_api_key})
+            try:
+                r.raise_for_status()
+            except:
+                raise ValueError(f"Could not fetch metadata, please check: {r.content}")
 
             content = r.json()
             headers = r.headers
 
-            peepee(content)
-            peepee(headers)
+            if verbose:
+                peepee(content)
+                peepee(headers)
 
             all_inputs = content["metadata"]["signature_def"]["signatureDef"]["serving_default"]["inputs"]
             self.templates = {}
             for node, meta in all_inputs.items():
                 self.templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
 
-            peepee(self.templates)
+            if verbose:
+                peepee(self.templates)
 
         # define the incoming parsers
         self.image_parser = ImageParser()
@@ -60,16 +66,13 @@ class NBXApi:
         return f"<nbox.Model: {self.model_key_or_url} >"
 
     def call(self, data):
-        print(":0-----------------0:")
-        print({k:v.size() for k,v in data.items()})
-        data = {k:v.tolist() for k,v in data.items()}
+        if self.verbose:
+            print(":0-----------------0:")
+            print({k: v.size() for k, v in data.items()})
+        data = {k: v.tolist() for k, v in data.items()}
         # for k in self.templates
         st = time()
-        r = requests.post(
-            self.model_key_or_url + ":predict",
-            json={"inputs": data},
-            headers = {"NBX-KEY": self.nbx_api_key}
-        )
+        r = requests.post(self.model_key_or_url + ":predict", json={"inputs": data}, headers={"NBX-KEY": self.nbx_api_key})
         et = time() - st
         return r.json(), r.headers, et
 
@@ -87,11 +90,11 @@ class NBXApi:
                 pil_img = self.image_parser(input_object)[0]
                 pil_img = pil_img.resize((224, 224))
                 input_tensor = processing.totensor(pil_img)
-            
+
             data = {}
             for k in self.templates:
                 data[k] = input_tensor
-
+            print(data)
             return data
 
         elif self.category == "text":
