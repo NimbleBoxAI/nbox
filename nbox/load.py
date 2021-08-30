@@ -2,9 +2,10 @@
 
 import re
 from typing import Dict
+
 from nbox.model import Model
 from nbox.api import NBXApi
-from importlib import util
+from nbox.utils import is_available
 
 # util functions
 def remove_kwargs(pop_list, **kwargs):
@@ -115,16 +116,18 @@ def load_transformers_models() -> Dict:
     import transformers
 
     def hf_model_builder(model, model_instr, **kwargs):
-        _auto_loaders = {
-            x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"
-        }
-        auto_model_type = model.split("/")[-1]
-        auto_model_type, task = model_instr.split("::")
+        _auto_loaders = {x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"}
 
-        assert task in [
-            "generation",
-            "masked_lm",
-        ], "For now only the following are supported: `generation`, `masked_lm`"
+        model_instr = model_instr.split("::")
+        if len(model_instr) == 1:
+            auto_model_type = model_instr[0]
+        else:
+            # if the task is given, validate that as well
+            auto_model_type, task = model_instr
+            assert task in [
+                "generation",
+                "masked_lm",
+            ], "For now only the following are supported: `generation`, `masked_lm`"
 
         # initliase the model and tokenizer object
         tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
@@ -144,14 +147,13 @@ def load_transformers_models() -> Dict:
 # have proper model building code like transformers, torchvision, etc.
 
 PRETRAINED_MODELS = {}
-
-if util.find_spec("efficientnet_pytorch") is not None:
+if is_available("efficientnet_pytorch"):
     PRETRAINED_MODELS.update(load_efficientnet_pytorch_models())
 
-if util.find_spec("torchvision") is not None:
+if is_available("torchvision"):
     PRETRAINED_MODELS.update(load_torchvision_models())
 
-if util.find_spec("transformers") is not None:
+if is_available("transformers"):
     PRETRAINED_MODELS.update(load_transformers_models())
 
 
@@ -198,6 +200,6 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
     if cloud_infer and nbx_api_key:
         out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
     else:
-        out = Model(model=model, category=model_meta, **model_kwargs)
+        out = Model(model=model, category=model_meta, model_key=model_key, **model_kwargs)
 
     return out
