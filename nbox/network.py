@@ -101,8 +101,8 @@ def ocd(
     # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
     input = ",".join([f"{name}:{str(list(x.shape)).replace(',', ' ')}" for name, x in zip(input_names, args)])
     # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
-    mean_values = [182, 178, 172]
-    scale_values = [28, 27, 27]
+    mean_values = "(182,178,172)"
+    scale_values = "(28,27,27)"
     convert_args = f"""--data_type=FP32 \
         --input={input} \
         --scale_values={scale_values} \
@@ -193,13 +193,13 @@ def ocd(
         # this means the deployment is done
         if statuses[-1]["status"] == "deployment.success":
             endpoint = updates["model_data"]["api_url"]
-            console(f"[{console.T.st}]Deployment successful at URL:")
-            console(f"     {endpoint}")
+            console(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
             break
-
+        
+        # if failed exit
         elif "failed" in statuses[-1]["status"]:
             break
 
-    console.stop()
+    console.stop("Process Complete")
     console.rule()
     return endpoint

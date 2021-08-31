@@ -69,17 +69,20 @@ class ImageParser:
 class TextParser:
     """Unified Text parsing engine, returns a list of dictionaries"""
 
-    def handle_string(self, x, tokenizer):
-        utils.info(" - TextParser - (A)")
-        return {k: v.numpy() for k, v in tokenizer(x, return_tensors="pt").items()}
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
 
-    def handle_numpy(self, x, tokenizer=None):
+    def handle_string(self, x):
+        utils.info(" - TextParser - (A)")
+        return {k: v.numpy() for k, v in self.tokenizer(x, return_tensors="pt").items()}
+
+    def handle_numpy(self, x):
         utils.info(" - TextParser - (B)")
         if x.dtype != np.int32 and x.dtype != np.int64:
             raise ValueError(f"Incorrect datatype for np.array: {x.dtype} | {x.dtype == np.int64}")
         return {"input_ids": x}
 
-    def handle_dict(self, x, tokenizer=None):
+    def handle_dict(self, x):
         _x = {}
         utils.info(" - TextParser - (C)")
         for k, v in x.items():
@@ -96,7 +99,7 @@ class TextParser:
                 raise ValueError("Cannot parse dict items")
         return _x
 
-    def handle_list_tuples(self, x, tokenizer=None):
+    def handle_list_tuples(self, x):
         utils.info(" - TextParser - (D)")
         if isinstance(x[0], int):
             utils.info(" - TextParser - (D1)")
@@ -106,23 +109,21 @@ class TextParser:
             assert len(x) * seqlen == sum([len(y) for y in x]), "Inconsistent values in list sequences"
         elif isinstance(x[0], str):
             utils.info(" - TextParser - (D3)")
-            if tokenizer == None:
-                raise ValueError("tokenizer cannot be None when string input")
-            tokens = tokenizer(x, padding="longest", return_tensors="pt")
+            if self.tokenizer == None:
+                raise ValueError("self.tokenizer cannot be None when string input")
+            tokens = self.tokenizer(x, padding="longest", return_tensors="pt")
             return {k: v.numpy().astype(np.int32) for k, v in tokens.items()}
         else:
             raise ValueError(f"Cannot parse list of item: {type(x[0])}")
         return {"input_ids": np.array(x).astype(np.int32)}
 
-    def handle_torch_tensor(self, x, tokenizer=None):
+    def handle_torch_tensor(self, x):
         utils.info(" - Text Parser - (F)")
         assert x.dtype == torch.long, f"Incorrect datatype for torch.tensor: {x.dtype}"
         return {"input_ids": x}
 
-    def __call__(self, x, tokenizer=None):
+    def __call__(self, x):
         if isinstance(x, str):
-            if tokenizer is None:
-                raise ValueError("tokenizer cannot be None when string input")
             proc_fn = self.handle_string
         elif isinstance(x, np.ndarray):
             proc_fn = self.handle_numpy
@@ -135,7 +136,7 @@ class TextParser:
         else:
             utils.info(" - ImageParser - (E)")
             raise ValueError(f"Cannot process item of dtype: {type(x)}")
-        return proc_fn(x, tokenizer)
+        return proc_fn(x)
 
 
 class Model:
@@ -158,14 +159,14 @@ class Model:
 
         # initialise all the parsers, like WTH, how bad would it be
         self.image_parser = ImageParser()
-        self.text_parser = TextParser()
+        self.text_parser = None
 
         if self.category not in ["image", "text"]:
             raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
 
         if self.category == "text":
             assert tokenizer != None, "tokenizer cannot be none for a text model!"
-            self.tokenizer = tokenizer
+            self.text_parser = TextParser(tokenizer = tokenizer)
 
     def get_model(self):
         return self.model
@@ -196,7 +197,7 @@ class Model:
 
         elif self.category == "text":
             # perform parsing for text and pass to the model
-            input_dict = self.text_parser(input_object, self.tokenizer)
+            input_dict = self.text_parser(input_object)
             input_dict = {k: torch.from_numpy(v) for k, v in input_dict.items()}
             return input_dict
 

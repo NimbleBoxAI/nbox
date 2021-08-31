@@ -70,7 +70,6 @@ class NBXApi:
             print(":0-----------------0:")
             print({k: v.size() for k, v in data.items()})
         data = {k: v.tolist() for k, v in data.items()}
-        # for k in self.templates
         st = time()
         r = requests.post(self.model_key_or_url + ":predict", json={"inputs": data}, headers={"NBX-KEY": self.nbx_api_key})
         et = time() - st
