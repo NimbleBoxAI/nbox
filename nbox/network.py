@@ -105,13 +105,13 @@ def ocd(
     convert_args = f"--data_type=FP32 --input_shape={input_shape} --input={input_}"
 
     if category == "image":
-      # mean and scale have to be defined for every single input
-      # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
-      mean_values = ",".join([f"{name}[182,178,172]" for name in input_names])
-      scale_values = ",".join([f"{name}[28,27,27]" for name in input_names])
-      convert_args += f" --mean_values={mean_values} --scale_values={scale_values}"
+        # mean and scale have to be defined for every single input
+        # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
+        mean_values = ",".join([f"{name}[182,178,172]" for name in input_names])
+        scale_values = ",".join([f"{name}[28,27,27]" for name in input_names])
+        convert_args += f" --mean_values={mean_values} --scale_values={scale_values}"
 
-    file_size = os.stat(onnx_model_path).st_size // (1024 ** 2) # in MBs
+    file_size = os.stat(onnx_model_path).st_size // (1024 ** 2)  # in MBs
     console._log("convert_args:", convert_args)
     console._log("file_size:", file_size)
 
@@ -156,7 +156,7 @@ def ocd(
     endpoint = None
     _stat_done = []  # status calls performed
     sleep_seconds = 3  # sleep up a little
-    model_data_access_key = None # this key is used for calling the model
+    model_data_access_key = None  # this key is used for calling the model
     console.start("Start Polling ...")
     while True:
         for i in range(sleep_seconds):
@@ -200,11 +200,9 @@ def ocd(
             if model_data_access_key is None:
                 endpoint = updates["model_data"]["api_url"]
                 console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
-                
+
                 r = requests.get(
-                    url = f"{URL}/get_model_access_key",
-                    headers = {"Authorization": f"Bearer {access_token}"},
-                    json = {"model_id": model_id}
+                    url=f"{URL}/get_model_access_key", headers={"Authorization": f"Bearer {access_token}"}, json={"model_id": model_id}
                 )
                 try:
                     r.raise_for_status()
@@ -222,13 +220,11 @@ def ocd(
             if r.status_code == 200:
                 console._log(f"Model is ready")
                 break
-        
+
         # if failed exit
         elif "failed" in statuses[-1]["status"]:
             break
 
-
-
     console.stop("Process Complete")
     console.rule()
-    return endpoint
+    return endpoint, model_data_access_key

@@ -28,7 +28,7 @@ class NBXApi:
         self.nbx_api_key = nbx_api_key
         self.category = category
         self.verbose = verbose
-        
+
         self.is_url = model_key_or_url.startswith("https") or model_key_or_url.startswith("http")
         self.is_on_nbx = "api.nimblebox.ai" in model_key_or_url
 

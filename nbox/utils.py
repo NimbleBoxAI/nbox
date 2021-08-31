@@ -132,7 +132,7 @@ class OCDConsole:
 #         with open(file_path, "r") as f:
 #             # read the JSON file, remove comments and then load it
 #             self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
-    
+
 #     def __getattribute__(self, name: str):
 #         return self.get(name)
 

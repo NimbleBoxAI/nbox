@@ -3,4 +3,4 @@
 
 import nbox
 
-model = nbox.load("torchvision/maskrcnn_resnet50_fpn", cache_dir = "../tests/__ignore/")
+model = nbox.load("torchvision/maskrcnn_resnet50_fpn", cache_dir="../tests/__ignore/")

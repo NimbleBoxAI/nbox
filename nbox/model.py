@@ -165,7 +165,7 @@ class Model:
 
         if self.category == "text":
             assert tokenizer != None, "tokenizer cannot be none for a text model!"
-            self.text_parser = TextParser(tokenizer = tokenizer)
+            self.text_parser = TextParser(tokenizer=tokenizer)
 
     def get_model(self):
         return self.model
@@ -271,17 +271,17 @@ class Model:
 
         # OCD baby!
         out = network.ocd(
-            model_key = self.model_key,
-            model = self.model,
-            args = args,
-            input_names = input_names,
-            output_names = output_names,
-            dynamic_axes = dynamic_axes,
-            category = self.category,
-            username = username,
-            password = password,
-            model_name = model_name,
-            cache_dir = cache_dir
+            model_key=self.model_key,
+            model=self.model,
+            args=args,
+            input_names=input_names,
+            output_names=output_names,
+            dynamic_axes=dynamic_axes,
+            category=self.category,
+            username=username,
+            password=password,
+            model_name=model_name,
+            cache_dir=cache_dir,
         )
 
         return out
