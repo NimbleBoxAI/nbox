@@ -96,9 +96,10 @@ class OCDConsole:
         else:
             self._update(cont)
 
-    def _log(self, x):
+    def _log(self, x, *y):
+        cont = " ".join([str(x)] + [str(_y) for _y in y])
         t = str(timedelta(seconds=int(time() - self.st)))[2:]
-        self.c.print(f"[[{self.T.clk}]{t}[/{self.T.clk}]] {x}")
+        self.c.print(f"[[{self.T.clk}]{t}[/{self.T.clk}]] {cont}")
 
     def start(self, x="", *y):
         cont = " ".join([str(x)] + [str(_y) for _y in y])

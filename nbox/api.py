@@ -25,10 +25,10 @@ class NBXApi:
         Raises:
             NotImplementedError
         """
-        self.model_key_or_url = model_key_or_url
         self.nbx_api_key = nbx_api_key
         self.category = category
         self.verbose = verbose
+        
         self.is_url = model_key_or_url.startswith("https") or model_key_or_url.startswith("http")
         self.is_on_nbx = "api.nimblebox.ai" in model_key_or_url
 
@@ -36,6 +36,9 @@ class NBXApi:
         assert self.nbx_api_key, "Invalid `nbx_api_key` found"
 
         if self.is_url:
+            # remove trailing '/'
+            model_key_or_url = model_key_or_url[:-1] if model_key_or_url.endswith("/") else model_key_or_url
+            self.model_key_or_url = model_key_or_url
             print(self.model_key_or_url + "/metadata")
             r = requests.get(url=self.model_key_or_url + "/metadata", headers={"NBX-KEY": self.nbx_api_key})
             try:
@@ -60,7 +63,7 @@ class NBXApi:
 
         # define the incoming parsers
         self.image_parser = ImageParser()
-        self.text_parser = TextParser()
+        self.text_parser = TextParser(None)
 
     def __repr__(self):
         return f"<nbox.Model: {self.model_key_or_url} >"

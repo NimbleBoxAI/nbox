@@ -1,10 +1,9 @@
 import os
 import torch
-import requests
 import numpy as np
 from PIL import Image
 
-from typing import Any, Dict
+from typing import Any
 
 from nbox import network
 from nbox import processing
@@ -22,7 +21,7 @@ class ImageParser:
         if os.path.exists(x):
             utils.info(" - ImageParser - (A1)")
             return [Image.open(x)]
-        elif x.startswith("http:") or x.startswith("https:"):
+        if x.startswith("http:") or x.startswith("https:"):
             utils.info(" - ImageParser - (A2)")
             return [utils.get_image(x)]
         else:

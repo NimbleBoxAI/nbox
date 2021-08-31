@@ -64,17 +64,17 @@ class DeployTest(unittest.TestCase):
     #         cache_dir=cache_dir,
     #     )
 
-    # def test_deploy_tv_resnet18(self):
-    #   model_key = "torchvision/resnet18"
-    #   cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
-    #   os.makedirs(cache_dir, exist_ok = True)
-    #   image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
-    #   model = get_model(model_key)
-    #   url = model.deploy(
-    #     image,
-    #     username=os.getenv("NBX_USERNAME"),
-    #     password=os.getenv("NBX_PASSWORD"),
-    #     cache_dir = cache_dir,
-    #   )
+    def test_deploy_tv_resnet18(self):
+      model_key = "torchvision/resnet18"
+      cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
+      os.makedirs(cache_dir, exist_ok = True)
+      image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
+      model = get_model(model_key)
+      url = model.deploy(
+        image,
+        username=os.getenv("NBX_USERNAME"),
+        password=os.getenv("NBX_PASSWORD"),
+        cache_dir = cache_dir,
+      )
 
     pass
