@@ -1,6 +1,5 @@
 # this file has methods for netorking related things
 
-import re
 import os
 import requests
 from time import sleep
@@ -20,6 +19,7 @@ def ocd(
     input_names: Tuple,
     output_names: Tuple,
     dynamic_axes: Dict,
+    category: str,
     username: str = None,
     password: str = None,
     model_name: str = None,
@@ -36,6 +36,7 @@ def ocd(
         input_names (Tuple): input tensor names to the model for ONNX export
         output_names (Tuple): output tensor names to the model for ONNX export
         dynamic_axes (Dict): dictionary with input_name and dynamic axes shape
+        category (str): model category
         username (str, optional): your username, ignore if on NBX platform. Defaults to None.
         password (str, optional): your password, ignore if on NBX platform. Defaults to None.
         model_name (str, optional): custom model name for this model. Defaults to None.
@@ -99,15 +100,21 @@ def ocd(
     console.start("Getting upload URL ...")
 
     # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
-    convert_args = f"""--data_type=FP32 \
-        --input_shape={",".join([str(list(x.shape)) for x in args]).replace(" ", "")} \
-        --input={",".join(input_names)}"""
-    convert_args = re.sub(r"\s+", "", convert_args)
-    convert_args = convert_args.replace("--", " --").strip()
-    file_size = os.stat(onnx_model_path).st_size // (1024 ** 3)
-    console("convert_args:", convert_args)
-    console("file_size:", file_size)
-    # exit()
+    input_ = ",".join(input_names)
+    input_shape = ",".join([str(list(x.shape)).replace(" ", "") for x in args])
+    convert_args = f"--data_type=FP32 --input_shape={input_shape} --input={input_}"
+
+    if category == "image":
+        # mean and scale have to be defined for every single input
+        # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
+        mean_values = ",".join([f"{name}[182,178,172]" for name in input_names])
+        scale_values = ",".join([f"{name}[28,27,27]" for name in input_names])
+        convert_args += f" --mean_values={mean_values} --scale_values={scale_values}"
+
+    file_size = os.stat(onnx_model_path).st_size // (1024 ** 2)  # in MBs
+    console._log("convert_args:", convert_args)
+    console._log("file_size:", file_size)
+
     r = requests.get(
         url=f"{URL}/api/model/get_upload_url",
         params={
@@ -149,6 +156,7 @@ def ocd(
     endpoint = None
     _stat_done = []  # status calls performed
     sleep_seconds = 3  # sleep up a little
+    model_data_access_key = None  # this key is used for calling the model
     console.start("Start Polling ...")
     while True:
         for i in range(sleep_seconds):
@@ -178,23 +186,45 @@ def ocd(
 
                 # only when this is a new status
                 if "failed" in curr_st:
-                    console(f"Status: [{console.T.fail}]{curr_st}")
+                    console._log(f"Status: [{console.T.fail}]{curr_st}")
                 elif "in-progress" in curr_st:
-                    console(f"Status: [{console.T.inp}]{curr_st}")
+                    console._log(f"Status: [{console.T.inp}]{curr_st}")
                 else:
-                    console(f"Status: [{console.T.st}]{curr_st}")
+                    console._log(f"Status: [{console.T.st}]{curr_st}")
                 _stat_done.append(curr_st)
 
         # this means the deployment is done
         if statuses[-1]["status"] == "deployment.success":
-            endpoint = updates["model_data"]["api_url"]
-            console(f"[{console.T.st}]Deployment successful at URL:")
-            console(f"     {endpoint}")
-            break
 
+            # if we do not have api key then query web server for it
+            if model_data_access_key is None:
+                endpoint = updates["model_data"]["api_url"]
+                console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
+
+                r = requests.get(
+                    url=f"{URL}/get_model_access_key", headers={"Authorization": f"Bearer {access_token}"}, json={"model_id": model_id}
+                )
+                try:
+                    r.raise_for_status()
+                    model_data_access_key = r.json()["model_data_access_key"]
+                    console._log(f"nbx-key: {model_data_access_key}")
+                except:
+                    raise ValueError(f"Failed to get model_data_access_key from /get_model_access_key")
+
+            # keep hitting /metadata and see if model is ready or not
+            r = requests.get(
+                url=f"{endpoint}/metadata",
+                headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"},
+                verify=False,
+            )
+            if r.status_code == 200:
+                console._log(f"Model is ready")
+                break
+
+        # if failed exit
         elif "failed" in statuses[-1]["status"]:
             break
 
-    console.stop()
+    console.stop("Process Complete")
     console.rule()
-    return endpoint
+    return endpoint, model_data_access_key

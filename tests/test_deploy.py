@@ -13,43 +13,33 @@ def get_model(*args, **kwargs):
 
 class DeployTest(unittest.TestCase):
 
-    # def test_onnx_export_tv(self):
-    #   # test onnx export for torchvision models
-    #   import torch
-    #   model = nbox.load("torchvision/resnet18")
-    #   image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
-    #   model(image) # pass a file once
-    #   print("Input Shape:", model._sample_input.shape)
-    #   pt_model = model.model.eval()
+    # def test_deploy_hf_bert(self):
+    #     model_key = "transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM"
+    #     cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
+    #     os.makedirs(cache_dir, exist_ok=True)
+    #     model = get_model(model_key, cache_dir=cache_dir)
+    #     # out = model("hello world")
+    #     # print(type(out), isinstance(out, dict))
+    #     url, model_data_access_key = model.deploy(
+    #         "hello world",
+    #         username=os.getenv("NBX_USERNAME"),
+    #         password=os.getenv("NBX_PASSWORD"),
+    #         cache_dir=cache_dir,
+    #     )
 
-    #   torch.onnx.export(
-    #     pt_model,
-    #     model._sample_input,
-    #     os.path.join(utils.folder(__file__), "assets/sample.onnx"),
-    #     verbose=True,
-    #   )
-
-    # def test_onnx_export_hf_bert(self):
-    #   model_key = "transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM"
-    #   cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
-    #   os.makedirs(cache_dir, exist_ok = True)
-    #   model = get_model(model_key,cache_dir = cache_dir)
-    #   out = model("hello world")
-    #   print(type(out), isinstance(out, dict))
-
-    def test_deploy_hf_bert(self):
-        model_key = "transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM"
-        cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
-        os.makedirs(cache_dir, exist_ok=True)
-        model = get_model(model_key, cache_dir=cache_dir)
-        # out = model("hello world")
-        # print(type(out), isinstance(out, dict))
-        url = model.deploy(
-            "hello world",
-            username=os.getenv("NBX_USERNAME"),
-            password=os.getenv("NBX_PASSWORD"),
-            cache_dir=cache_dir,
-        )
+    # def test_deploy_hf_bert_mid(self):
+    #     model_key = "transformers/bert-base-uncased::AutoModelForMaskedLM"
+    #     cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
+    #     os.makedirs(cache_dir, exist_ok=True)
+    #     model = get_model(model_key, cache_dir=cache_dir)
+    #     # out = model("hello world")
+    #     # print(type(out), isinstance(out, dict))
+    #     url, model_data_access_key = model.deploy(
+    #         "hello world",
+    #         username=os.getenv("NBX_USERNAME"),
+    #         password=os.getenv("NBX_PASSWORD"),
+    #         cache_dir=cache_dir,
+    #     )
 
     # def test_deploy_tv_resnet18(self):
     #   model_key = "torchvision/resnet18"
@@ -57,9 +47,11 @@ class DeployTest(unittest.TestCase):
     #   os.makedirs(cache_dir, exist_ok = True)
     #   image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
     #   model = get_model(model_key)
-    #   url = model.deploy(
+    #   url, model_data_access_key = model.deploy(
     #     image,
     #     username=os.getenv("NBX_USERNAME"),
     #     password=os.getenv("NBX_PASSWORD"),
     #     cache_dir = cache_dir,
     #   )
+
+    pass

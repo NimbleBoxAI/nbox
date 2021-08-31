@@ -3,6 +3,9 @@
 import re
 from typing import Dict
 
+import inspect
+import warnings
+
 from nbox.model import Model
 from nbox.api import NBXApi
 from nbox.utils import is_available
@@ -107,7 +110,17 @@ def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
             raise IndexError(f"Model: {model} not found in torchvision")
 
         kwargs = remove_kwargs(pop_kwargs, **kwargs)
-        return model_fn(pretrained=pretrained, **kwargs), {}
+
+        # compare variables between the model_fn and kwargs if they are different then remove it with warning
+        arg_spec = inspect.getfullargspec(model_fn)
+        if kwargs and arg_spec.varkw != None:
+            diff = set(kwargs.keys()) - set(arg_spec.args)
+            for d in list(diff):
+                warnings.warn(f"Ignoring unknown argument: {d}")
+                kwargs.pop(d)
+
+        model = model_fn(pretrained=pretrained, **kwargs)
+        return model, {}
 
     return {"torchvision": (model_builder, "image")}
 
@@ -147,14 +160,16 @@ def load_transformers_models() -> Dict:
 # have proper model building code like transformers, torchvision, etc.
 
 PRETRAINED_MODELS = {}
-if is_available("efficientnet_pytorch"):
-    PRETRAINED_MODELS.update(load_efficientnet_pytorch_models())
+all_repos = ["efficientnet_pytorch", "torchvision", "transformers"]
 
-if is_available("torchvision"):
-    PRETRAINED_MODELS.update(load_torchvision_models())
+for repo in all_repos:
+    if is_available(repo):
+        print(f"Loading pretrained models from {repo}")
+        PRETRAINED_MODELS.update(locals()[f"load_{repo}_models"]())
 
-if is_available("transformers"):
-    PRETRAINED_MODELS.update(load_transformers_models())
+# if there are no pretrained models available, then raise an error
+if not PRETRAINED_MODELS:
+    raise ValueError("No pretrained models available. Please install PyTorch or torchvision or transformers to use pretrained models.")
 
 
 PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
@@ -196,10 +211,10 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
             raise IndexError(f"Model: {model_key} not found")
 
     # load the model based on local infer or cloud infer
-    model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
     if cloud_infer and nbx_api_key:
-        out = NBXApi(model_key=model, nbx_api_key=nbx_api_key)
+        out = NBXApi(model_key_or_url=model_key, category=model_meta, nbx_api_key=nbx_api_key)
     else:
+        model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
         out = Model(model=model, category=model_meta, model_key=model_key, **model_kwargs)
 
     return out

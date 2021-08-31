@@ -53,8 +53,9 @@ class ImportTest(unittest.TestCase):
     def test_hf_masked_lm(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        model = nbox.load("transformers/prajjwal1/bert-tiny::BertLMHeadModel", cache_dir=cache_dir)
-        model("hello world")
+        model = nbox.load("transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM", cache_dir=cache_dir)
+        out = model("hello world")
+        self.assertEqual(out.logits.argmax(-1).tolist(), [[1012, 7592, 2088, 1012]])
 
 
 if __name__ == "__main__":

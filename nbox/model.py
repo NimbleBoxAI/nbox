@@ -1,10 +1,9 @@
 import os
 import torch
-import requests
 import numpy as np
 from PIL import Image
 
-from typing import Any, Dict
+from typing import Any
 
 from nbox import network
 from nbox import processing
@@ -18,10 +17,13 @@ from nbox import utils
 class ImageParser:
     """single unified Image parser that returns PIL.Image objects by consuming multiple differnet data-types"""
 
-    def handle_string(self, x):
+    def handle_string(self, x: str):
         if os.path.exists(x):
-            utils.info(" - ImageParser - (A)")
+            utils.info(" - ImageParser - (A1)")
             return [Image.open(x)]
+        if x.startswith("http:") or x.startswith("https:"):
+            utils.info(" - ImageParser - (A2)")
+            return [utils.get_image(x)]
         else:
             utils.info(" - ImageParser - (B)")
             raise ValueError("Cannot process string that is not Image path")
@@ -66,17 +68,20 @@ class ImageParser:
 class TextParser:
     """Unified Text parsing engine, returns a list of dictionaries"""
 
-    def handle_string(self, x, tokenizer):
-        utils.info(" - TextParser - (A)")
-        return {k: v.numpy() for k, v in tokenizer(x, return_tensors="pt").items()}
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
 
-    def handle_numpy(self, x, tokenizer=None):
+    def handle_string(self, x):
+        utils.info(" - TextParser - (A)")
+        return {k: v.numpy() for k, v in self.tokenizer(x, return_tensors="pt").items()}
+
+    def handle_numpy(self, x):
         utils.info(" - TextParser - (B)")
         if x.dtype != np.int32 and x.dtype != np.int64:
             raise ValueError(f"Incorrect datatype for np.array: {x.dtype} | {x.dtype == np.int64}")
         return {"input_ids": x}
 
-    def handle_dict(self, x, tokenizer=None):
+    def handle_dict(self, x):
         _x = {}
         utils.info(" - TextParser - (C)")
         for k, v in x.items():
@@ -93,7 +98,7 @@ class TextParser:
                 raise ValueError("Cannot parse dict items")
         return _x
 
-    def handle_list_tuples(self, x, tokenizer=None):
+    def handle_list_tuples(self, x):
         utils.info(" - TextParser - (D)")
         if isinstance(x[0], int):
             utils.info(" - TextParser - (D1)")
@@ -103,23 +108,21 @@ class TextParser:
             assert len(x) * seqlen == sum([len(y) for y in x]), "Inconsistent values in list sequences"
         elif isinstance(x[0], str):
             utils.info(" - TextParser - (D3)")
-            if tokenizer == None:
-                raise ValueError("tokenizer cannot be None when string input")
-            tokens = tokenizer(x, padding="longest", return_tensors="pt")
+            if self.tokenizer == None:
+                raise ValueError("self.tokenizer cannot be None when string input")
+            tokens = self.tokenizer(x, padding="longest", return_tensors="pt")
             return {k: v.numpy().astype(np.int32) for k, v in tokens.items()}
         else:
             raise ValueError(f"Cannot parse list of item: {type(x[0])}")
         return {"input_ids": np.array(x).astype(np.int32)}
 
-    def handle_torch_tensor(self, x, tokenizer=None):
+    def handle_torch_tensor(self, x):
         utils.info(" - Text Parser - (F)")
         assert x.dtype == torch.long, f"Incorrect datatype for torch.tensor: {x.dtype}"
         return {"input_ids": x}
 
-    def __call__(self, x, tokenizer=None):
+    def __call__(self, x):
         if isinstance(x, str):
-            if tokenizer is None:
-                raise ValueError("tokenizer cannot be None when string input")
             proc_fn = self.handle_string
         elif isinstance(x, np.ndarray):
             proc_fn = self.handle_numpy
@@ -132,7 +135,7 @@ class TextParser:
         else:
             utils.info(" - ImageParser - (E)")
             raise ValueError(f"Cannot process item of dtype: {type(x)}")
-        return proc_fn(x, tokenizer)
+        return proc_fn(x)
 
 
 class Model:
@@ -155,14 +158,14 @@ class Model:
 
         # initialise all the parsers, like WTH, how bad would it be
         self.image_parser = ImageParser()
-        self.text_parser = TextParser()
+        self.text_parser = None
 
         if self.category not in ["image", "text"]:
             raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
 
         if self.category == "text":
             assert tokenizer != None, "tokenizer cannot be none for a text model!"
-            self.tokenizer = tokenizer
+            self.text_parser = TextParser(tokenizer=tokenizer)
 
     def get_model(self):
         return self.model
@@ -193,7 +196,7 @@ class Model:
 
         elif self.category == "text":
             # perform parsing for text and pass to the model
-            input_dict = self.text_parser(input_object, self.tokenizer)
+            input_dict = self.text_parser(input_object)
             input_dict = {k: torch.from_numpy(v) for k, v in input_dict.items()}
             return input_dict
 
@@ -209,6 +212,7 @@ class Model:
 
         Args:
             input_object (Any): input to be processed
+            return_inputs (bool, optional): whether to return the inputs or not. Defaults to False.
 
         Returns:
             Any: currently this is output from the model, so if it is tensors and return dicts.
@@ -247,26 +251,38 @@ class Model:
         dynamic_axes_dict = {
             0: "batch_size",
         }
+        if self.category == "text":
+            dynamic_axes_dict[1] = "sequence_length"
+
+        # need to convert inputs and outputs to list / tuple
         if isinstance(model_input, dict):
             args = tuple(model_input.values())
             input_names = tuple(model_input.keys())
-            dynamic_axes = {i: dynamic_axes_dict for i in input_names}
         elif isinstance(model_input, torch.Tensor):
             args = tuple([model_input])
-            input_names = tuple(["input:0"])
-            dynamic_axes = {"input:0": dynamic_axes_dict}
+            input_names = tuple(["input_0"])
+        dynamic_axes = {i: dynamic_axes_dict for i in input_names}
 
-        # need to convert inputs and outputs to list / tuple
         if isinstance(model_output, dict):
             output_names = tuple(model_output.keys())
         elif isinstance(model_output, (list, tuple)):
-            output_names = tuple([f"output:{i}" for i, x in enumerate(model_output)])
+            output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
         elif isinstance(model_output, torch.Tensor):
-            output_names = tuple(["output:0"])
+            output_names = tuple(["output_0"])
 
         # OCD baby!
         out = network.ocd(
-            self.model_key, self.model, args, input_names, output_names, dynamic_axes, username, password, model_name, cache_dir
+            model_key=self.model_key,
+            model=self.model,
+            args=args,
+            input_names=input_names,
+            output_names=output_names,
+            dynamic_axes=dynamic_axes,
+            category=self.category,
+            username=username,
+            password=password,
+            model_name=model_name,
+            cache_dir=cache_dir,
         )
 
         return out
