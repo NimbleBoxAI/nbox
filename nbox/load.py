@@ -3,6 +3,9 @@
 import re
 from typing import Dict
 
+import inspect
+import warnings
+
 from nbox.model import Model
 from nbox.api import NBXApi
 from nbox.utils import is_available
@@ -107,7 +110,17 @@ def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
             raise IndexError(f"Model: {model} not found in torchvision")
 
         kwargs = remove_kwargs(pop_kwargs, **kwargs)
-        return model_fn(pretrained=pretrained, **kwargs), {}
+
+        # compare variables between the model_fn and kwargs if they are different then remove it with warning
+        arg_spec = inspect.getfullargspec(model_fn)
+        if kwargs and arg_spec.varkw != None:
+            diff = set(kwargs.keys()) - set(arg_spec.args)
+            for d in list(diff):
+                warnings.warn(f"Ignoring unknown argument: {d}")
+                kwargs.pop(d)
+
+        model = model_fn(pretrained=pretrained, **kwargs)
+        return model, {}
 
     return {"torchvision": (model_builder, "image")}
 

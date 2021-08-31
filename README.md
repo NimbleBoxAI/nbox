@@ -17,14 +17,26 @@ import nbox
 # torchvision, efficient_pytorch or hf.transformers
 model = nbox.load("torchvision/mobilenetv2", pretrained = True)
 
-# nbox makes inference the priority so you can
-out = model('cat.jpg')                       # pass it image path
-out = model(Image.open('cat.jpg'))           # pass it PIL.Image
-out = model(np.array(Image.open('cat.jpg'))) # pass it numpy arrays
-out = model(['cat.jpg', 'cat.jpg'])          # pass it a list for batch inference
+# nbox makes inference the priority so you can use it
+# pass it a list for batch inference 
+out_single = model('cat.jpg')
+out = model([Image.open('cat.jpg'), np.array(Image.open('cat.jpg'))])
+tuple(out.shape) == (2, 1000)
 
-# To access the underlying framework dependent model
-underlying_model = model.get_model()
+# deploy the model to a managed kubernetes cluster on NimbleBox.ai
+url_endpoint, nbx_api_key = model.deploy()
+
+# or load a cloud infer model and use seamlessly
+model = nbox.load(
+  model_key_or_url = url_endpoint,
+  nbx_api_key = nbx_api_key,
+  category = "image"
+)
+
+# Deja-Vu!
+out_single = model('cat.jpg')
+out = model([Image.open('cat.jpg'), np.array(Image.open('cat.jpg'))])
+tuple(out.shape) == (2, 1000)
 ```
 
 ## Things for Repo
@@ -38,6 +50,14 @@ underlying_model = model.get_model()
 # License
 
 The code in thist repo is licensed as [BSD 3-Clause](./LICENSE). Please check for individual repositories for licenses. Here are some of them:
+
+### Requirements
+
+- [`rich`](https://github.com/willmcgugan/rich/blob/master/LICENSE)
+
+### Model Sources
+
+99% of the credit for `nbox` goes to the amazing people behind these projects:
 
 - [`torch`](https://github.com/pytorch/pytorch/blob/master/LICENSE)
 - [`transformers`](https://github.com/huggingface/transformers/blob/master/LICENSE)

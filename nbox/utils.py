@@ -2,6 +2,8 @@
 
 import os
 import io
+import re
+import json
 import hashlib
 import requests
 import tempfile
@@ -117,3 +119,25 @@ class OCDConsole:
         del self.status
         self._log(x)
         self._in_status = False
+
+
+# class Secrets:
+#     # this class is used to manage all auth related secrets by reading them from a file
+#     # and writing them back when the program exits
+#     def __init__(self, file_path = None):
+#         fp = file_path or join("/", "secrets.json")
+
+#         self.file_path = file_path
+#         self.secrets = {}
+#         with open(file_path, "r") as f:
+#             # read the JSON file, remove comments and then load it
+#             self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
+    
+#     def __getattribute__(self, name: str):
+#         return self.get(name)
+
+#     def __getitem__(self, name: str):
+#         return self.get(name)
+
+#     def get(self, name: str):
+#         return self.secrets[name]

@@ -5,8 +5,8 @@ import nbox
 from nbox import utils
 
 # we check forward pass works and that results are reproducible
-URL_CAT_TARGET_LIST = [78, 669, 794, 434, 75]
-ASSET_CAT_TARGET_LIST = [283, 279, 285, 281, 333]
+URL_CAT_TARGET_LIST = [78, 285, 283, 281, 282]
+ASSET_CAT_TARGET_LIST = [285, 283, 281, 282, 284]
 
 
 class ImportComputerVision(unittest.TestCase):
