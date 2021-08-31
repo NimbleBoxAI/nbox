@@ -160,14 +160,16 @@ def load_transformers_models() -> Dict:
 # have proper model building code like transformers, torchvision, etc.
 
 PRETRAINED_MODELS = {}
-if is_available("efficientnet_pytorch"):
-    PRETRAINED_MODELS.update(load_efficientnet_pytorch_models())
+all_repos = ["efficientnet_pytorch", "torchvision", "transformers"]
 
-if is_available("torchvision"):
-    PRETRAINED_MODELS.update(load_torchvision_models())
+for repo in all_repos:
+    if is_available(repo):
+        print(f"Loading pretrained models from {repo}")
+        PRETRAINED_MODELS.update(locals()[f"load_{repo}_models"]())
 
-if is_available("transformers"):
-    PRETRAINED_MODELS.update(load_transformers_models())
+# if there are no pretrained models available, then raise an error
+if not PRETRAINED_MODELS:
+    raise ValueError("No pretrained models available. Please install PyTorch or torchvision or transformers to use pretrained models.")
 
 
 PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))

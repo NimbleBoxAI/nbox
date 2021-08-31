@@ -1,6 +1,5 @@
 # this file has methods for netorking related things
 
-import re
 import os
 import requests
 from time import sleep
@@ -37,6 +36,7 @@ def ocd(
         input_names (Tuple): input tensor names to the model for ONNX export
         output_names (Tuple): output tensor names to the model for ONNX export
         dynamic_axes (Dict): dictionary with input_name and dynamic axes shape
+        category (str): model category
         username (str, optional): your username, ignore if on NBX platform. Defaults to None.
         password (str, optional): your password, ignore if on NBX platform. Defaults to None.
         model_name (str, optional): custom model name for this model. Defaults to None.

@@ -16,14 +16,13 @@ class NBXApi:
         """NBXApi would call the NBX Chill Inference API
 
         Args:
-            model_key_or_url (str): model (str, optional): key for which to load the model, the structure looks as follows:
-                ```
-                source/(source/key)::<pre::task::post>
-                ```
-            nbx_api_key (str): Your Nimblebox API key
+            model_key_or_url (str): URL from OCD or model_key
+            nbx_api_key (str): NBX API Key
+            category (str): "image" or "text"
+            verbose (bool, optional): verbose mode. Defaults to False.
 
         Raises:
-            NotImplementedError
+            ValueError: if category is not "image" or "text"
         """
         self.nbx_api_key = nbx_api_key
         self.category = category
@@ -96,7 +95,6 @@ class NBXApi:
             data = {}
             for k in self.templates:
                 data[k] = input_tensor
-            print(data)
             return data
 
         elif self.category == "text":

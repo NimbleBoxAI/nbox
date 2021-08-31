@@ -212,6 +212,7 @@ class Model:
 
         Args:
             input_object (Any): input to be processed
+            return_inputs (bool, optional): whether to return the inputs or not. Defaults to False.
 
         Returns:
             Any: currently this is output from the model, so if it is tensors and return dicts.

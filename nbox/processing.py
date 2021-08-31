@@ -5,13 +5,6 @@ import numpy as np
 from torchvision.transforms import functional as F
 
 
-# def image_processing(input_path):
-#     img = Image.open(input_path).convert("RGB")
-#     img = torch.tensor(np.asarray(img))
-#     img = img.permute(2, 0, 1).unsqueeze(0)
-#     return img.float()
-
-
 def totensor(image):
     min_dim = min(image.size)
     img = F.to_tensor(image)

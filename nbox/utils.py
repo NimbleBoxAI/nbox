@@ -15,6 +15,8 @@ from types import SimpleNamespace
 
 import logging
 
+# ----- functions
+
 logging.basicConfig(level="INFO")
 
 
@@ -72,6 +74,9 @@ def hash_(item, fn="md5"):
     return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
 
+# --- classes
+
+# OCDConsole is a rich console wrapper for beautifying statuses
 class OCDConsole:
     T = SimpleNamespace(
         clk="deep_sky_blue1",  # timer
@@ -121,23 +126,21 @@ class OCDConsole:
         self._in_status = False
 
 
-# class Secrets:
-#     # this class is used to manage all auth related secrets by reading them from a file
-#     # and writing them back when the program exits
-#     def __init__(self, file_path = None):
-#         fp = file_path or join("/", "secrets.json")
+class Secrets:
+    # this class is used to manage all auth related secrets by reading them from a file
+    # and writing them back when the program exits
+    def __init__(self, file_path=None):
+        self.fp = file_path or join("/", "secrets.json")
+        self.secrets = {}
+        with open(file_path, "r") as f:
+            # read the JSON file, remove comments and then load it
+            self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
 
-#         self.file_path = file_path
-#         self.secrets = {}
-#         with open(file_path, "r") as f:
-#             # read the JSON file, remove comments and then load it
-#             self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
+    def __getattribute__(self, name: str):
+        return self.get(name)
 
-#     def __getattribute__(self, name: str):
-#         return self.get(name)
+    def __getitem__(self, name: str):
+        return self.get(name)
 
-#     def __getitem__(self, name: str):
-#         return self.get(name)
-
-#     def get(self, name: str):
-#         return self.secrets[name]
+    def get(self, name: str):
+        return self.secrets[name]
