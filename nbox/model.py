@@ -250,26 +250,38 @@ class Model:
         dynamic_axes_dict = {
             0: "batch_size",
         }
+        if self.category == "text":
+            dynamic_axes_dict[1] = "sequence_length"
+
+        # need to convert inputs and outputs to list / tuple
         if isinstance(model_input, dict):
             args = tuple(model_input.values())
             input_names = tuple(model_input.keys())
-            dynamic_axes = {i: dynamic_axes_dict for i in input_names}
         elif isinstance(model_input, torch.Tensor):
             args = tuple([model_input])
-            input_names = tuple(["input:0"])
-            dynamic_axes = {"input:0": dynamic_axes_dict}
+            input_names = tuple(["input_0"])
+        dynamic_axes = {i: dynamic_axes_dict for i in input_names}
 
-        # need to convert inputs and outputs to list / tuple
         if isinstance(model_output, dict):
             output_names = tuple(model_output.keys())
         elif isinstance(model_output, (list, tuple)):
-            output_names = tuple([f"output:{i}" for i, x in enumerate(model_output)])
+            output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
         elif isinstance(model_output, torch.Tensor):
-            output_names = tuple(["output:0"])
+            output_names = tuple(["output_0"])
 
         # OCD baby!
         out = network.ocd(
-            self.model_key, self.model, args, input_names, output_names, dynamic_axes, username, password, model_name, cache_dir
+            model_key = self.model_key,
+            model = self.model,
+            args = args,
+            input_names = input_names,
+            output_names = output_names,
+            dynamic_axes = dynamic_axes,
+            category = self.category,
+            username = username,
+            password = password,
+            model_name = model_name,
+            cache_dir = cache_dir
         )
 
         return out
