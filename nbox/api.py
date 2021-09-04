@@ -1,14 +1,19 @@
 # Plugging NBXApi as another alternative for nbox.Model
 # Seemlessly remove boundaries between local and cloud inference
 
+import os
+import json
 import requests
 from time import time
 
 import torch
 from nbox import processing
 from nbox.model import ImageParser, TextParser
+from nbox.utils import Console
 
 from pprint import pprint as peepee
+
+URL = os.getenv("NBX_OCD_URL")
 
 # main class that calls the NBX Server Models
 class NBXApi:
@@ -24,6 +29,7 @@ class NBXApi:
         Raises:
             ValueError: if category is not "image" or "text"
         """
+        self.model_key_or_url = model_key_or_url
         self.nbx_api_key = nbx_api_key
         self.category = category
         self.verbose = verbose
@@ -33,41 +39,66 @@ class NBXApi:
 
         assert self.is_url, "Currently only URLs are accepted"
         assert self.nbx_api_key, "Invalid `nbx_api_key` found"
+        
+        self.console = Console()
 
         if self.is_url:
-            # remove trailing '/'
-            model_key_or_url = model_key_or_url[:-1] if model_key_or_url.endswith("/") else model_key_or_url
-            self.model_key_or_url = model_key_or_url
-            print(self.model_key_or_url + "/metadata")
-            r = requests.get(url=self.model_key_or_url + "/metadata", headers={"NBX-KEY": self.nbx_api_key})
-            try:
-                r.raise_for_status()
-            except:
-                raise ValueError(f"Could not fetch metadata, please check: {r.content}")
-
-            content = r.json()
-            headers = r.headers
-
-            if verbose:
-                peepee(content)
-                peepee(headers)
-
-            all_inputs = content["metadata"]["signature_def"]["signatureDef"]["serving_default"]["inputs"]
-            self.templates = {}
-            for node, meta in all_inputs.items():
-                self.templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
-
-            if verbose:
-                peepee(self.templates)
+            ovms_meta, nbox_meta = self.prepare_as_url(verbose)
 
         # define the incoming parsers
         self.image_parser = ImageParser()
         self.text_parser = TextParser(None)
 
+        if self.category == "text":
+            import transformers
+            model_key = nbox_meta["model_key"].split("::")[0].split("transformers/")[-1]
+            tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
+            self.text_parser = TextParser(tokenizer)
+
     def __repr__(self):
         return f"<nbox.Model: {self.model_key_or_url} >"
 
+    def prepare_as_url(self, verbose):
+        self.console.start("Getting model metadata")
+        # remove trailing '/'
+        r = requests.get(
+            f"{URL}/api/model/get_model_meta",
+            params = {
+                "url": self.model_key_or_url,
+                "key": self.nbx_api_key
+            }
+        )
+        try:
+            r.raise_for_status()
+            content = r.json()["meta"]
+            ovms_meta = content["ovms_meta"]
+            nbox_meta = json.loads(content["nbox_meta"])
+            headers = r.headers
+            self.model_key_or_url = self.model_key_or_url[:-1] if self.model_key_or_url.endswith("/") else self.model_key_or_url
+        except:
+            raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
+
+
+        if verbose:
+            peepee(headers)
+            print("--------------")
+            peepee(ovms_meta)
+            print("--------------")
+            peepee(nbox_meta)
+
+        all_inputs = ovms_meta["metadata"]["signature_def"]["signatureDef"]["serving_default"]["inputs"]
+        self.templates = {}
+        for node, meta in all_inputs.items():
+            self.templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
+
+        if verbose:
+            peepee(self.templates)
+
+        self.console.stop("Cloud infer metadata obtained")
+        return ovms_meta, nbox_meta
+
     def call(self, data):
+        self.console.start("Hitting API")
         if self.verbose:
             print(":0-----------------0:")
             print({k: v.size() for k, v in data.items()})
@@ -75,7 +106,14 @@ class NBXApi:
         st = time()
         r = requests.post(self.model_key_or_url + ":predict", json={"inputs": data}, headers={"NBX-KEY": self.nbx_api_key})
         et = time() - st
-        return r.json(), r.headers, et
+        try:
+            out = r.json()
+        except:
+            print(r.content)
+
+        self.console.stop(f"Took {et:.3f} seconds!")
+        # structure this and 
+        return out
 
     def _handle_input_object(self, input_object):
         """First level handling to convert the input object to a fixed object"""
@@ -85,11 +123,14 @@ class NBXApi:
                 _t = []
                 for item in input_object:
                     pil_img = self.image_parser(item)[0]
+                    for k, s in self.templates.items():
+                        pil_img = pil_img.resize(s[-2:])
                     _t.append(processing.totensor(pil_img))
                 input_tensor = torch.cat(_t, axis=0)
             else:
                 pil_img = self.image_parser(input_object)[0]
-                pil_img = pil_img.resize((224, 224))
+                for k, s in self.templates.items():
+                    pil_img = pil_img.resize(s[-2:])
                 input_tensor = processing.totensor(pil_img)
 
             data = {}

@@ -1,4 +1,6 @@
 import os
+from re import I
+from numpy.lib.arraysetops import isin
 import torch
 import numpy as np
 from PIL import Image
@@ -15,54 +17,90 @@ from nbox import utils
 
 
 class ImageParser:
-    """single unified Image parser that returns PIL.Image objects by consuming multiple differnet data-types"""
+    """single unified Image parser that consumes different types of data
+    and returns a processed numpy array"""
+
+    def __init__(self, pre_proc_fn = None):
+        self.pre_proc_fn = pre_proc_fn
+
+    # if the input is torch.int then rescale it -1, 1
+    def rescale(self, x):
+        if utils.is_available("torch") and isinstance(x, torch.Tensor) and "int" in str(x.dtype):
+            return (x - 122.5) / 122.5
+        return x
+
+    def rearrange(self, x):
+        if len(x.shape) == 3 and x.shape[0] != 3:
+            return x.permute(2, 0, 1)
+        elif len(x.shape) == 4 and x.shape[1] != 3:
+            return x.permute(0, 3, 1, 2)
+        return x
 
     def handle_string(self, x: str):
         if os.path.exists(x):
             utils.info(" - ImageParser - (A1)")
-            return [Image.open(x)]
-        if x.startswith("http:") or x.startswith("https:"):
+            out = np.array(Image.open(x))
+            return out
+        elif x.startswith("http:") or x.startswith("https:"):
             utils.info(" - ImageParser - (A2)")
-            return [utils.get_image(x)]
+            out = np.array(utils.get_image(x))
+            return out
         else:
-            utils.info(" - ImageParser - (B)")
+            utils.info(" - ImageParser - (A)")
             raise ValueError("Cannot process string that is not Image path")
 
-    def handle_numpy(self, obj):
-        if obj.dtype == np.float32 or obj.dtype == np.float64:
-            utils.info(" - ImageParser - (C)")
-            obj *= 122.5
-            obj += 122.5
-        utils.info(" - ImageParser - (C2)")
-        if obj.dtype != np.uint8:
-            obj = obj.astype(np.uint8)
-        return [Image.fromarray(obj)]
+    def handle_list(self, x: list):
+        utils.info(" - ImageParser - (B)")
+        return [self(i) for i in x]
 
-    def handle_torch_tensor(self, obj):
-        if obj.dtype == torch.float:
-            utils.info(" - ImageParser - (C)")
-            obj *= 122.5
-            obj += 122.5
-            obj = obj.numpy()
-        else:
-            raise ValueError(f"Incorrect datatype for torch.tensor: {obj.dtype}")
-        utils.info(" - ImageParser - (C2)")
-        if obj.dtype != np.uint8:
-            obj = obj.astype(np.uint8)
-        return [Image.fromarray(obj)]
+    def handle_dictionary(self, x: dict):
+        utils.info(" - ImageParser - (C)")
+        return {k: self(v) for k, v in x.items()}
+
+    def handle_pil_image(self, x: Image):
+        utils.info(" - ImageParser - (E)")
+        out = self(np.array(x))
+        return out
 
     def __call__(self, x):
-        if isinstance(x, str):
-            proc_fn = self.handle_string
+        if utils.is_available("torch") and isinstance(x, torch.Tensor):
+            x = x
+            x = self.pre_proc_fn(x) if self.pre_proc_fn is not None else x
+            out = self.rearrange(self.rescale(x.unsqueeze(0)))
         elif isinstance(x, np.ndarray):
-            proc_fn = self.handle_numpy
+            x = torch.from_numpy(x)
+            x = self.pre_proc_fn(x) if self.pre_proc_fn is not None else x
+            out = self.rearrange(self.rescale(x.unsqueeze(0)))
+        elif isinstance(x, str):
+            x = torch.from_numpy(self.handle_string(x))
+            x = self.pre_proc_fn(x) if self.pre_proc_fn is not None else x
+            out = self.rearrange(self.rescale(x.unsqueeze(0)))
+        elif isinstance(x, list):
+            out = self.handle_list(x)
+
+            # if out is list of dicts then create a dict with concatenated tensors
+            if isinstance(out[0], dict):
+                # assert all keys are same in the list
+                assert all([set(out[0].keys()) == set(i.keys()) for i in out])
+                out = {k: torch.cat([i[k] for i in out]) for k in out[0].keys()}
+            elif isinstance(out[0], torch.Tensor):
+                out = torch.cat(out)
+            else:
+                raise ValueError("Unsupported type: {}".format(type(out[0])))
+
+        elif isinstance(x, dict):
+            x = self.handle_dictionary(x)
+            x = {k:self.pre_proc_fn(v) if self.pre_proc_fn is not None else v for k, v in x.items()}
+            out = {k:self.rescale(v) for k, v in x.items()}
+            out = {k:self.rearrange(v) for k, v in x.items()}
         elif isinstance(x, Image.Image):
-            utils.info(" - ImageParser - (D)")
-            proc_fn = lambda x: [x]
+            x = self.handle_pil_image(x)
+            out = self.rearrange(self.rescale(x))
         else:
-            utils.info(" - ImageParser - (E)")
+            utils.info(" - ImageParser - (D)")
             raise ValueError(f"Cannot process item of dtype: {type(x)}")
-        return proc_fn(x)
+        return out
+
 
 
 class TextParser:
@@ -158,14 +196,16 @@ class Model:
 
         # initialise all the parsers, like WTH, how bad would it be
         self.image_parser = ImageParser()
-        self.text_parser = None
+        self.text_parser = TextParser(tokenizer=tokenizer)
 
-        if self.category not in ["image", "text"]:
-            raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
+        if isinstance(self.category, dict):
+            assert all([v in ["image", "text"] for v in self.category.values()])
+        else:
+            if self.category not in ["image", "text"]:
+                raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
 
         if self.category == "text":
             assert tokenizer != None, "tokenizer cannot be none for a text model!"
-            self.text_parser = TextParser(tokenizer=tokenizer)
 
     def get_model(self):
         return self.model
@@ -179,20 +219,29 @@ class Model:
     def __repr__(self):
         return f"<nbox.Model: {repr(self.model)} >"
 
-    def _handle_input_object(self, input_object):
+    def _handle_input_object(self, input_object, verbose = False):
         """First level handling to convert the input object to a fixed object"""
+        if isinstance(self.category, dict):
+            assert isinstance(input_object, dict), "If category is a dict then input must be a dict"
+            # check for same keys
+            assert set(input_object.keys()) == set(self.category.keys())
+            input_dict = {}
+            for k,v in input_object.items():
+                if k in self.category:
+                    if self.category[k] == "image":
+                        input_dict[k] = self.image_parser(v)
+                    elif self.category[k] == "text":
+                        input_dict[k] = self.text_parser(v)["input_ids"]
+                    else:
+                        raise ValueError(f"Unsupported category: {self.category[k]}")
+            if verbose:
+                for k,v in input_dict.items():
+                    print(k,v.shape)
+            return input_dict
+
         if self.category == "image":
-            # perform parsing for images
-            if isinstance(input_object, (list, tuple)):
-                _t = []
-                for item in input_object:
-                    pil_img = self.image_parser(item)[0]
-                    _t.append(processing.totensor(pil_img))
-                input_tensor = torch.cat(_t, axis=0)
-            else:
-                pil_img = self.image_parser(input_object)[0]
-                input_tensor = processing.totensor(pil_img)
-            return input_tensor
+            input_obj = self.image_parser(input_object)
+            return input_obj
 
         elif self.category == "text":
             # perform parsing for text and pass to the model
@@ -200,7 +249,7 @@ class Model:
             input_dict = {k: torch.from_numpy(v) for k, v in input_dict.items()}
             return input_dict
 
-    def __call__(self, input_object: Any, return_inputs=False):
+    def __call__(self, input_object: Any, return_inputs=False, verbose = False):
         """This is the most important part of this codebase. The `input_object` can be anything from
         a tensor, an image file, filepath as string, string to process as NLP model. This `__call__`
         should understand the different usecases and manage accordingly.
@@ -218,7 +267,7 @@ class Model:
             Any: currently this is output from the model, so if it is tensors and return dicts.
         """
 
-        model_input = self._handle_input_object(input_object=input_object)
+        model_input = self._handle_input_object(input_object=input_object, verbose = verbose)
 
         if isinstance(model_input, dict):
             out = self.model(**model_input)
@@ -258,17 +307,28 @@ class Model:
         if isinstance(model_input, dict):
             args = tuple(model_input.values())
             input_names = tuple(model_input.keys())
+            input_shapes = tuple([tuple(v.shape) for k,v in model_input.items()])
         elif isinstance(model_input, torch.Tensor):
             args = tuple([model_input])
             input_names = tuple(["input_0"])
+            input_shapes = tuple([tuple(model_input.shape)])
         dynamic_axes = {i: dynamic_axes_dict for i in input_names}
 
         if isinstance(model_output, dict):
             output_names = tuple(model_output.keys())
+            output_shapes = tuple([tuple(v.shape) for k,v in model_output.keys()])
         elif isinstance(model_output, (list, tuple)):
-            output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
+            mo = model_output[0]
+            if isinstance(mo, dict):
+                # cases like [{"output_0": tensor, "output_1": tensor}]
+                output_names = tuple(mo.keys())
+                output_shapes = tuple([tuple(v.shape) for k,v in mo.items()])
+            else:
+                output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
+                output_shapes = tuple([tuple(v.shape) for v in model_output])
         elif isinstance(model_output, torch.Tensor):
             output_names = tuple(["output_0"])
+            output_shapes = (tuple(model_output.shape),)
 
         # OCD baby!
         out = network.ocd(
@@ -276,7 +336,9 @@ class Model:
             model=self.model,
             args=args,
             input_names=input_names,
+            input_shapes=input_shapes,
             output_names=output_names,
+            output_shapes=output_shapes,
             dynamic_axes=dynamic_axes,
             category=self.category,
             username=username,

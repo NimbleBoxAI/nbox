@@ -5,5 +5,6 @@ import nbox.load
 from nbox.model import Model
 from nbox.load import load, PRETRAINED_MODELS, PT_SOURCES
 from nbox.api import NBXApi
+# from nbox.user import secrets
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"

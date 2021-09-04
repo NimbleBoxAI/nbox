@@ -10,6 +10,8 @@ from nbox.model import Model
 from nbox.api import NBXApi
 from nbox.utils import is_available
 
+model_key_regex = re.compile(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$")
+
 # util functions
 def remove_kwargs(pop_list, **kwargs):
     for p in pop_list:
@@ -201,7 +203,12 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
         nbox.NBXApi: when using cloud inference
     """
     # the input key can also contain instructions on how to run a particular models and so
-    model_key, src, src_key, model_instr = re.findall(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$", model_key)[0]
+    model_key_parts = re.findall(model_key_regex, model_key)
+    if not model_key_parts:
+        raise ValueError(f"Key: {model_key} incorrect, please check once!")
+
+    # this key is valid, now get it's components
+    model_key, src, src_key, model_instr = model_key_parts[0]
     if src not in PT_SOURCES:
         raise ValueError(f"Model source: {src} not found. Is this package installed!")
     model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))

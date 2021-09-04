@@ -1,18 +1,31 @@
 [tool.poetry]
 name = "nbox"
-version = "0.1.4"
-description = "Makes using a host of opensource deep learning algorithms easier"
+version = "0.1.5"
+description = "ML Inference 🥶"
 authors = [
-            "Yash Bonde <bonde.yash97@gmail.com>",
-            "Aakash Kaushik <kaushikaakash7539@gmail.com>",
-            "NBX Research <research@nimblebox.ai>"
-          ]
+  "Yash Bonde <bonde.yash97@gmail.com>",
+  "Aakash Kaushik <kaushikaakash7539@gmail.com>",
+  "NBX Research <research@nimblebox.ai>"
+]
+maintainers = [
+  "Yash Bonde <bonde.yash97@gmail.com>",
+  "Aakash Kaushik <kaushikaakash7539@gmail.com>",
+  "NBX Research <research@nimblebox.ai>"
+]
+readme = "README.md"
+homepage = "https://docs.nimblebox.ai/nbox/python-api"
+repository = "https://github.com/NimbleBoxAI/nbox"
+documentation = "https://docs.nimblebox.ai/nbox/python-api"
 
 [tool.poetry.dependencies]
 python = "^3.6"
+rich = "10.7.0"
+randomname = "1.0.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
+rich = "10.7.0"
+randomname = "1.0.0"
 
 [build-system]
 requires = [

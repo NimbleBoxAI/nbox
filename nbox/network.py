@@ -3,13 +3,27 @@
 import os
 import requests
 from time import sleep
+from copy import deepcopy
 from typing import Dict, Tuple
 from pprint import pprint as peepee
 
 import torch
 from nbox import utils
+# from nbox.user import secrets as S
 
-URL = os.getenv("NBX_OCD_URL")
+from nbox.user import get_access_token
+
+# get URL from S
+# URL = S.get("nbx_url")
+
+URL = os.getenv("NBX_OCD_URL", None)
+
+NBOX_META = {
+    "input_names": [],
+    "input_shapes": [],
+    "output_names": [],
+    "output_shapes": [],
+}
 
 
 def ocd(
@@ -17,7 +31,9 @@ def ocd(
     model: torch.nn.Module,
     args: Tuple,
     input_names: Tuple,
+    input_shapes: Tuple,
     output_names: Tuple,
+    output_shapes: Tuple,
     dynamic_axes: Dict,
     category: str,
     username: str = None,
@@ -34,7 +50,9 @@ def ocd(
         model (torch.nn.Module): model to be deployed
         args (Tuple): input tensor to the model for ONNX export
         input_names (Tuple): input tensor names to the model for ONNX export
+        input_shapes (Tuple): input tensor shapes to the model for ONNX export
         output_names (Tuple): output tensor names to the model for ONNX export
+        output_shapes (Tuple): output tensor shapes to the model for ONNX export
         dynamic_axes (Dict): dictionary with input_name and dynamic axes shape
         category (str): model category
         username (str, optional): your username, ignore if on NBX platform. Defaults to None.
@@ -48,31 +66,10 @@ def ocd(
     Returns:
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
-    print()
-    console = utils.OCDConsole()
+    console = utils.Console()
     console.rule()
-
     cache_dir = "/tmp" if cache_dir is None else cache_dir
-
-    # get the access tokens
-    console.start("Getting access tokens ...")
-    access_token = os.getenv("NBX_ACCESS_TOKEN", None)
-    if not access_token:
-        if not (username or password):
-            raise ValueError("No access token found and username and password not provided")
-        r = requests.post(
-            url=f"{URL}/api/login",
-            json={"username": username, "password": password},
-            verify=False,
-        )
-        try:
-            r.raise_for_status()
-        except:
-            raise ValueError(f"Authentication Failed: {r.content.decode('utf-8')}")
-        access_packet = r.json()
-        access_token = access_packet.get("access_token", None)
-        os.environ["NBX_ACCESS_TOKEN"] = access_token
-    console.stop("Access token obtained")
+    access_token = get_access_token(URL, username, password)
 
     # convert the model
     _m_hash = utils.hash_(model_key)
@@ -99,9 +96,19 @@ def ocd(
     # get the one-time-url from webserver
     console.start("Getting upload URL ...")
 
+    # create the metadata and fill it
+    nbox_meta = deepcopy(NBOX_META)
+    nbox_meta["input_names"] = input_names
+    nbox_meta["input_shapes"] = input_shapes
+    nbox_meta["output_names"] = output_names
+    nbox_meta["output_shapes"] = output_shapes
+    nbox_meta["model_key"] = model_key
+
+    console._log("nbox_meta:", nbox_meta)
+
     # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
     input_ = ",".join(input_names)
-    input_shape = ",".join([str(list(x.shape)).replace(" ", "") for x in args])
+    input_shape = ",".join([str(x).replace(" ", "") for x in nbox_meta["input_shapes"]])
     convert_args = f"--data_type=FP32 --input_shape={input_shape} --input={input_}"
 
     if category == "image":
@@ -122,6 +129,7 @@ def ocd(
             "file_type": onnx_model_path.split(".")[-1],
             "model_name": model_name,
             "convert_args": convert_args,
+            "nbox_meta": nbox_meta,
         },
         headers={"Authorization": f"Bearer {access_token}"},
         verify=False,
@@ -129,16 +137,15 @@ def ocd(
     try:
         r.raise_for_status()
     except:
-        peepee(r.content)
+        raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
     out = r.json()
     console.stop("S3 Upload URL obtained")
     model_id = out["fields"]["x-amz-meta-model_id"]
     console("model_id:", model_id)
 
-    # upload the file to a S3
+    # upload the file to a S3 -> don't raise for status here
     console.start("Uploading model to S3 ...")
     r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(onnx_model_path, "rb"))})
-    # cannot raise_for_status
     console.stop(f"Upload to S3 complete")
 
     # checking if file is successfully uploaded on S3 and tell webserver
@@ -157,6 +164,7 @@ def ocd(
     _stat_done = []  # status calls performed
     sleep_seconds = 3  # sleep up a little
     model_data_access_key = None  # this key is used for calling the model
+    console._log(f"Check your deployment at {URL}/oneclick")
     console.start("Start Polling ...")
     while True:
         for i in range(sleep_seconds):
@@ -202,14 +210,14 @@ def ocd(
                 console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
 
                 r = requests.get(
-                    url=f"{URL}/get_model_access_key", headers={"Authorization": f"Bearer {access_token}"}, json={"model_id": model_id}
+                    url=f"{URL}/api/model/get_model_access_key", headers={"Authorization": f"Bearer {access_token}"}, params={"model_id": model_id}
                 )
                 try:
                     r.raise_for_status()
                     model_data_access_key = r.json()["model_data_access_key"]
                     console._log(f"nbx-key: {model_data_access_key}")
                 except:
-                    raise ValueError(f"Failed to get model_data_access_key from /get_model_access_key")
+                    raise ValueError(f"Failed to get model_data_access_key: {r.content}")
 
             # keep hitting /metadata and see if model is ready or not
             r = requests.get(
@@ -219,6 +227,7 @@ def ocd(
             )
             if r.status_code == 200:
                 console._log(f"Model is ready")
+                # S.add_ocd(model_id, endpoint, nbx_meta, access_key)
                 break
 
         # if failed exit
