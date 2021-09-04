@@ -15,6 +15,8 @@ from pprint import pprint as peepee
 
 URL = os.getenv("NBX_OCD_URL")
 
+from pprint import pprint as peepee
+
 # main class that calls the NBX Server Models
 class NBXApi:
     def __init__(self, model_key_or_url: str, nbx_api_key: str, category: str, verbose: bool = False):
@@ -29,7 +31,6 @@ class NBXApi:
         Raises:
             ValueError: if category is not "image" or "text"
         """
-        self.model_key_or_url = model_key_or_url
         self.nbx_api_key = nbx_api_key
         self.category = category
         self.verbose = verbose
