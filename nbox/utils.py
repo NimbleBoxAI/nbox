@@ -124,4 +124,3 @@ class Console:
         del self.status
         self._log(x)
         self._in_status = False
-

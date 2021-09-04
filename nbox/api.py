@@ -40,7 +40,7 @@ class NBXApi:
 
         assert self.is_url, "Currently only URLs are accepted"
         assert self.nbx_api_key, "Invalid `nbx_api_key` found"
-        
+
         self.console = Console()
 
         if self.is_url:
@@ -52,6 +52,7 @@ class NBXApi:
 
         if self.category == "text":
             import transformers
+
             model_key = nbox_meta["model_key"].split("::")[0].split("transformers/")[-1]
             tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
             self.text_parser = TextParser(tokenizer)
@@ -62,13 +63,7 @@ class NBXApi:
     def prepare_as_url(self, verbose):
         self.console.start("Getting model metadata")
         # remove trailing '/'
-        r = requests.get(
-            f"{URL}/api/model/get_model_meta",
-            params = {
-                "url": self.model_key_or_url,
-                "key": self.nbx_api_key
-            }
-        )
+        r = requests.get(f"{URL}/api/model/get_model_meta", params={"url": self.model_key_or_url, "key": self.nbx_api_key})
         try:
             r.raise_for_status()
             content = r.json()["meta"]
@@ -78,7 +73,6 @@ class NBXApi:
             self.model_key_or_url = self.model_key_or_url[:-1] if self.model_key_or_url.endswith("/") else self.model_key_or_url
         except:
             raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
-
 
         if verbose:
             peepee(headers)
@@ -113,7 +107,7 @@ class NBXApi:
             print(r.content)
 
         self.console.stop(f"Took {et:.3f} seconds!")
-        # structure this and 
+        # structure this and
         return out
 
     def _handle_input_object(self, input_object):

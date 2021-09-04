@@ -19,7 +19,6 @@ def get_model(*args, **kwargs):
 
 
 class DeployTest(unittest.TestCase):
-
     @unittest.skipIf(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
     def test_deploy_hf_bert(self):
         model_key = "transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM"
@@ -52,16 +51,16 @@ class DeployTest(unittest.TestCase):
 
     @unittest.skipIf(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
     def test_deploy_tv_resnet18(self):
-      model_key = "torchvision/resnet18"
-      cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
-      os.makedirs(cache_dir, exist_ok = True)
-      image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
-      model = get_model(model_key)
-      url, model_data_access_key = model.deploy(
-        image,
-        username=os.getenv("NBX_USERNAME"),
-        password=os.getenv("NBX_PASSWORD"),
-        cache_dir = cache_dir,
-      )
+        model_key = "torchvision/resnet18"
+        cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
+        os.makedirs(cache_dir, exist_ok=True)
+        image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
+        model = get_model(model_key)
+        url, model_data_access_key = model.deploy(
+            image,
+            username=os.getenv("NBX_USERNAME"),
+            password=os.getenv("NBX_PASSWORD"),
+            cache_dir=cache_dir,
+        )
 
     pass

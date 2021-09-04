@@ -1,12 +1,7 @@
 [tool.poetry]
 name = "nbox"
-<<<<<<< HEAD
 version = "0.1.5"
 description = "ML Inference 🥶"
-=======
-version = "0.1.4"
-description = "Makes using a host of opensource deep learning algorithms easier"
->>>>>>> master
 authors = [
   "Yash Bonde <bonde.yash97@gmail.com>",
   "Aakash Kaushik <kaushikaakash7539@gmail.com>",

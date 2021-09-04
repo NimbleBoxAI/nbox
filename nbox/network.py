@@ -9,6 +9,7 @@ from pprint import pprint as peepee
 
 import torch
 from nbox import utils
+
 # from nbox.user import secrets as S
 
 from nbox.user import get_access_token
@@ -210,7 +211,9 @@ def ocd(
                 console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
 
                 r = requests.get(
-                    url=f"{URL}/api/model/get_model_access_key", headers={"Authorization": f"Bearer {access_token}"}, params={"model_id": model_id}
+                    url=f"{URL}/api/model/get_model_access_key",
+                    headers={"Authorization": f"Bearer {access_token}"},
+                    params={"model_id": model_id},
                 )
                 try:
                     r.raise_for_status()

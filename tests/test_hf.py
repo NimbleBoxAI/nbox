@@ -47,7 +47,3 @@ class ImportTest(unittest.TestCase):
         model = nbox.load("transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM", cache_dir=cache_dir)
         out = model("hello world")
         self.assertEqual(out.logits.argmax(-1).tolist(), [[1012, 7592, 2088, 1012]])
-
-
-if __name__ == "__main__":
-    unittest.main()

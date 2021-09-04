@@ -9,6 +9,7 @@ from nbox import utils
 URL_CAT_TARGET_LIST = [78, 434, 700, 419, 622]
 ASSET_CAT_TARGET_LIST = [111, 78, 845, 626, 418]
 
+
 @lru_cache
 def get_model(*args, **kwargs):
     return nbox.load(*args, **kwargs)
@@ -63,10 +64,11 @@ class ImportComputerVision(unittest.TestCase):
 
 
 class ParserTest(unittest.TestCase):
-
     def test_url(self):
         parser = nbox.model.ImageParser()
-        out = parser("https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030")
+        out = parser(
+            "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030"
+        )
         self.assertEqual(list(out.shape), [1, 3, 1200, 1200])
 
     def test_filepath(self):
@@ -108,88 +110,74 @@ class ParserTest(unittest.TestCase):
 
     def test_dicts(self):
         parser = nbox.model.ImageParser()
-        out = parser({
-            "image_0": "./tests/assets/cat.jpg",
-            "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030"
-        })
-        self.assertEqual(
+        out = parser(
             {
-                "image_0": list(out["image_0"].shape),
-                "image_1": list(out["image_1"].shape)
-            },
-            {
-                "image_0": [1, 3, 720, 1280],
-                "image_1": [1, 3, 1200, 1200]
+                "image_0": "./tests/assets/cat.jpg",
+                "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030",
             }
+        )
+        self.assertEqual(
+            {"image_0": list(out["image_0"].shape), "image_1": list(out["image_1"].shape)},
+            {"image_0": [1, 3, 720, 1280], "image_1": [1, 3, 1200, 1200]},
         )
 
     def test_listed_dict(self):
         parser = nbox.model.ImageParser()
-        out = parser([
-            {
-                "image_0": "./tests/assets/cat.jpg",
-                "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030"
-            },
-            {
-                "image_0": "./tests/assets/cat.jpg",
-                "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030"
-            }
-        ])
-        self.assertEqual(
-            {
-                "image_0": list(out["image_0"].shape),
-                "image_1": list(out["image_1"].shape)
-            },
-            {
-                "image_0": [2, 3, 720, 1280],
-                "image_1": [2, 3, 1200, 1200]
-            }
+        out = parser(
+            [
+                {
+                    "image_0": "./tests/assets/cat.jpg",
+                    "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030",
+                },
+                {
+                    "image_0": "./tests/assets/cat.jpg",
+                    "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030",
+                },
+            ]
         )
-    
+        self.assertEqual(
+            {"image_0": list(out["image_0"].shape), "image_1": list(out["image_1"].shape)},
+            {"image_0": [2, 3, 720, 1280], "image_1": [2, 3, 1200, 1200]},
+        )
+
     def test_dict_unequal_items(self):
         import torch
 
         parser = nbox.model.ImageParser()
-        out = parser({
-            "image_list": [
-                "./tests/assets/cat.jpg",
-                "./tests/assets/cat.jpg"
-            ],
-            "image_tensor": torch.randn(3, 224, 224),
-            "image_tensor_list": [
-                torch.randn(3, 224, 224),
-                torch.randn(3, 224, 224),
-                torch.randn(3, 224, 224),
-            ]
-        })
+        out = parser(
+            {
+                "image_list": ["./tests/assets/cat.jpg", "./tests/assets/cat.jpg"],
+                "image_tensor": torch.randn(3, 224, 224),
+                "image_tensor_list": [
+                    torch.randn(3, 224, 224),
+                    torch.randn(3, 224, 224),
+                    torch.randn(3, 224, 224),
+                ],
+            }
+        )
 
         self.assertEqual(
             {
                 "image_list": list(out["image_list"].shape),
                 "image_tensor": list(out["image_tensor"].shape),
-                "image_tensor_list": list(out["image_tensor_list"].shape)
+                "image_tensor_list": list(out["image_tensor_list"].shape),
             },
-            {
-                "image_list": [2, 3, 720, 1280],
-                "image_tensor": [1, 3, 224, 224],
-                "image_tensor_list": [3, 3, 224, 224]
-            }
+            {"image_list": [2, 3, 720, 1280], "image_tensor": [1, 3, 224, 224], "image_tensor_list": [3, 3, 224, 224]},
         )
 
     # these tests should fail
     @unittest.expectedFailure
     def test_listed_dict_unequal_keys(self):
         parser = nbox.model.ImageParser()
-        out = parser([
-            {
-                "image_0": "./tests/assets/cat.jpg",
-                "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030"
-            },
-            {
-                "image_0": "./tests/assets/cat.jpg",
-                "image_2": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030"
-            }
-        ])
-        
-if __name__ == "__main__":
-    unittest.main()
+        out = parser(
+            [
+                {
+                    "image_0": "./tests/assets/cat.jpg",
+                    "image_1": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030",
+                },
+                {
+                    "image_0": "./tests/assets/cat.jpg",
+                    "image_2": "https://i.guim.co.uk/img/media/6088d89032f8673c3473567a91157080840a7bb8/413_955_2808_1685/master/2808.jpg?width=1200&height=1200&quality=85&auto=format&fit=crop&s=412cc526a799b2d3fff991129cb8f030",
+                },
+            ]
+        )
