@@ -19,7 +19,7 @@ def get_model(*args, **kwargs):
 
 
 class DeployTest(unittest.TestCase):
-    @unittest.skipIf(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
+    @unittest.skipUnless(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
     def test_deploy_hf_bert(self):
         model_key = "transformers/prajjwal1/bert-tiny::AutoModelForMaskedLM"
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
@@ -34,7 +34,7 @@ class DeployTest(unittest.TestCase):
             cache_dir=cache_dir,
         )
 
-    @unittest.skipIf(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
+    @unittest.skipUnless(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
     def test_deploy_hf_bert_mid(self):
         model_key = "transformers/bert-base-uncased::AutoModelForMaskedLM"
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
@@ -49,7 +49,7 @@ class DeployTest(unittest.TestCase):
             cache_dir=cache_dir,
         )
 
-    @unittest.skipIf(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
+    @unittest.skipUnless(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
     def test_deploy_tv_resnet18(self):
         model_key = "torchvision/resnet18"
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")

@@ -9,7 +9,8 @@ from nbox import utils
 
 _a = os.environ.get("NBOX_TEST_CLOUD_INFER", False) != False
 _b = os.environ.get("NBOX_API_KEY", False) != False
-SKIP_CONDITION = _a & _b
+_c = os.environ.get("NBX_OCD_URL", False) != False
+SKIP_CONDITION = _a & _b & _c
 
 
 @lru_cache
@@ -18,7 +19,7 @@ def get_model(*args, **kwargs):
 
 
 class CloudInferTest(unittest.TestCase):
-    @unittest.skipUnless(SKIP_CONDITION, f"Skip: {(_a, _b)}")
+    @unittest.skipUnless(SKIP_CONDITION, f"Skip: {(_a, _b, _c)}")
     def test_cloud_infer_resnet(self):
 
         model = nbox.NBXApi(
@@ -32,19 +33,12 @@ class CloudInferTest(unittest.TestCase):
         image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
         out = model(image)
         out = np.array(out["outputs"])
+        self.assertEquals(tuple(out.shape), (1, 1000))
 
         out = model(
-            "https://www.cnet.com/a/img/CSTqzAl5wJ57HHyASLD-a0vS2O0=/940x528/2021/04/05/9e065d90-51f2-46c5-bd3a-416fd4983c1a/elantra-1080p.jpg"
+            "https://www.cnet.com/a/img/CSTqzAl5wJ57HHyASLD-a0vS2O0=/940x528/2021/04/05/9e065d90-51f2-46c5-bd3a-416fd4983c1a/elantra-1080p.jpg",
         )
         out = np.array(out["outputs"])
-
-    @unittest.skipUnless(SKIP_CONDITION, f"Skip: {(_a, _b)}")
-    def test_cloud_infer_bert_mid(self):
-        model = nbox.NBXApi(
-            model_key_or_url="https://api.test-2.nimblebox.ai/yash_bonde_139/inscribed_metrics_e4b1/",
-            nbx_api_key=os.environ.get("NBOX_API_KEY"),
-            category="text",
-        )
-        out = model("Hello World!")
+        self.assertEquals(tuple(out.shape), (1, 1000))
 
     pass

@@ -20,13 +20,16 @@ class ImageParser:
     """single unified Image parser that consumes different types of data
     and returns a processed numpy array"""
 
-    def __init__(self, pre_proc_fn=None):
+    def __init__(self, pre_proc_fn=None, cloud_infer=False):
         self.pre_proc_fn = pre_proc_fn
+        self.cloud_infer = cloud_infer
 
+    # common operations
     # if the input is torch.int then rescale it -1, 1
     def rescale(self, x):
-        if utils.is_available("torch") and isinstance(x, torch.Tensor) and "int" in str(x.dtype):
-            return (x - 122.5) / 122.5
+        if not self.cloud_infer:
+            if utils.is_available("torch") and isinstance(x, torch.Tensor) and "int" in str(x.dtype):
+                return (x - 122.5) / 122.5
         return x
 
     def rearrange(self, x):
@@ -36,6 +39,7 @@ class ImageParser:
             return x.permute(0, 3, 1, 2)
         return x
 
+    # ---- handler functions
     def handle_string(self, x: str):
         if os.path.exists(x):
             utils.info(" - ImageParser - (A1)")
@@ -58,7 +62,7 @@ class ImageParser:
         return {k: self(v) for k, v in x.items()}
 
     def handle_pil_image(self, x: Image):
-        utils.info(" - ImageParser - (E)")
+        utils.info(" - ImageParser - (D)")
         out = self(np.array(x))
         return out
 
@@ -81,7 +85,7 @@ class ImageParser:
             # if out is list of dicts then create a dict with concatenated tensors
             if isinstance(out[0], dict):
                 # assert all keys are same in the list
-                assert all([set(out[0].keys()) == set(i.keys()) for i in out])
+                assert all([set(out[0].keys()) == set(i.keys()) for i in out]), "All keys must be same in all dicts in list"
                 out = {k: torch.cat([i[k] for i in out]) for k in out[0].keys()}
             elif isinstance(out[0], torch.Tensor):
                 out = torch.cat(out)
