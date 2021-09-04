@@ -91,8 +91,7 @@ class ImageParser:
         elif isinstance(x, dict):
             x = self.handle_dictionary(x)
             x = {k: self.pre_proc_fn(v) if self.pre_proc_fn is not None else v for k, v in x.items()}
-            out = {k: self.rescale(v) for k, v in x.items()}
-            out = {k: self.rearrange(v) for k, v in x.items()}
+            out = x
         elif isinstance(x, Image.Image):
             x = self.handle_pil_image(x)
             out = self.rearrange(self.rescale(x))
