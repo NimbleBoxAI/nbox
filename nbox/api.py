@@ -9,8 +9,8 @@ from time import time
 
 import torch
 
-from nbox.model import ImageParser, TextParser
 from nbox.utils import Console
+from nbox.parsers import ImageParser, TextParser
 
 from pprint import pprint as peepee
 
