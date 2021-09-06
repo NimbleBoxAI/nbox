@@ -9,7 +9,7 @@ from nbox.utils import join, Console
 
 
 def get_access_token(nbx_home_url, username, password=None):
-    password = getpass("Password: ") if password is None else password
+    # password = getpass("Password: ") if password is None else password
     console = Console()
     console.start("Getting access tokens ...")
     r = requests.post(
@@ -42,9 +42,9 @@ class Secrets:
                 re.sub(
                     r"//.*",
                     "",
-                    requests.get("https://raw.githubusercontent.com/NimbleBoxAI/nbox/cloud-infer/assets/sample_config.json").content.decode(
-                        "utf-8"
-                    ),
+                    requests.get(
+                        "https://raw.githubusercontent.com/NimbleBoxAI/nbox/cloud-infer/assets/sample_config.json"
+                    ).content.decode("utf-8"),
                 )
             )
 

@@ -124,6 +124,8 @@ class Model:
             return out, model_input
         return out
 
+
+
     def deploy(self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None):
         """OCD your model on NBX platform.
 
@@ -175,11 +177,17 @@ class Model:
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
+        spec = {
+            "category": self.category,
+            "model_key": self.model_key
+        }
+
         # OCD baby!
         out = network.ocd(
             model_key=self.model_key,
             model=self.model,
             args=args,
+            outputs = model_output,
             input_names=input_names,
             input_shapes=input_shapes,
             output_names=output_names,
@@ -190,6 +198,7 @@ class Model:
             password=password,
             model_name=model_name,
             cache_dir=cache_dir,
+            spec = spec,
         )
 
         return out
