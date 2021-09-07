@@ -28,7 +28,7 @@ def ocd(
     output_shapes: Tuple,
     dynamic_axes: Dict,
     category: str,
-    deployment_type:str = "ovms2",
+    deployment_type: str = "ovms2",
     username: str = None,
     password: str = None,
     model_name: str = None,
@@ -86,15 +86,15 @@ def ocd(
 
     console.start(f"Converting using: {export_fn}")
     nbox_meta = export_fn(
-        model = model,
-        args = args,
-        outputs = outputs,
-        input_shapes = input_shapes,
-        output_shapes = output_shapes,
-        onnx_model_path = export_model_path,
-        input_names = input_names,
-        dynamic_axes = dynamic_axes,
-        output_names = output_names,
+        model=model,
+        args=args,
+        outputs=outputs,
+        input_shapes=input_shapes,
+        output_shapes=output_shapes,
+        onnx_model_path=export_model_path,
+        input_names=input_names,
+        dynamic_axes=dynamic_axes,
+        output_names=output_names,
     )
     console.stop("Conversion Complete")
     nbox_meta = {
@@ -132,7 +132,7 @@ def ocd(
             "model_name": model_name,
             "convert_args": convert_args,
             "nbox_meta": json.dumps(nbox_meta),
-            "deployment_type": deployment_type # "nbxs" or "ovms2"
+            "deployment_type": deployment_type,  # "nbxs" or "ovms2"
         },
         headers={"Authorization": f"Bearer {access_token}"},
         verify=False,
@@ -148,11 +148,7 @@ def ocd(
 
     # upload the file to a S3 -> don't raise for status here
     console.start("Uploading model to S3 ...")
-    r = requests.post(
-        url=out["url"],
-        data=out["fields"],
-        files={"file": (out["fields"]["key"], open(export_model_path, "rb"))}
-    )
+    r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(export_model_path, "rb"))})
     console.stop(f"Upload to S3 complete")
 
     # checking if file is successfully uploaded on S3 and tell webserver

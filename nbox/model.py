@@ -24,7 +24,7 @@ class Model:
         self.model = model
         self.category = category
         self.model_key = model_key
-        self.model_meta = model_meta # this is a big dictionary (~ same) as TF-Serving metadata 
+        self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
 
         # initialise all the parsers, like WTH, how bad would it be
         self.image_parser = ImageParser()
@@ -94,6 +94,7 @@ class Model:
         Args:
             input_object (Any): input to be processed
             return_inputs (bool, optional): whether to return the inputs or not. Defaults to False.
+            verbose (bool, optional): whether to print the inputs or not. Defaults to False.
 
         Returns:
             Any: currently this is output from the model, so if it is tensors and return dicts.
@@ -108,11 +109,7 @@ class Model:
                 assert isinstance(model_input, torch.Tensor)
                 out = self.model(model_input)
 
-        if (
-            self.model_meta is not None and
-            self.model_meta.get("metadata", False) and
-            self.model_meta["metadata"].get("outputs", False)
-        ):
+        if self.model_meta is not None and self.model_meta.get("metadata", False) and self.model_meta["metadata"].get("outputs", False):
             outputs = self.model_meta["metadata"]["outputs"]
             if not isinstance(out, torch.Tensor):
                 assert len(outputs) == len(out)
@@ -123,8 +120,6 @@ class Model:
         if return_inputs:
             return out, model_input
         return out
-
-
 
     def deploy(self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None):
         """OCD your model on NBX platform.
@@ -177,17 +172,14 @@ class Model:
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
-        spec = {
-            "category": self.category,
-            "model_key": self.model_key
-        }
+        spec = {"category": self.category, "model_key": self.model_key}
 
         # OCD baby!
         out = network.ocd(
             model_key=self.model_key,
             model=self.model,
             args=args,
-            outputs = model_output,
+            outputs=model_output,
             input_names=input_names,
             input_shapes=input_shapes,
             output_names=output_names,
@@ -198,7 +190,7 @@ class Model:
             password=password,
             model_name=model_name,
             cache_dir=cache_dir,
-            spec = spec,
+            spec=spec,
         )
 
         return out

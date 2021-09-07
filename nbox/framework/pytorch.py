@@ -5,36 +5,33 @@ from inspect import trace
 import torch
 from torch.onnx import export
 
-def get_meta(
-  input_names,
-  args,
-  output_names,
-  outputs,
-):
-  meta = {
-    "inputs": {
-      name: {
-        "dtype": str(x.dtype),
-        "tensorShape": {
-          "dim": [{"name": "", "size": y} for y in x.shape],
-          "unknownRank": False
-        },
-        "name": name
-      } for name, x in zip(input_names, args)
-    },
-    "outputs": {
-      name: {
-        "dtype": str(x.dtype),
-        "tensorShape": {
-          "dim": [{"name": "", "size": y} for y in x.shape],
-          "unknownRank": False
-        },
-        "name": name
-      } for name, x in zip(output_names, outputs)
-    }
-  }
 
-  return meta
+def get_meta(
+    input_names,
+    args,
+    output_names,
+    outputs,
+):
+    meta = {
+        "inputs": {
+            name: {
+                "dtype": str(x.dtype),
+                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
+                "name": name,
+            }
+            for name, x in zip(input_names, args)
+        },
+        "outputs": {
+            name: {
+                "dtype": str(x.dtype),
+                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
+                "name": name,
+            }
+            for name, x in zip(output_names, outputs)
+        },
+    }
+
+    return meta
 
 
 def export_to_onnx(
@@ -69,19 +66,12 @@ def export_to_onnx(
     return meta
 
 
-def export_to_torchscript(
-  model,
-  args,
-  outputs,
-  torchscript_model_path,
-  input_names,
-  output_names,
-  **kwargs
-):
-  traced_model = torch.jit.trace(model.model, args, check_tolerance = 0.0001)
-  torch.jit.save(traced_model, torchscript_model_path)
-  meta = get_meta(input_names, args, output_names, outputs)
-  return meta
+def export_to_torchscript(model, args, outputs, torchscript_model_path, input_names, output_names, **kwargs):
+    traced_model = torch.jit.trace(model.model, args, check_tolerance=0.0001)
+    torch.jit.save(traced_model, torchscript_model_path)
+    meta = get_meta(input_names, args, output_names, outputs)
+    return meta
+
 
 def get_metadata_from_trace_object():
-  pass
+    pass

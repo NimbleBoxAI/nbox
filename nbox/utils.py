@@ -78,15 +78,16 @@ def hash_(item, fn="md5"):
 
 
 def convert_to_list(x):
-  # recursively convert tensors -> list
-  if isinstance(x, list):
-    return x
-  if isinstance(x, dict):
-    return {k:convert_to_list(v) for k,v in x.items()}
-  elif isinstance(x, (torch.Tensor, np.ndarray)):
-    return x.tolist()
-  else:
-    raise Exception("Unknown type: {}".format(type(x)))
+    # recursively convert tensors -> list
+    if isinstance(x, list):
+        return x
+    if isinstance(x, dict):
+        return {k: convert_to_list(v) for k, v in x.items()}
+    elif isinstance(x, (torch.Tensor, np.ndarray)):
+        return x.tolist()
+    else:
+        raise Exception("Unknown type: {}".format(type(x)))
+
 
 # --- classes
 

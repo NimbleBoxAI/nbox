@@ -215,15 +215,16 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
         with open(model_meta_path, "r") as f:
             model_meta = json.load(f)
             spec = model_meta["spec"]
-        
+
         category = spec["category"]
         tokenizer = None
         if category == "text":
             from transformers import AutoTokenizer
+
             tokenizer = AutoTokenizer.from_pretrained(model_path)
 
-        model = torch.jit.load(model_path, map_location = "cpu")
-        out = Model(model, category=category, tokenizer=tokenizer, model_key=spec["model_key"], model_meta = model_meta)
+        model = torch.jit.load(model_path, map_location="cpu")
+        out = Model(model, category=category, tokenizer=tokenizer, model_key=spec["model_key"], model_meta=model_meta)
 
     else:
         # the input key can also contain instructions on how to run a particular models and so
@@ -246,6 +247,6 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
             out = NBXApi(model_key_or_url=model_key, category=model_meta, nbx_api_key=nbx_api_key)
         else:
             model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
-            out = Model(model=model, category=model_meta, model_key=model_key, model_meta = None, **model_kwargs)
+            out = Model(model=model, category=model_meta, model_key=model_key, model_meta=None, **model_kwargs)
 
     return out

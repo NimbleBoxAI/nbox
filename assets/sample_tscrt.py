@@ -18,7 +18,7 @@ from torch import nn
 
 #   def forward(self, x):
 #     return self.h(x)
-  
+
 # model = Model()
 # _in = torch.randn(5, 2)
 # inputs = [_in]
@@ -34,14 +34,11 @@ from torch import nn
 # print(out.shape)
 # outputs = [out]
 
-model = nbox.load("torchvision/mobilenetv2", pretrained = True)
-out, in_ = model(
-  [torch.randn(400, 400, 3) for _ in range(2)],
-  return_inputs = True
-)
+model = nbox.load("torchvision/mobilenetv2", pretrained=True)
+out, in_ = model([torch.randn(400, 400, 3) for _ in range(2)], return_inputs=True)
 inputs = [in_]
 outputs = [out]
-traced_model = torch.jit.trace(model.model, in_, check_tolerance = 0.0001)
+traced_model = torch.jit.trace(model.model, in_, check_tolerance=0.0001)
 
 torch.jit.save(traced_model, "./sample.pt")
 
@@ -49,38 +46,31 @@ torch.jit.save(traced_model, "./sample.pt")
 # and types
 
 meta = {
-  "metadata":{
-    "inputs": {
-      f"input_{i}": {
-        "dtype": str(x.dtype),
-        "tensorShape": {
-          "dim": [{"name": "", "size": y} for y in x.shape],
-          "unknownRank": False
+    "metadata": {
+        "inputs": {
+            f"input_{i}": {
+                "dtype": str(x.dtype),
+                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
+                "name": f"input_{i}",
+            }
+            for i, x in enumerate(inputs)
         },
-        "name": f"input_{i}"
-      } for i,x in enumerate(inputs)
+        "outputs": {
+            f"output_{i}": {
+                "dtype": str(x.dtype),
+                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
+                "name": f"output_{i}",
+            }
+            for i, x in enumerate(outputs)
+        },
     },
-    "outputs": {
-      f"output_{i}": {
-        "dtype": str(x.dtype),
-        "tensorShape": {
-          "dim": [{"name": "", "size": y} for y in x.shape],
-          "unknownRank": False
-        },
-        "name": f"output_{i}"
-      } for i,x in enumerate(outputs)
-    }
-  },
-  "spec": {
-    "name": "some_model_name",
-    "category": model.category,
-    "model_key": model.model_key
-  }
+    "spec": {"name": "some_model_name", "category": model.category, "model_key": model.model_key},
 }
 
 import json
+
 with open("./sample.json", "w") as f:
-  f.write(json.dumps(meta, indent=2))
+    f.write(json.dumps(meta, indent=2))
 
 # from pprint import pprint as peepee
 
