@@ -3,9 +3,9 @@ name = "nbox"
 version = "0.1.4"
 description = "Makes using a host of opensource deep learning algorithms easier"
 authors = [
-            "NBX Research <research@nimblebox.ai>"
+            "NBX Research <research@nimblebox.ai>",
             "Yash Bonde <bonde.yash97@gmail.com>",
-            "Aakash Kaushik <kaushikaakash7539@gmail.com>",
+            "Aakash Kaushik <kaushikaakash7539@gmail.com>"
           ]
 
 [tool.poetry.dependencies]
