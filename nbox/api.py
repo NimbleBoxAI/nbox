@@ -94,7 +94,7 @@ class NBXApi:
 
     def prepare_as_url(self, verbose, model_key_or_url):
         self.console.start("Getting model metadata")
-        r = requests.get(f"{URL}/api/model/get_model_meta", params={"url": model_key_or_url + "/", "key": self.nbx_api_key})
+        r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={model_key_or_url}&key={self.nbx_api_key}")
         try:
             r.raise_for_status()
         except Exception as e:
