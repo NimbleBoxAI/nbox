@@ -1,4 +1,4 @@
-# from https://gist.github.com/yashbonde/62df9d16858a43775c22a6af00a8d707
+# this file has bunch of functions that are used everywhere
 
 import os
 import io
@@ -10,10 +10,13 @@ import tempfile
 from PIL import Image
 from time import time
 from datetime import timedelta
-from rich.console import Console
 from types import SimpleNamespace
+from rich.console import Console as richConsole
 
 import logging
+
+import numpy as np
+import torch
 
 # ----- functions
 
@@ -74,10 +77,22 @@ def hash_(item, fn="md5"):
     return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
 
+def convert_to_list(x):
+    # recursively convert tensors -> list
+    if isinstance(x, list):
+        return x
+    if isinstance(x, dict):
+        return {k: convert_to_list(v) for k, v in x.items()}
+    elif isinstance(x, (torch.Tensor, np.ndarray)):
+        return x.tolist()
+    else:
+        raise Exception("Unknown type: {}".format(type(x)))
+
+
 # --- classes
 
-# OCDConsole is a rich console wrapper for beautifying statuses
-class OCDConsole:
+# Console is a rich console wrapper for beautifying statuses
+class Console:
     T = SimpleNamespace(
         clk="deep_sky_blue1",  # timer
         st="bold dark_cyan",  # status + print
@@ -89,7 +104,7 @@ class OCDConsole:
     )
 
     def __init__(self):
-        self.c = Console()
+        self.c = richConsole()
         self.st = time()
         self._in_status = False
 
@@ -124,23 +139,3 @@ class OCDConsole:
         del self.status
         self._log(x)
         self._in_status = False
-
-
-class Secrets:
-    # this class is used to manage all auth related secrets by reading them from a file
-    # and writing them back when the program exits
-    def __init__(self, file_path=None):
-        self.fp = file_path or join("/", "secrets.json")
-        self.secrets = {}
-        with open(file_path, "r") as f:
-            # read the JSON file, remove comments and then load it
-            self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
-
-    def __getattribute__(self, name: str):
-        return self.get(name)
-
-    def __getitem__(self, name: str):
-        return self.get(name)
-
-    def get(self, name: str):
-        return self.secrets[name]

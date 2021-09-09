@@ -137,8 +137,14 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
+
+# our ignores
 .DS_Store
 *.cfg
-.vscode/
 notebooks/
 __ignore/
+.vscode/
+serve_fp.py
+*.pt
+*.onnx
+*.pb

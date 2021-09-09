@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "inputs": {
+      "input_0": {
+        "dtype": "torch.float32",
+        "tensorShape": {
+          "dim": [
+            {
+              "name": "",
+              "size": 2
+            },
+            {
+              "name": "",
+              "size": 3
+            },
+            {
+              "name": "",
+              "size": 400
+            },
+            {
+              "name": "",
+              "size": 400
+            }
+          ],
+          "unknownRank": false
+        },
+        "name": "input_0"
+      }
+    },
+    "outputs": {
+      "output_0": {
+        "dtype": "torch.float32",
+        "tensorShape": {
+          "dim": [
+            {
+              "name": "",
+              "size": 2
+            },
+            {
+              "name": "",
+              "size": 1000
+            }
+          ],
+          "unknownRank": false
+        },
+        "name": "output_0"
+      }
+    }
+  },
+  "spec": {
+    "name": "some_model_name",
+    "category": "image",
+    "model_key": "torchvision/mobilenetv2"
+  }
+}
