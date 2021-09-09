@@ -118,4 +118,4 @@ class Secrets:
         self.secrets["username"] = username
         self.save()
 
-secret = Secrets()
+# secret = Secrets()
