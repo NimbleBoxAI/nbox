@@ -168,7 +168,7 @@ class NBXApi:
 
         if self.category == "image":
             input_obj = self.image_parser(input_object)
-            input_obj = self.web_parser.format_image(input_obj, resize_image=[224, 224])
+            input_obj = self.web_parser.format_image(input_obj, resize_image=[400, 400])
             return input_obj
 
         elif self.category == "text":
