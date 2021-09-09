@@ -3,34 +3,25 @@ name = "nbox"
 version = "0.1.6"
 description = "ML Inference 🥶"
 authors = [
-  "Yash Bonde <bonde.yash97@gmail.com>",
-  "Aakash Kaushik <kaushikaakash7539@gmail.com>",
-  "NBX Research <research@nimblebox.ai>"
-]
-maintainers = [
-  "Yash Bonde <bonde.yash97@gmail.com>",
-  "Aakash Kaushik <kaushikaakash7539@gmail.com>",
-  "NBX Research <research@nimblebox.ai>"
-]
-readme = "README.md"
-homepage = "https://docs.nimblebox.ai/nbox/python-api"
-repository = "https://github.com/NimbleBoxAI/nbox"
-documentation = "https://docs.nimblebox.ai/nbox/python-api"
+            "NBX Research <research@nimblebox.ai>",
+            "Yash Bonde <bonde.yash97@gmail.com>",
+            "Aakash Kaushik <kaushikaakash7539@gmail.com>"
+          ]
 
 [tool.poetry.dependencies]
 python = "^3.6"
-rich = "10.7.0"
-randomname = "0.1.3"
+randomname = "^0.1.3"
+rich = "^10.7.0"
+requests = "^2.25.1"
+numpy = "^1.19.5"
+Pillow = "^8.3.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
-rich = "10.7.0"
-randomname = "0.1.3"
 
 [build-system]
 requires = [
-  "poetry-core>=1.0.0",
-  "randomname==0.1.3",
-  "rich==10.7.0"
+  "poetry-core>=1.0.0"
 ]
+
 build-backend = "poetry.core.masonry.api"
