@@ -39,8 +39,29 @@ class BaseParser:
     def process_list(self):
         raise NotImplementedError
 
-    def __call__(self):
-        raise NotImplementedError
+    def __call__(self, input_object):
+        if isinstance(input_object, list):
+            utils.info(" - BaseParser - (A1)")
+            out = self.process_list(input_object)
+        elif isinstance(input_object, dict):
+            utils.info(" - BaseParser - (A2)")
+            out = self.process_dict(input_object)
+        else:
+            utils.info(" - BaseParser - (A3)")
+            out = self.process_primitive(input_object)
+
+        # apply self.post_proc_fn if it exists
+        if self.post_proc_fn:
+            # either you are going to get a dict or you are going to get a np.ndarray
+            if isinstance(out, dict):
+                if isinstance(next(iter(out.values())), dict):
+                    # dict of dicts kinda thingy (say when two inputs are given)
+                    out = {k: {_k: self.post_proc_fn(_v) for _k, _v in v.items()} for k, v in out.items()}
+                else:
+                    out = {k: self.post_proc_fn(v) for k, v in out.items()}
+            else:
+                out = self.post_proc_fn(out)
+        return out
 
 
 # ----- parsers for each category
@@ -141,29 +162,6 @@ class ImageParser(BaseParser):
                 out = [self.process_primitive(x) for x in input_object]
                 return np.vstack(out)
 
-    def __call__(self, input_object):
-        """takes in input_object and returns a numy array.
-        First check for structure, is it a list, dict or directly a primitive
-        """
-        if isinstance(input_object, list):
-            utils.info(" - TextParser - (A1)")
-            out = self.process_list(input_object)
-        elif isinstance(input_object, dict):
-            utils.info(" - TextParser - (A2)")
-            out = self.process_dict(input_object)
-        else:
-            utils.info(" - TextParser - (A3)")
-            out = self.process_primitive(input_object)
-
-        # apply self.post_proc_fn if it exists
-        if self.post_proc_fn:
-            # either you are going to get a dict or you are going to get a np.ndarray
-            if isinstance(out, dict):
-                out = {k: self.post_proc_fn(x) for k, x in out.items()}
-            else:
-                out = self.post_proc_fn(out)
-        return out
-
 
 class TextParser(BaseParser):
     """Unified Text parsing engine, returns tokenized dictionaries"""
@@ -195,31 +193,6 @@ class TextParser(BaseParser):
         """takes in and tokenises the strings"""
         assert all([isinstance(x, str) for x in input_object]), "TextParser - (B1) input must be list of strings"
         return {k: np.array(v) for k, v in self.tokenizer(input_object, padding="longest").items()}
-
-    def __call__(self, input_object):
-        """Unlike Image parser the only primitive is a string and structures are the same"""
-        if isinstance(input_object, list):
-            utils.info(" - TextParser - (A1)")
-            out = self.process_list(input_object)
-        elif isinstance(input_object, dict):
-            utils.info(" - TextParser - (A2)")
-            out = self.process_dict(input_object)
-        else:
-            utils.info(" - TextParser - (A3)")
-            out = self.process_primitive(input_object)
-
-        # apply self.post_proc_fn if it exists
-        if self.post_proc_fn:
-            # either you are going to get a dict or you are going to get a np.ndarray
-            if isinstance(out, dict):
-                if isinstance(next(iter(out.values())), dict):
-                    # dict of dicts kinda thingy (say when two inputs are given)
-                    out = {k: {_k: self.post_proc_fn(_v) for _k, _v in v.items()} for k, v in out.items()}
-                else:
-                    out = {k: self.post_proc_fn(v) for k, v in out.items()}
-            else:
-                out = self.post_proc_fn(out)
-        return out
 
 
 # the class ImageParser below is only added here for reference. Itis not used in the code
