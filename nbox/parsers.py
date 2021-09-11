@@ -41,13 +41,13 @@ class BaseParser:
 
     def __call__(self, input_object):
         if isinstance(input_object, list):
-            utils.info(" - BaseParser - (A1)")
+            utils.info(f" - {self.__class__.__name__} - (A1)")
             out = self.process_list(input_object)
         elif isinstance(input_object, dict):
-            utils.info(" - BaseParser - (A2)")
+            utils.info(f" - {self.__class__.__name__} - (A2)")
             out = self.process_dict(input_object)
         else:
-            utils.info(" - BaseParser - (A3)")
+            utils.info(f" - {self.__class__.__name__} - (A3)")
             out = self.process_primitive(input_object)
 
         # apply self.post_proc_fn if it exists
