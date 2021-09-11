@@ -7,6 +7,7 @@ from re import A
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+
 iris = load_iris()
 X, y = iris.data, iris.target
 X_train, X_test, y_train, y_test = train_test_split(X, y)
@@ -29,16 +30,17 @@ from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
 print("Converting into ONNX format...")
-initial_type = [('float_input', FloatTensorType([None, 4]))]
+initial_type = [("float_input", FloatTensorType([None, 4]))]
 onx = convert_sklearn(clr, initial_types=initial_type)
 with open("rf_iris.onnx", "wb") as f:
-  print("Writing to file...", "rf_iris.onnx")
-  f.write(onx.SerializeToString())
+    print("Writing to file...", "rf_iris.onnx")
+    f.write(onx.SerializeToString())
 
 
 # Compute the prediction with ONNX Runtime
 import onnxruntime as rt
 import numpy
+
 print("Compiling model to ONNX Runtime")
 sess = rt.InferenceSession("rf_iris.onnx")
 input_name = sess.get_inputs()[0].name
