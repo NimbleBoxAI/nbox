@@ -29,11 +29,11 @@ from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 
 print("Converting into ONNX format...")
-initial_type = [('float_input', FloatTensorType([None, 4]))]
+initial_type = [("float_input", FloatTensorType([None, 4]))]
 onx = convert_sklearn(clr, initial_types=initial_type)
 with open("rf_iris.onnx", "wb") as f:
-  print("Writing to file...", "rf_iris.onnx")
-  f.write(onx.SerializeToString())
+    print("Writing to file...", "rf_iris.onnx")
+    f.write(onx.SerializeToString())
 
 
 # Compute the prediction with ONNX Runtime

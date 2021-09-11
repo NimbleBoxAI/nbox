@@ -27,8 +27,8 @@ class Model:
         self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
 
         # initialise all the parsers, like WTH, how bad would it be
-        self.image_parser = ImageParser()
-        self.text_parser = TextParser(tokenizer=tokenizer)
+        self.image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
+        self.text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int())
 
         if isinstance(self.category, dict):
             assert all([v in ["image", "text", None] for v in self.category.values()])
@@ -78,7 +78,6 @@ class Model:
         elif self.category == "text":
             # perform parsing for text and pass to the model
             input_dict = self.text_parser(input_object)
-            input_dict = {k: torch.from_numpy(v) for k, v in input_dict.items()}
             return input_dict
 
     def __call__(self, input_object: Any, return_inputs=False, verbose=False):
