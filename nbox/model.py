@@ -27,7 +27,7 @@ class Model:
         self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
 
         # initialise all the parsers, like WTH, how bad would it be
-        self.image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
+        self.image_parser = ImageParser(target_shape=None, post_proc_fn=lambda x: torch.from_numpy(x).float(), cloud_infer=False)
         self.text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int())
 
         if isinstance(self.category, dict):

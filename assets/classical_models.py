@@ -7,6 +7,7 @@ from re import A
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+
 iris = load_iris()
 X, y = iris.data, iris.target
 X_train, X_test, y_train, y_test = train_test_split(X, y)
@@ -39,6 +40,7 @@ with open("rf_iris.onnx", "wb") as f:
 # Compute the prediction with ONNX Runtime
 import onnxruntime as rt
 import numpy
+
 print("Compiling model to ONNX Runtime")
 sess = rt.InferenceSession("rf_iris.onnx")
 input_name = sess.get_inputs()[0].name

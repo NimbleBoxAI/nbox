@@ -77,7 +77,7 @@ class NBXApi:
             ovms_meta, nbox_meta = self.prepare_as_url(verbose, model_key_or_url)
 
         # define the incoming parsers
-        self.image_parser = ImageParser(cloud_infer=False)
+        self.image_parser = ImageParser(cloud_infer=True)
         self.text_parser = TextParser(tokenizer=None)
 
         if self.category == "text":

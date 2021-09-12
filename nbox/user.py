@@ -7,6 +7,7 @@ from getpass import getpass
 
 from nbox.utils import join, Console
 
+
 def get_access_token(nbx_home_url, username, password=None):
     password = getpass("Password: ") if password is None else password
     console = Console()
@@ -117,5 +118,6 @@ class Secrets:
     def update_username(self, username):
         self.secrets["username"] = username
         self.save()
+
 
 # secret = Secrets()

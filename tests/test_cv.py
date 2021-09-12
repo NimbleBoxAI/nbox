@@ -6,8 +6,8 @@ import nbox
 from nbox import utils
 
 # we check forward pass works and that results are reproducible
-URL_CAT_TARGET_LIST = [78, 434, 700, 419, 622]
-ASSET_CAT_TARGET_LIST = [111, 78, 845, 626, 418]
+URL_CAT_TARGET_LIST = [78, 794, 844, 434, 999]
+ASSET_CAT_TARGET_LIST = [78, 722, 418, 845, 783]
 
 
 @lru_cache
@@ -64,6 +64,9 @@ class ImportComputerVision(unittest.TestCase):
 
 
 class ParserTest(unittest.TestCase):
+
+    # test primitives
+
     def test_url(self):
         parser = nbox.model.ImageParser()
         out = parser(
@@ -86,6 +89,18 @@ class ParserTest(unittest.TestCase):
         parser = nbox.model.ImageParser()
         out = parser(np.random.randint(low=0, high=256, size=(224, 224, 3)))
         self.assertEqual(list(out.shape), [1, 3, 224, 224])
+
+    def test_b64(self):
+        import base64
+
+        path = utils.join(utils.folder(__file__), "assets/cat.jpg")
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        parser = nbox.model.ImageParser()
+        out = parser(b64)
+        self.assertEqual(list(out.shape), [1, 3, 720, 1280])
+
+    # test structures
 
     def test_numpy_list(self):
         import numpy as np
