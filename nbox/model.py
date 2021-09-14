@@ -120,7 +120,7 @@ class Model:
             return out, model_input
         return out
 
-    def deploy(self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None):
+    def deploy(self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None, deployment_type="ovms2"):
         """OCD your model on NBX platform.
 
         Args:
@@ -190,6 +190,7 @@ class Model:
             model_name=model_name,
             cache_dir=cache_dir,
             spec=spec,
+            deployment_type=deployment_type,
         )
 
         return out

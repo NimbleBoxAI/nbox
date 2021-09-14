@@ -66,7 +66,8 @@ class Secrets:
             self.save()
         else:
             with open(self.fp, "r") as f:
-                self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
+                # self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
+                self.secrets = json.loads(f.read())
 
     def __repr__(self):
         return json.dumps(self.secrets, indent=2)

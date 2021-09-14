@@ -11,11 +11,13 @@ from pprint import pprint as peepee
 import torch
 
 from nbox import utils
-from nbox.user import get_access_token
+from nbox.user import get_access_token, Secrets
 import nbox.framework.pytorch as frm_pytorch
 
-URL = os.getenv("NBX_OCD_URL", None)
-
+# Rewrote this to get URL from Secrets
+# URL = os.getenv("NBX_OCD_URL", None)
+user_sec = Secrets()
+URL = user_sec.get("nbx_url")
 
 def ocd(
     model_key: str,
@@ -28,7 +30,7 @@ def ocd(
     output_shapes: Tuple,
     dynamic_axes: Dict,
     category: str,
-    deployment_type: str = "ovms2",
+    deployment_type: str,
     username: str = None,
     password: str = None,
     model_name: str = None,
@@ -61,14 +63,16 @@ def ocd(
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
     # perform sanity checks on the input values
-    assert deployment_type in ["ovms2", "nbxs"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+    assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
 
     # intialise the console logger
     console = utils.Console()
     console.rule()
     cache_dir = "/tmp" if cache_dir is None else cache_dir
 
-    access_token = get_access_token(URL, username, password)
+    # Rewrote this to take the OCD Url from the Secrets
+    # access_token = get_access_token(URL, username, password)
+    access_token = user_sec.get("access_token")
 
     # convert the model
     _m_hash = utils.hash_(model_key)
@@ -76,26 +80,28 @@ def ocd(
     console(f"model_name: {model_name}")
     spec["name"] = model_name
 
+    export_model_args = {
+        "model": model,
+        "args": args,
+        "outputs": outputs,
+        "input_shapes": input_shapes,
+        "output_shapes": output_shapes,
+        "input_names": input_names,
+        "dynamic_axes": dynamic_axes,
+        "output_names": output_names,
+    }
     export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
     if deployment_type == "ovms2":
         export_model_path += ".onnx"
+        export_model_args["onnx_model_path"] = export_model_path
         export_fn = frm_pytorch.export_to_onnx
-    elif deployment_type == "nbxs":
+    elif deployment_type == "nbox":
         export_model_path += ".torchscript"
+        export_model_args["torchscript_model_path"] = export_model_path
         export_fn = frm_pytorch.export_to_torchscript
 
     console.start(f"Converting using: {export_fn}")
-    nbox_meta = export_fn(
-        model=model,
-        args=args,
-        outputs=outputs,
-        input_shapes=input_shapes,
-        output_shapes=output_shapes,
-        onnx_model_path=export_model_path,
-        input_names=input_names,
-        dynamic_axes=dynamic_axes,
-        output_names=output_names,
-    )
+    nbox_meta = export_fn(**export_model_args)
     console.stop("Conversion Complete")
     nbox_meta = {
         "metadata": nbox_meta,
@@ -207,7 +213,7 @@ def ocd(
                 _stat_done.append(curr_st)
 
         # this means the deployment is done
-        if statuses[-1]["status"] == "deployment.success":
+        if statuses[-1]["status"] == "deployment.success" and updates["model_data"]["api_url"] is not None:
 
             # if we do not have api key then query web server for it
             if model_data_access_key is None:
