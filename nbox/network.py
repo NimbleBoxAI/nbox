@@ -14,7 +14,7 @@ from nbox import utils
 from nbox.user import get_access_token
 import nbox.framework.pytorch as frm_pytorch
 
-URL = "https://test-2.www.nimblebox.ai"
+URL = "https://www.nimblebox.ai"
 
 def ocd(
     model_key: str,
