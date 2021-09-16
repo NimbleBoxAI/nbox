@@ -27,7 +27,7 @@ class Model:
         self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
 
         # initialise all the parsers, like WTH, how bad would it be
-        self.image_parser = ImageParser(target_shape=None, post_proc_fn=lambda x: torch.from_numpy(x).float(), cloud_infer=False)
+        self.image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
         self.text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int())
 
         if isinstance(self.category, dict):
@@ -157,7 +157,8 @@ class Model:
 
         if isinstance(model_output, dict):
             output_names = tuple(model_output.keys())
-            output_shapes = tuple([tuple(v.shape) for k, v in model_output.keys()])
+            output_shapes = tuple([tuple(v.shape) for k, v in model_output.items()])
+            model_output = tuple(model_output.values())
         elif isinstance(model_output, (list, tuple)):
             mo = model_output[0]
             if isinstance(mo, dict):

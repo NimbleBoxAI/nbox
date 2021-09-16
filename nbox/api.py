@@ -11,40 +11,39 @@ import torch
 
 from nbox.utils import Console
 from nbox.parsers import ImageParser, TextParser
+from nbox.network import URL
 
 from pprint import pprint as peepee
-
-URL = os.getenv("NBX_OCD_URL")
 
 from PIL import Image
 
 
-class WebParser:
-    def __init__(self, image_parser, text_parser):
-        self.image_parser = image_parser
-        self.text_parser = text_parser
+# class WebParser:
+#     def __init__(self, image_parser, text_parser):
+#         self.image_parser = image_parser
+#         self.text_parser = text_parser
 
-    def __repr__(self):
-        return "<WebParser: {}, {}>".format(self.image_parser, self.text_parser)
+#     def __repr__(self):
+#         return "<WebParser: {}, {}>".format(self.image_parser, self.text_parser)
 
-    def format_image(self, x, resize_image=None):
-        # take this torch.Tensor object image convert it back to PIL.Image and return numpy array
-        assert len(x.shape) == 4, "shape must be [N,C,H,W] got {}".format(x.shape)
-        x = x.permute(0, 2, 3, 1)
-        x = x.cpu().numpy()
-        x *= 122.5
-        x += 122.5
-        x[x > 255] = 255
-        x[x < 0] = 0
-        x = x.astype(np.uint8)
-        if resize_image is not None:
-            img = Image.fromarray(x[0])
-            img = img.resize(resize_image)
-            x = torch.from_numpy(np.array(img)).to(torch.uint8)
-        x = x.reshape(1, *x.shape)
-        x = x.permute(0, 3, 1, 2)
-        x = x.tolist()
-        return x
+#     def format_image(self, x, resize_image=None):
+#         # take this torch.Tensor object image convert it back to PIL.Image and return numpy array
+#         assert len(x.shape) == 4, "shape must be [N,C,H,W] got {}".format(x.shape)
+#         x = x.permute(0, 2, 3, 1)
+#         x = x.cpu().numpy()
+#         x *= 122.5
+#         x += 122.5
+#         x[x > 255] = 255
+#         x[x < 0] = 0
+#         x = x.astype(np.uint8)
+#         if resize_image is not None:
+#             img = Image.fromarray(x[0])
+#             img = img.resize(resize_image)
+#             x = torch.from_numpy(np.array(img)).to(torch.uint8)
+#         x = x.reshape(1, *x.shape)
+#         x = x.permute(0, 3, 1, 2)
+#         x = x.tolist()
+#         return x
 
 
 # main class that calls the NBX Server Models
@@ -77,17 +76,18 @@ class NBXApi:
             ovms_meta, nbox_meta = self.prepare_as_url(verbose, model_key_or_url)
 
         # define the incoming parsers
-        self.image_parser = ImageParser(cloud_infer=True)
+        self.image_parser = ImageParser(cloud_infer=False)
         self.text_parser = TextParser(tokenizer=None)
 
         if self.category == "text":
             import transformers
 
-            model_key = nbox_meta["model_key"].split("::")[0].split("transformers/")[-1]
+            model_key = nbox_meta["spec"]["model_key"].split("::")[0].split("transformers/")[-1]
             tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
-            self.text_parser = TextParser(tokenizer)
+            max_len = self.templates["input_ids"][-1]
+            self.text_parser = TextParser(tokenizer, max_len = max_len)
 
-        self.web_parser = WebParser(self.image_parser, self.text_parser)
+        # self.web_parser = WebParser(self.image_parser, self.text_parser)
 
     def __repr__(self):
         return f"<nbox.Model: {self.model_key_or_url} >"
@@ -103,7 +103,7 @@ class NBXApi:
 
         content = json.loads(r.content)["meta"]
         ovms_meta = content["ovms_meta"]
-        nbox_meta = content["nbox_meta"]
+        nbox_meta = json.loads(content["nbox_meta"])
         headers = r.headers
 
         # remove trailing '/'
@@ -136,8 +136,9 @@ class NBXApi:
         try:
             r.raise_for_status()
             out = r.json()
+            out = {k:np.array(v) for k,v in out.items()}
         except:
-            print(r.content)
+            out = r.json()
 
         self.console.stop(f"Took {et:.3f} seconds!")
         # structure out and return
@@ -175,9 +176,9 @@ class NBXApi:
             # perform parsing for text and pass to the model
             input_dict = self.text_parser(input_object)
             input_dict = {k: v.tolist() for k, v in input_dict.items()}
-            if verbose:
-                for k, v in input_dict.items():
-                    print(k, v.shape)
+            # if verbose:
+            #     for k, v in input_dict.items():
+            #         print(k, v.shape)
             return input_dict
 
     def __call__(self, input_object, verbose=True):

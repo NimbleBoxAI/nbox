@@ -71,49 +71,41 @@ class ImageParser(BaseParser):
     """single unified Image parser that consumes different types of data
     and returns a processed numpy array"""
 
-    def __init__(self, target_shape=None, post_proc_fn=None, cloud_infer=False):
+    def __init__(self, post_proc_fn=None, cloud_infer=False):
         super().__init__()
-        self.target_shape = target_shape
         self.post_proc_fn = post_proc_fn
         self.cloud_infer = cloud_infer
 
+    # common operations
+    # if not cloud_infer and input is int then rescale it -1, 1
     def rescale(self, x: np.ndarray):
         if not self.cloud_infer and "int" in str(x.dtype):
-            # normalise values between [0,1] just like torchvision.transforms.ToTensor
-            x = x / 255.0
+            return (x - 122.5) / 122.5
         return x
 
     def rearrange(self, x: np.ndarray):
         if len(x.shape) == 3 and x.shape[0] != 3:
-            assert x.shape[-1] == 3
             return x.transpose(2, 0, 1)
         elif len(x.shape) == 4 and x.shape[1] != 3:
-            assert x.shape[-1] == 3
             return x.transpose(0, 3, 1, 2)
         return x
 
     def process_primitive(self, x):
         """primitive can be string, array, Image"""
-        if isinstance(x, np.ndarray):
-            utils.info(" - ImageParser - (C1) np.ndarray")
+        if isinstance(x, Image.Image):
+            utils.info(" - ImageParser - (C1) Image.Image object")
+            out = self.process_primitive(np.array(x))
+        elif isinstance(x, np.ndarray):
+            utils.info(" - ImageParser - (C2) np.ndarray")
             # if shape == 3, unsqueeze it
             out = x[None, ...] if len(x.shape) == 3 else x
-            # note that we cannot resize the numpy arrays
-        elif isinstance(x, Image.Image):
-            utils.info(" - ImageParser - (C2) Image.Image object")
-            x = x.resize(self.target_shape) if self.target_shape else x
-            out = self.process_primitive(np.array(x))
         elif isinstance(x, str):
             if os.path.isfile(x):
                 utils.info(" - ImageParser - (C3) string - file")
-                x = Image.open(x)
-                x = x.resize(self.target_shape) if self.target_shape else x
-                out = self.process_primitive(np.array(x))
+                out = self.process_primitive(np.array(Image.open(x)))
             elif x.startswith("http"):
                 utils.info(" - ImageParser - (C4) string - url")
-                x = utils.get_image(x)
-                x = x.resize(self.target_shape) if self.target_shape else x
-                out = self.process_primitive(np.array(x))
+                out = self.process_primitive(np.array(utils.get_image(x)))
             else:
                 try:
                     # probably base64
@@ -121,9 +113,7 @@ class ImageParser(BaseParser):
                     import base64
 
                     utils.info(" - ImageParser - (C5) string - base64")
-                    x = Image.open(BytesIO(base64.b64decode(x)))
-                    x = x.resize(self.target_shape) if self.target_shape else x
-                    out = self.process_primitive(np.array(x))
+                    out = self.process_primitive(np.array(Image.open(BytesIO(base64.b64decode(x)))))
                 except:
                     raise Exception("Unable to parse string as Image")
         else:
@@ -176,16 +166,23 @@ class ImageParser(BaseParser):
 class TextParser(BaseParser):
     """Unified Text parsing engine, returns tokenized dictionaries"""
 
-    def __init__(self, tokenizer, post_proc_fn=None):
+    def __init__(self, tokenizer, max_len = None, post_proc_fn=None):
         super().__init__()
         # tokenizer is supposed to be AutoTokenizer object, check that
         self.tokenizer = tokenizer
+        self.max_len = max_len
         self.post_proc_fn = post_proc_fn
 
     def process_primitive(self, x):
         # in case of text this is quite simple because only primitive is strings
         assert isinstance(x, str), "TextParser - (C1) input must be string"
-        return {k: np.array(v)[None, ...] for k, v in self.tokenizer(x).items()}
+        return {
+            k: np.array(v)[None, ...] for k, v in self.tokenizer(
+                x,
+                max_length = self.max_len,
+                padding="max_length"
+            ).items()
+        }
 
     def process_dict(self, input_object):
         """takes in a dict and for each key's type call that method"""
