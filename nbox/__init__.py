@@ -6,7 +6,7 @@ import nbox.framework
 
 from nbox.model import Model
 from nbox.load import load, PRETRAINED_MODELS, PT_SOURCES
-from nbox.api import NBXApi
+from nbox.api import CloudModel
 from nbox.parsers import ImageParser, TextParser
 
-__version__ = "0.1.7"
+__version__ = "0.1.9"

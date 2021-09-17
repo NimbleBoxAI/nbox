@@ -8,7 +8,15 @@ from nbox.parsers import ImageParser, TextParser
 
 
 class Model:
-    def __init__(self, model: torch.nn.Module, category: str, tokenizer=None, model_key: str = None, model_meta: dict = None):
+    def __init__(
+        self,
+        model: torch.nn.Module,
+        category: str = None,
+        tokenizer=None,
+        model_key: str = None,
+        model_meta: dict = None,
+        verbose: bool = False,
+    ):
         """Nbox.Model class designed for inference
 
         Args:
@@ -26,14 +34,16 @@ class Model:
         self.model_key = model_key
         self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
 
+        assert self.category is not None, "Category must be provided"
+
         # initialise all the parsers, like WTH, how bad would it be
         self.image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
         self.text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int())
 
         if isinstance(self.category, dict):
-            assert all([v in ["image", "text", None] for v in self.category.values()])
+            assert all([v in ["image", "text"] for v in self.category.values()])
         else:
-            if self.category not in ["image", "text", None]:
+            if self.category not in ["image", "text"]:
                 raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
 
         if self.category == "text":
@@ -157,7 +167,8 @@ class Model:
 
         if isinstance(model_output, dict):
             output_names = tuple(model_output.keys())
-            output_shapes = tuple([tuple(v.shape) for k, v in model_output.keys()])
+            output_shapes = tuple([tuple(v.shape) for k, v in model_output.items()])
+            model_output = tuple(model_output.values())
         elif isinstance(model_output, (list, tuple)):
             mo = model_output[0]
             if isinstance(mo, dict):
@@ -174,7 +185,7 @@ class Model:
         spec = {"category": self.category, "model_key": self.model_key}
 
         # OCD baby!
-        out = network.ocd(
+        endpoint, model_data_access_key = network.ocd(
             model_key=self.model_key,
             model=self.model,
             args=args,
@@ -192,15 +203,4 @@ class Model:
             spec=spec,
         )
 
-        return out
-
-    def export(self, folder_path):
-        """Creates a FastAPI / Flask folder with all the things required to serve this model
-
-        Args:
-            folder_path (str): folder where to put things in
-
-        Raises:
-            NotImplementedError
-        """
-        raise NotImplementedError()
+        return endpoint, model_data_access_key

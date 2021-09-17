@@ -1,9 +1,7 @@
 # this file has the utilities and functions required for processing pytorch items
 # such as conversion to ONNX, getting the metadata and so on.
 
-from inspect import trace
 import torch
-from torch.onnx import export
 
 
 def get_meta(
@@ -12,6 +10,17 @@ def get_meta(
     output_names,
     outputs,
 ):
+    # In certain cases the output from model will be [1000,] but the TF-Serving would
+    # take that as [1, 1000]. So here unsequeeze the ouputs
+    if isinstance(outputs, torch.Tensor):
+        if len(outputs.shape) == 1:
+            outputs = outputs.unsqueeze(0)
+    elif isinstance(outputs, (list, tuple)):
+        for i, o in enumerate(outputs):
+            if len(o.shape) == 1:
+                outputs[i] = o.unsqueeze(0)
+
+    # get the meta object
     meta = {
         "inputs": {
             name: {

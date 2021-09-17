@@ -11,10 +11,11 @@ from pprint import pprint as peepee
 import torch
 
 from nbox import utils
-from nbox.user import get_access_token
+from nbox.user import secret
 import nbox.framework.pytorch as frm_pytorch
 
-URL = os.getenv("NBX_OCD_URL", None)
+URL = secret.get("nbx_url")
+# URL = "https://test-2.nimblebox.ai"
 
 
 def ocd(
@@ -68,7 +69,7 @@ def ocd(
     console.rule()
     cache_dir = "/tmp" if cache_dir is None else cache_dir
 
-    access_token = get_access_token(URL, username, password)
+    access_token = secret.get("access_token")
 
     # convert the model
     _m_hash = utils.hash_(model_key)
@@ -172,6 +173,11 @@ def ocd(
     console.start("Start Polling ...")
     while True:
         total_retries += 1
+
+        # don't keep polling for very long, kill after sometime
+        if total_retries > 50:
+            console._log(f"Stopping polling, please check status at: {URL}/oneclick")
+
         for i in range(sleep_seconds):
             console(f"Sleeping for {sleep_seconds-i}s ...")
             sleep(1)
@@ -212,6 +218,12 @@ def ocd(
             # if we do not have api key then query web server for it
             if model_data_access_key is None:
                 endpoint = updates["model_data"]["api_url"]
+
+                if endpoint is None:
+                    console._log("Deployment in proress ...")
+                    console._log(f"Endpoint to be setup, please check status at: {URL}/oneclick")
+                    break
+
                 console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
 
                 r = requests.get(
@@ -240,6 +252,13 @@ def ocd(
         # if failed exit
         elif "failed" in statuses[-1]["status"]:
             break
+
+    secret.add_ocd(
+        model_id=model_id,
+        url=endpoint,
+        nbox_meta=nbox_meta,
+        access_key=model_data_access_key,
+    )
 
     console.stop("Process Complete")
     console.rule()

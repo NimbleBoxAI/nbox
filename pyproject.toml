@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nbox"
-version = "0.1.7"
+version = "0.1.9"
 description = "ML Inference 🥶"
 authors = [
             "NBX Research <research@nimblebox.ai>",
@@ -21,7 +21,8 @@ pytest = "^5.2"
 
 [build-system]
 requires = [
-  "poetry-core>=1.0.0"
+  "poetry-core>=1.0.0",
+  "setuptools"
 ]
 
 build-backend = "poetry.core.masonry.api"

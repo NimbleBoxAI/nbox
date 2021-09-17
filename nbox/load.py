@@ -9,7 +9,7 @@ import inspect
 import warnings
 
 from nbox.model import Model
-from nbox.api import NBXApi
+from nbox.api import CloudModel
 from nbox.utils import is_available
 
 import torch
@@ -29,7 +29,7 @@ def remove_kwargs(pop_list, **kwargs):
 #   "key": (builder_function, "category")
 #
 #   # to be moved to
-#   # "key": (builder_function, "task_type", "source", "pre", "task", "post")
+#   "key": (builder_function, "task_type", "source", "pre", "task", "post")
 # }
 #
 # Structure of each loader function looks as follows:
@@ -184,12 +184,12 @@ PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = False, **loader_kwargs):
+def load(model_key_or_url: str = None, nbx_api_key: str = None, cloud_infer: bool = False, verbose=False, **loader_kwargs):
     """Returns nbox.Model from a model (key), can optionally setup a connection to
     cloud inference on a Nimblebox instance.
 
     Args:
-        model_key (str, optional): key for which to load the model, the structure looks as follows:
+        model_key_or_url (str, optional): key for which to load the model, the structure looks as follows:
             ```
             source/(source/key)::<pre::task::post>
             ```
@@ -207,8 +207,8 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
         nbox.NBXApi: when using cloud inference
     """
     # step 1: check the model key if it is a file path, declare such a variable
-    if os.path.exists(model_key):
-        model_path = os.path.abspath(model_key)
+    if os.path.exists(model_key_or_url):
+        model_path = os.path.abspath(model_key_or_url)
         model_meta_path = ".".join(model_path.split(".")[:-1] + ["json"])
         assert os.path.exists(model_meta_path), f"Model meta file not found: {model_meta_path}"
 
@@ -224,13 +224,16 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
             tokenizer = AutoTokenizer.from_pretrained(model_path)
 
         model = torch.jit.load(model_path, map_location="cpu")
-        out = Model(model, category=category, tokenizer=tokenizer, model_key=spec["model_key"], model_meta=model_meta)
+        out = Model(model, category=category, tokenizer=tokenizer, model_key=spec["model_key"], model_meta=model_meta, verbose=verbose)
+
+    elif model_key_or_url.startswith("http"):
+        out = CloudModel(model_url=model_key_or_url, nbx_api_key=nbx_api_key, verbose=verbose)
 
     else:
         # the input key can also contain instructions on how to run a particular models and so
-        model_key_parts = re.findall(model_key_regex, model_key)
+        model_key_parts = re.findall(model_key_regex, model_key_or_url)
         if not model_key_parts:
-            raise ValueError(f"Key: {model_key} incorrect, please check once!")
+            raise ValueError(f"Key: {model_key_or_url} incorrect, please check once!")
 
         # this key is valid, now get it's components
         model_key, src, src_key, model_instr = model_key_parts[0]
@@ -244,9 +247,9 @@ def load(model_key: str = None, nbx_api_key: str = None, cloud_infer: bool = Fal
 
         # load the model based on local infer or cloud infer
         if cloud_infer and nbx_api_key:
-            out = NBXApi(model_key_or_url=model_key, category=model_meta, nbx_api_key=nbx_api_key)
+            out = CloudModel(model_key_or_url=model_key, nbx_api_key=nbx_api_key, verbose=verbose)
         else:
             model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
-            out = Model(model=model, category=model_meta, model_key=model_key, model_meta=None, **model_kwargs)
+            out = Model(model=model, category=model_meta, model_key=model_key, model_meta=None, verbose=verbose ** model_kwargs)
 
     return out
