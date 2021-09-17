@@ -1,27 +1,20 @@
-// this is the local data store for NimbleBox.ai auth tokens
 {
   "version": 1,
-
-  // store username and access_tokens
   "username": null,
-  "access_token": null,
-  
-  // this will also define the NimbleBox.ai API endpoint being used
-  // whether this is staging or prod
+  "access_token": null, 
   "nbx_url": null,
-
-  // OCD is the shizz of this experiment so a full dedicated key for
-  // managing your deployment
   "ocd": [
     {
-      "url": null, // capture the url of the OCD
-      "access_key": null, // capture the access key
-      "nbx_meta": null, // each model has it's own weird things
-      "api_hits": 0, // how many times we've hit the API
-      "bytes_recieved": 0, // how many bytes we've recieved
-      "bytes_sent": 0, // how many bytes we've sent
-      "bytes_total": 0, // how many bytes we've sent and recieved
-      "last_status": null // last status of this OCD
+      "url": null,
+      "access_key": null,
+      "nbox_meta": null,
+      "api_hits": [
+        {}
+      ],
+      "bytes_recieved": 0,
+      "bytes_sent": 0,
+      "bytes_total": 0,
+      "last_status": null
     }
   ]
 }

@@ -1,6 +1,4 @@
-from logging import warning
 import os
-import re
 import json
 import requests
 from getpass import getpass
@@ -12,11 +10,15 @@ def get_access_token(nbx_home_url, username, password=None):
     password = getpass("Password: ") if password is None else password
     console = Console()
     console.start("Getting access tokens ...")
-    r = requests.post(
-        url=f"{nbx_home_url}/api/login",
-        json={"username": username, "password": password},
-        verify=False,
-    )
+    try:
+        r = requests.post(
+            url=f"{nbx_home_url}/api/login",
+            json={"username": username, "password": password},
+            verify=False,
+        )
+    except Exception as e:
+        raise Exception(f"Could not connect to NBX. You cannot use any cloud based tool!")
+
     if r.status_code == 401:
         console.stop("Invalid username/password")
         print("::" * 20 + " Invalid username/password. Please try again!")
@@ -41,20 +43,20 @@ class Secrets:
         # if this is the first time starting this then get things from the nbx-hq
         if not os.path.exists(self.fp):
             # get the secrets JSON
-            self.secrets = json.loads(
-                re.sub(
-                    r"//.*",
-                    "",
-                    requests.get("https://raw.githubusercontent.com/NimbleBoxAI/nbox/cloud-infer/assets/sample_config.json").content.decode(
+            try:
+                self.secrets = json.loads(
+                    requests.get("https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/sample_config.json").content.decode(
                         "utf-8"
-                    ),
+                    )
                 )
-            )
+            except Exception as e:
+                raise Exception(f"Could not connect to NBX. You cannot use any cloud based tool!")
 
             # populate with the first time things
-            nbx_home_url = input("NimbleBox.ai home URL (default: https://www.nimblebox.ai/): ")
-            if not nbx_home_url.strip():
+            nbx_home_url = input("NimbleBox.ai home URL (default: https://www.nimblebox.ai/): ").strip()
+            if not nbx_home_url:
                 nbx_home_url = "https://www.nimblebox.ai/"
+            nbx_home_url = nbx_home_url.rstrip("/")
 
             username = input("Username: ")
             access_token = None
@@ -66,7 +68,8 @@ class Secrets:
             self.save()
         else:
             with open(self.fp, "r") as f:
-                self.secrets = json.loads(re.sub(r"//.*", "", f.read()))
+                self.secrets = json.load(f)
+            print("Successfully loaded secrets!")
 
     def __repr__(self):
         return json.dumps(self.secrets, indent=2)
@@ -78,12 +81,16 @@ class Secrets:
         with open(self.fp, "w") as f:
             f.write(json.dumps(self.secrets, indent=2))
 
-    def add_ocd(self, model_id, url, nbx_meta, access_key):
+    def add_ocd(self, model_id, url, nbox_meta, access_key):
+        ocd = list(filter(lambda x: x["url"] == url, self.secrets["ocd"]))
+        if ocd:
+            # no need to udpate if already present
+            return
         self.secrets["ocd"].append(
             {
                 "url": url,
                 "model_id": model_id,
-                "nbx_meta": nbx_meta,
+                "nbox_meta": nbox_meta,
                 "access_key": access_key,
                 "api_hits": 0,
                 "bytes_recieved": 0,
@@ -96,7 +103,8 @@ class Secrets:
     def update_ocd(self, url, bytes_recieved, bytes_sent):
         ocd = list(filter(lambda x: x["url"] == url, self.secrets["ocd"]))
         if not ocd:
-            raise IndexError(f"URL {url} not found in secrets.json")
+            # raise IndexError(f"URL {url} not found in secrets.json")
+            self.add_ocd(None, url, None, self.nbx_api_key)
         ocd = ocd[0]
         ocd["bytes_recieved"] += bytes_recieved
         ocd["bytes_sent"] += bytes_sent
@@ -120,4 +128,4 @@ class Secrets:
         self.save()
 
 
-# secret = Secrets()
+secret = Secrets()
