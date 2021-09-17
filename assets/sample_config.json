@@ -8,9 +8,7 @@
       "url": null,
       "access_key": null,
       "nbox_meta": null,
-      "api_hits": [
-        {}
-      ],
+      "api_hits": [],
       "bytes_recieved": 0,
       "bytes_sent": 0,
       "bytes_total": 0,
