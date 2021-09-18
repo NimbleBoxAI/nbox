@@ -25,7 +25,7 @@ def get_model_template(spec: str):
                 return self.a(a.reshape(a.shape[0], -1)) + self.b(b.reshape(b.shape[0], -1))
 
         # load the model
-        model = nbox.Model(NHeadModel(), {"a": "image", "b": "image"})
+        model = nbox.Model(NHeadModel(), category={"a": "image", "b": "image"})
         return model, {"a": [1, 3, 10, 10], "b": [1, 3, 5, 5]}
 
     elif spec == "I-T":

@@ -9,7 +9,6 @@ import inspect
 import warnings
 
 from nbox.model import Model
-from nbox.api import CloudModel
 from nbox.utils import is_available
 
 import torch
@@ -184,7 +183,7 @@ PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model_key_or_url: str = None, nbx_api_key: str = None, cloud_infer: bool = False, verbose=False, **loader_kwargs):
+def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, **loader_kwargs):
     """Returns nbox.Model from a model (key), can optionally setup a connection to
     cloud inference on a Nimblebox instance.
 
@@ -206,7 +205,7 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, cloud_infer: boo
         nbox.Model: when using local inference
         nbox.NBXApi: when using cloud inference
     """
-    # step 1: check the model key if it is a file path, declare such a variable
+    # check the model key if it is a file path, then check if
     if os.path.exists(model_key_or_url):
         model_path = os.path.abspath(model_key_or_url)
         model_meta_path = ".".join(model_path.split(".")[:-1] + ["json"])
@@ -226,30 +225,30 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, cloud_infer: boo
         model = torch.jit.load(model_path, map_location="cpu")
         out = Model(model, category=category, tokenizer=tokenizer, model_key=spec["model_key"], model_meta=model_meta, verbose=verbose)
 
-    elif model_key_or_url.startswith("http"):
-        out = CloudModel(model_url=model_key_or_url, nbx_api_key=nbx_api_key, verbose=verbose)
-
     else:
-        # the input key can also contain instructions on how to run a particular models and so
-        model_key_parts = re.findall(model_key_regex, model_key_or_url)
-        if not model_key_parts:
-            raise ValueError(f"Key: {model_key_or_url} incorrect, please check once!")
+        if model_key_or_url.startswith("http"):
+            out = Model(model_or_model_url=model_key_or_url, nbx_api_key=nbx_api_key, verbose=verbose)
 
-        # this key is valid, now get it's components
-        model_key, src, src_key, model_instr = model_key_parts[0]
-        if src not in PT_SOURCES:
-            raise ValueError(f"Model source: {src} not found. Is this package installed!")
-        model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
-        if model_meta is None:
-            model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
-            if model_meta is None:
-                raise IndexError(f"Model: {model_key} not found")
-
-        # load the model based on local infer or cloud infer
-        if cloud_infer and nbx_api_key:
-            out = CloudModel(model_key_or_url=model_key, nbx_api_key=nbx_api_key, verbose=verbose)
         else:
+            # the input key can also contain instructions on how to run a particular models and so
+            model_key_parts = re.findall(model_key_regex, model_key_or_url)
+            if not model_key_parts:
+                raise ValueError(f"Key: {model_key_or_url} incorrect, please check once!")
+
+            # this key is valid, now get it's components
+            model_key, src, src_key, model_instr = model_key_parts[0]
+            if src not in PT_SOURCES:
+                raise ValueError(f"Model source: {src} not found. Is this package installed!")
+            model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
+            if model_meta is None:
+                model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
+                if model_meta is None:
+                    raise IndexError(f"Model: {model_key} not found")
+
+            # now just load the underlying graph and the model and off you go
             model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
-            out = Model(model=model, category=model_meta, model_key=model_key, model_meta=None, verbose=verbose ** model_kwargs)
+            out = Model(
+                model_or_model_url=model, category=model_meta, model_key=model_key, model_meta=None, verbose=verbose, **model_kwargs
+            )
 
     return out

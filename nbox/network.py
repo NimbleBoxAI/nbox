@@ -4,7 +4,6 @@ import os
 import json
 import requests
 from time import sleep
-from copy import deepcopy
 from typing import Dict, Tuple
 from pprint import pprint as peepee
 
@@ -15,7 +14,6 @@ from nbox.user import secret
 import nbox.framework.pytorch as frm_pytorch
 
 URL = secret.get("nbx_url")
-# URL = "https://test-2.nimblebox.ai"
 
 
 def ocd(

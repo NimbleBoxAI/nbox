@@ -1,8 +1,6 @@
 import os
-import torch
 import numpy as np
 from PIL import Image
-from torch._C import Value
 
 from nbox import utils
 

@@ -6,37 +6,29 @@ import torch
 
 def get_meta(
     input_names,
+    input_shapes,
     args,
     output_names,
+    output_shapes,
     outputs,
 ):
-    # In certain cases the output from model will be [1000,] but the TF-Serving would
-    # take that as [1, 1000]. So here unsequeeze the ouputs
-    if isinstance(outputs, torch.Tensor):
-        if len(outputs.shape) == 1:
-            outputs = outputs.unsqueeze(0)
-    elif isinstance(outputs, (list, tuple)):
-        for i, o in enumerate(outputs):
-            if len(o.shape) == 1:
-                outputs[i] = o.unsqueeze(0)
-
     # get the meta object
     meta = {
         "inputs": {
             name: {
-                "dtype": str(x.dtype),
-                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
+                "dtype": str(tensor.dtype),
+                "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
                 "name": name,
             }
-            for name, x in zip(input_names, args)
+            for name, shapes, tensor in zip(input_names, input_shapes, args)
         },
         "outputs": {
             name: {
-                "dtype": str(x.dtype),
-                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
+                "dtype": str(tensor.dtype),
+                "tensorShape": {"dim": [{"name": "", "size": y} for y in shapes], "unknownRank": False},
                 "name": name,
             }
-            for name, x in zip(output_names, outputs)
+            for name, shapes, tensor in zip(output_names, output_shapes, outputs)
         },
     }
 
@@ -80,7 +72,3 @@ def export_to_torchscript(model, args, outputs, torchscript_model_path, input_na
     torch.jit.save(traced_model, torchscript_model_path)
     meta = get_meta(input_names, args, output_names, outputs)
     return meta
-
-
-def get_metadata_from_trace_object():
-    pass

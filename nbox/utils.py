@@ -2,8 +2,6 @@
 
 import os
 import io
-import re
-import json
 import hashlib
 import requests
 import tempfile
