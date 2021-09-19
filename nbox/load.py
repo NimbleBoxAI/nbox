@@ -3,15 +3,15 @@
 import os
 import re
 import json
-from typing import Dict
-
 import inspect
 import warnings
-
-from nbox.model import Model
-from nbox.utils import is_available
+import requests
+from typing import Dict
 
 import torch
+
+from nbox.model import Model
+from nbox.utils import is_available, fetch
 
 model_key_regex = re.compile(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$")
 
@@ -39,9 +39,9 @@ def remove_kwargs(pop_list, **kwargs):
 
 
 def load_efficientnet_pytorch_models(pop_kwargs=["model_instr"]) -> Dict:
-    import efficientnet_pytorch
-
     def model_builder(pretrained=False, **kwargs):
+        import efficientnet_pytorch
+
         if pretrained:
             model_fn = efficientnet_pytorch.EfficientNet.from_pretrained
         else:
@@ -54,66 +54,20 @@ def load_efficientnet_pytorch_models(pop_kwargs=["model_instr"]) -> Dict:
 
 
 def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
-    import torchvision
-
     def model_builder(model, pretrained=False, **kwargs):
-        model_fn = {
-            "alexnet": torchvision.models.alexnet,
-            "resnet18": torchvision.models.resnet18,
-            "resnet34": torchvision.models.resnet34,
-            "resnet50": torchvision.models.resnet50,
-            "resnet101": torchvision.models.resnet101,
-            "resnet152": torchvision.models.resnet152,
-            "vgg11": torchvision.models.vgg11,
-            "vgg11-bn": torchvision.models.vgg11_bn,
-            "vgg13": torchvision.models.vgg13,
-            "vgg13-bn": torchvision.models.vgg13_bn,
-            "vgg16": torchvision.models.vgg16,
-            "vgg16-bn": torchvision.models.vgg16_bn,
-            "vgg19": torchvision.models.vgg19,
-            "vgg19-bn": torchvision.models.vgg19_bn,
-            "squeezenet1": torchvision.models.squeezenet1_0,
-            "squeezenet1-1": torchvision.models.squeezenet1_1,
-            "densenet121": torchvision.models.densenet121,
-            "densenet161": torchvision.models.densenet161,
-            "densenet169": torchvision.models.densenet169,
-            "densenet201": torchvision.models.densenet201,
-            "inceptionv3": torchvision.models.inception_v3,
-            "googlenet": torchvision.models.googlenet,
-            "shufflenetv2-0.5": torchvision.models.shufflenet_v2_x0_5,
-            "shufflenetv2-1.0": torchvision.models.shufflenet_v2_x1_0,
-            "shufflenetv2-1.5": torchvision.models.shufflenet_v2_x1_5,
-            "shufflenetv2-2.0": torchvision.models.shufflenet_v2_x2_0,
-            "mobilenetv2": torchvision.models.mobilenet_v2,
-            "mobilenetv3-small": torchvision.models.mobilenet_v3_small,
-            "mobilenetv3-large": torchvision.models.mobilenet_v3_large,
-            "resnext50": torchvision.models.resnext50_32x4d,
-            "resnext101": torchvision.models.resnext101_32x8d,
-            "wide-resnet50": torchvision.models.wide_resnet50_2,
-            "wide-resnet101": torchvision.models.wide_resnet101_2,
-            "mnasnet0-5": torchvision.models.mnasnet0_5,
-            "mnasnet0-75": torchvision.models.mnasnet0_75,
-            "mnasnet1-0": torchvision.models.mnasnet1_0,
-            "mnasnet1-3": torchvision.models.mnasnet1_3,
-            "fasterrcnn_mobilenet_v3_large_fpn": torchvision.models.detection.fasterrcnn_mobilenet_v3_large_fpn,
-            "fasterrcnn_mobilenet_v3_large_320_fpn": torchvision.models.detection.fasterrcnn_mobilenet_v3_large_320_fpn,
-            "fasterrcnn_resnet50_fpn": torchvision.models.detection.fasterrcnn_resnet50_fpn,
-            "maskrcnn_resnet50_fpn": torchvision.models.detection.maskrcnn_resnet50_fpn,
-            "keypointrcnn_resnet50_fpn": torchvision.models.detection.keypointrcnn_resnet50_fpn,
-            "retinanet_resnet50_fpn": torchvision.models.detection.retinanet_resnet50_fpn,
-            "mc3_18": torchvision.models.video.mc3_18,
-            "r3d_18": torchvision.models.video.r3d_18,
-            "r2plus1d_18": torchvision.models.video.r2plus1d_18,
-            "deeplabv3_mobilenet_v3_large": torchvision.models.segmentation.deeplabv3_mobilenet_v3_large,
-            "deeplabv3_resnet101": torchvision.models.segmentation.deeplabv3_resnet101,
-            "deeplabv3_resnet50": torchvision.models.segmentation.deeplabv3_resnet50,
-            "fcn_resnet50": torchvision.models.segmentation.fcn_resnet50,
-            "fcn_resnet101": torchvision.models.segmentation.fcn_resnet101,
-            "lraspp_mobilenet_v3_large": torchvision.models.segmentation.lraspp_mobilenet_v3_large,
-        }.get(model, None)
+        # tv_mr = torchvision models registry
+        # this is a json object that maps all the models to their respective methods from torchvision
+        # the trick to loading is to eval the method string
+        tv_mr = json.loads(fetch("https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/pt_models.json").decode("utf-8"))
+        model_fn = tv_mr.get(model, None)
         if model_fn == None:
             raise IndexError(f"Model: {model} not found in torchvision")
 
+        # torchvision is imported here, if it is imported in the outer method, eval fails
+        # reason: unknown
+        import torchvision
+
+        model_fn = eval(model_fn)
         kwargs = remove_kwargs(pop_kwargs, **kwargs)
 
         # compare variables between the model_fn and kwargs if they are different then remove it with warning
@@ -131,9 +85,9 @@ def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
 
 
 def load_transformers_models() -> Dict:
-    import transformers
-
     def hf_model_builder(model, model_instr, **kwargs):
+        import transformers
+
         _auto_loaders = {x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"}
 
         model_instr = model_instr.split("::")
@@ -150,11 +104,10 @@ def load_transformers_models() -> Dict:
         # initliase the model and tokenizer object
         tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
 
-        # TODO: @yashbonde remove GPT hardcoded dependency
-        if not tokenizer.pad_token_id:
-            tokenizer.pad_token = "<|endoftext|>"
+        # tokenizer.pad_token = tokenizer.eos_token if not tokenizer.pad_token_id else tokenizer.pad_token
         model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
-        # ignoring task for now
+
+        # return the model and tokenizer
         return model, {"tokenizer": tokenizer}
 
     return {"transformers": (hf_model_builder, "text")}
@@ -225,30 +178,30 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, *
         model = torch.jit.load(model_path, map_location="cpu")
         out = Model(model, category=category, tokenizer=tokenizer, model_key=spec["model_key"], model_meta=model_meta, verbose=verbose)
 
+    # if this is a nbx-deployed model
+    elif model_key_or_url.startswith("http"):
+        out = Model(model_or_model_url=model_key_or_url, nbx_api_key=nbx_api_key, verbose=verbose)
+
     else:
-        if model_key_or_url.startswith("http"):
-            out = Model(model_or_model_url=model_key_or_url, nbx_api_key=nbx_api_key, verbose=verbose)
+        # the input key can also contain instructions on how to run a particular models and so
+        model_key_parts = re.findall(model_key_regex, model_key_or_url)
+        if not model_key_parts:
+            raise ValueError(f"Key: {model_key_or_url} incorrect, please check!")
 
-        else:
-            # the input key can also contain instructions on how to run a particular models and so
-            model_key_parts = re.findall(model_key_regex, model_key_or_url)
-            if not model_key_parts:
-                raise ValueError(f"Key: {model_key_or_url} incorrect, please check once!")
+        # this key is valid, now get it's components
+        model_key, src, src_key, model_instr = model_key_parts[0]
+        if src not in PT_SOURCES:
+            raise ValueError(f"Model source: {src} not found. Is this package installed!")
 
-            # this key is valid, now get it's components
-            model_key, src, src_key, model_instr = model_key_parts[0]
-            if src not in PT_SOURCES:
-                raise ValueError(f"Model source: {src} not found. Is this package installed!")
-            model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
+        # sometimes you'll find the whole key, sometimes from the source, so check both
+        model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
+        if model_meta is None:
+            model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
             if model_meta is None:
-                model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
-                if model_meta is None:
-                    raise IndexError(f"Model: {model_key} not found")
+                raise IndexError(f"Model: {model_key} not found")
 
-            # now just load the underlying graph and the model and off you go
-            model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
-            out = Model(
-                model_or_model_url=model, category=model_meta, model_key=model_key, model_meta=None, verbose=verbose, **model_kwargs
-            )
+        # now just load the underlying graph and the model and off you go
+        model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
+        out = Model(model_or_model_url=model, category=model_meta, model_key=model_key, model_meta=None, verbose=verbose, **model_kwargs)
 
     return out

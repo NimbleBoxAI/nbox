@@ -16,7 +16,7 @@ import nbox.framework.pytorch as frm_pytorch
 URL = secret.get("nbx_url")
 
 
-def ocd(
+def one_click_deploy(
     model_key: str,
     model: torch.nn.Module,
     args: Tuple,
@@ -28,11 +28,8 @@ def ocd(
     dynamic_axes: Dict,
     category: str,
     deployment_type: str = "ovms2",
-    username: str = None,
-    password: str = None,
     model_name: str = None,
     cache_dir: str = None,
-    spec: Dict = None,
 ):
     """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
     and then deploys on NBX Platform. Avoid using this function manually and use
@@ -48,8 +45,6 @@ def ocd(
         output_shapes (Tuple): output tensor shapes to the model for ONNX export
         dynamic_axes (Dict): dictionary with input_name and dynamic axes shape
         category (str): model category
-        username (str, optional): your username, ignore if on NBX platform. Defaults to None.
-        password (str, optional): your password, ignore if on NBX platform. Defaults to None.
         model_name (str, optional): custom model name for this model. Defaults to None.
         cache_dir (str, optional): Custom caching directory. Defaults to None.
 
@@ -67,13 +62,14 @@ def ocd(
     console.rule()
     cache_dir = "/tmp" if cache_dir is None else cache_dir
 
+    # getting access token -> now loads directly from the secret file
     access_token = secret.get("access_token")
 
     # convert the model
     _m_hash = utils.hash_(model_key)
     model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
     console(f"model_name: {model_name}")
-    spec["name"] = model_name
+    spec = {"category": category, "model_key": model_key, "name": model_name}
 
     export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
     if deployment_type == "ovms2":
@@ -100,11 +96,10 @@ def ocd(
         "metadata": nbox_meta,
         "spec": spec,
     }
+    console._log("nbox_meta:", nbox_meta)
 
     # get the one-time-url from webserver
     console.start("Getting upload URL ...")
-    console._log("nbox_meta:", nbox_meta)
-
     convert_args = ""
     if deployment_type == "ovms2":
         # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
@@ -130,7 +125,7 @@ def ocd(
             "file_type": export_model_path.split(".")[-1],
             "model_name": model_name,
             "convert_args": convert_args,
-            "nbox_meta": json.dumps(nbox_meta),
+            "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
             "deployment_type": deployment_type,  # "nbxs" or "ovms2"
         },
         headers={"Authorization": f"Bearer {access_token}"},
@@ -164,7 +159,6 @@ def ocd(
     # polling
     endpoint = None
     _stat_done = []  # status calls performed
-    sleep_seconds = 3  # sleep up a little
     total_retries = 0  # number of hits it took
     model_data_access_key = None  # this key is used for calling the model
     console._log(f"Check your deployment at {URL}/oneclick")
@@ -176,8 +170,8 @@ def ocd(
         if total_retries > 50:
             console._log(f"Stopping polling, please check status at: {URL}/oneclick")
 
-        for i in range(sleep_seconds):
-            console(f"Sleeping for {sleep_seconds-i}s ...")
+        for i in range(3):
+            console(f"Sleeping for {3-i}s ...")
             sleep(1)
 
         # get the status update
@@ -244,7 +238,6 @@ def ocd(
             )
             if r.status_code == 200:
                 console._log(f"Model is ready")
-                # S.add_ocd(model_id, endpoint, nbx_meta, access_key)
                 break
 
         # if failed exit

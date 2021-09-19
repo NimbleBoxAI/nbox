@@ -30,7 +30,7 @@ def info(x, *args):
 
 def fetch(url):
     # efficient loading of URLs
-    fp = os.path.join(tempfile.gettempdir(), hashlib.md5(url.encode("utf-8")).hexdigest())
+    fp = os.path.join(tempfile.gettempdir(), hash_(url))
     if os.path.isfile(fp) and os.stat(fp).st_size > 0:
         with open(fp, "rb") as f:
             dat = f.read()

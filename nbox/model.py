@@ -239,7 +239,7 @@ class Model:
             return out, model_input
         return out
 
-    def get_nbox_meta(self, input_object, return_kwargs_dict=False):
+    def get_nbox_meta(self, input_object):
         # this function gets the nbox metadata for the the current model, based on the input_object
         assert not self.__on_cloud, "This function is not supported when using cloud infer"
 
@@ -281,8 +281,6 @@ class Model:
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
-        spec = {"category": self.category, "model_key": self.model_key}
-
         meta = get_meta(
             input_names=input_names,
             input_shapes=input_shapes,
@@ -299,36 +297,26 @@ class Model:
             output_shapes=output_shapes,
             outputs=model_output,
             dynamic_axes=dynamic_axes,
-            spec=spec,
         )
         return meta, out
 
-    def deploy(self, input_object: Any, username: str = None, password: str = None, model_name: str = None, cache_dir: str = None):
+    def deploy(self, input_object: Any, model_name: str = None, cache_dir: str = None):
         """OCD your model on NBX platform.
 
         Args:
             input_object (Any): input to be processed
-            username (str, optional): your username, ignore if on NBX platform. Defaults to None.
-            password (str, optional): your password, ignore if on NBX platform. Defaults to None.
             model_name (str, optional): custom model name for this model. Defaults to None.
             cache_dir (str, optional): Custom caching directory. Defaults to None.
-
-        Returns:
-            (str, None): if deployment is successful then push then return the URL endpoint else return None
         """
         # user will always have to pass the input_object
         nbox_meta, meta_dict = self.get_nbox_meta(input_object, return_kwargs_dict=True)
 
         # OCD baby!
-        endpoint, model_data_access_key = network.ocd(
+        network.one_click_deploy(
             model_key=self.model_key,
             model=self.model,
             category=self.category,
-            username=username,
-            password=password,
             model_name=model_name,
             cache_dir=cache_dir,
             **meta_dict,
         )
-
-        return endpoint, model_data_access_key
