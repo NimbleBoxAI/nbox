@@ -54,6 +54,7 @@ class Model:
         # define the console, either it get's used or lays unused, doesn't matter
         self.console = Console()
 
+        nbox_meta = None
         if isinstance(model_or_model_url, str):
             self.__on_cloud = True
             assert isinstance(nbx_api_key, str), "Nbx API key must be a string"
@@ -104,6 +105,8 @@ class Model:
             if self.category == "text":
                 assert tokenizer != None, "tokenizer cannot be none for a text model!"
 
+        self.nbox_meta = nbox_meta
+
     def fetch_meta_from_nbx_cloud(self):
         self.console.start("Getting model metadata")
         r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={self.model_or_model_url}&key={self.nbx_api_key}")
@@ -138,13 +141,18 @@ class Model:
         return nbox_meta, category
 
     def eval(self):
+        assert not self.__on_cloud
         self.model.eval()
 
     def train(self):
+        assert not self.__on_cloud
         self.model.train()
 
     def __repr__(self):
-        return f"<nbox.Model: {repr(self.model)} >"
+        if not self.__on_cloud:
+            return f"<nbox.Model: {repr(self.model)} >"
+        else:
+            return f"<nbox.Model: {self.model_url} >"
 
     def _handle_input_object(self, input_object):
         """First level handling to convert the input object to a fixed object"""
@@ -281,23 +289,16 @@ class Model:
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
-        meta = get_meta(
-            input_names=input_names,
-            input_shapes=input_shapes,
-            args=args,
-            output_names=output_names,
-            output_shapes=output_shapes,
-            outputs=model_output,
-        )
-        out = dict(
-            input_names=input_names,
-            input_shapes=input_shapes,
-            args=args,
-            output_names=output_names,
-            output_shapes=output_shapes,
-            outputs=model_output,
-            dynamic_axes=dynamic_axes,
-        )
+        meta = get_meta(input_names, input_shapes, args, output_names, output_shapes, model_output)
+        out = {
+            "input_names": input_names,
+            "input_shapes": input_shapes,
+            "args": args,
+            "output_names": output_names,
+            "output_shapes": output_shapes,
+            "outputs": model_output,
+            "dynamic_axes": dynamic_axes,
+        }
         return meta, out
 
     def deploy(self, input_object: Any, model_name: str = None, cache_dir: str = None):

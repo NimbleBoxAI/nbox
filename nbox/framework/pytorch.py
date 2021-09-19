@@ -13,24 +13,17 @@ def get_meta(
     outputs,
 ):
     # get the meta object
-    meta = {
-        "inputs": {
+    def __get_struct(names_, shapes_, tensors_):
+        return {
             name: {
                 "dtype": str(tensor.dtype),
                 "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
                 "name": name,
             }
-            for name, shapes, tensor in zip(input_names, input_shapes, args)
-        },
-        "outputs": {
-            name: {
-                "dtype": str(tensor.dtype),
-                "tensorShape": {"dim": [{"name": "", "size": y} for y in shapes], "unknownRank": False},
-                "name": name,
-            }
-            for name, shapes, tensor in zip(output_names, output_shapes, outputs)
-        },
-    }
+            for name, shapes, tensor in zip(names_, shapes_, tensors_)
+        }
+
+    meta = {"inputs": __get_struct(input_names, input_shapes, args), "outputs": __get_struct(output_names, output_shapes, outputs)}
 
     return meta
 
