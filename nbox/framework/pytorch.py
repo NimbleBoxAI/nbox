@@ -6,39 +6,24 @@ import torch
 
 def get_meta(
     input_names,
+    input_shapes,
     args,
     output_names,
+    output_shapes,
     outputs,
 ):
-    # In certain cases the output from model will be [1000,] but the TF-Serving would
-    # take that as [1, 1000]. So here unsequeeze the ouputs
-    if isinstance(outputs, torch.Tensor):
-        if len(outputs.shape) == 1:
-            outputs = outputs.unsqueeze(0)
-    elif isinstance(outputs, (list, tuple)):
-        for i, o in enumerate(outputs):
-            if len(o.shape) == 1:
-                outputs[i] = o.unsqueeze(0)
-
     # get the meta object
-    meta = {
-        "inputs": {
+    def __get_struct(names_, shapes_, tensors_):
+        return {
             name: {
-                "dtype": str(x.dtype),
-                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
+                "dtype": str(tensor.dtype),
+                "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
                 "name": name,
             }
-            for name, x in zip(input_names, args)
-        },
-        "outputs": {
-            name: {
-                "dtype": str(x.dtype),
-                "tensorShape": {"dim": [{"name": "", "size": y} for y in x.shape], "unknownRank": False},
-                "name": name,
-            }
-            for name, x in zip(output_names, outputs)
-        },
-    }
+            for name, shapes, tensor in zip(names_, shapes_, tensors_)
+        }
+
+    meta = {"inputs": __get_struct(input_names, input_shapes, args), "outputs": __get_struct(output_names, output_shapes, outputs)}
 
     return meta
 
@@ -49,6 +34,8 @@ def export_to_onnx(
     outputs,
     onnx_model_path,
     input_names,
+    input_shapes,
+    output_shapes,
     dynamic_axes,
     output_names,
     export_params=True,
@@ -71,7 +58,7 @@ def export_to_onnx(
         do_constant_folding=do_constant_folding,  # whether to execute constant folding for optimization
         dynamic_axes=dynamic_axes,
     )
-    meta = get_meta(input_names, args, output_names, outputs)
+    meta = get_meta(input_names, input_shapes, args, output_names, output_shapes, outputs)
     return meta
 
 
@@ -80,7 +67,3 @@ def export_to_torchscript(model, args, outputs, torchscript_model_path, input_na
     torch.jit.save(traced_model, torchscript_model_path)
     meta = get_meta(input_names, args, output_names, outputs)
     return meta
-
-
-def get_metadata_from_trace_object():
-    pass

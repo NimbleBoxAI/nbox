@@ -1,8 +1,6 @@
 import os
-import torch
 import numpy as np
 from PIL import Image
-from torch._C import Value
 
 from nbox import utils
 
@@ -177,7 +175,7 @@ class ImageParser(BaseParser):
         # r_depth=1 -> {k:[URL, URL], l:[URL, URL]}
         # r_depth=2 -> [{k:[URL, URL], l:[URL, URL]}, {k:[URL, URL], l:[URL, URL]}]}]
         # thus if r_depth > 3, raise error
-        if r_depth > 3:
+        if r_depth >= 3:
             raise RecursionError("Cannot go deeper with a list input")
 
         if r_depth == 0 and hasattr(self, "templates") and len(self.templates) > 1:
@@ -220,16 +218,22 @@ class TextParser(BaseParser):
 
     def process_primitive(self, x):
         # in case of text this is quite simple because only primitive is strings
-        assert isinstance(x, str), "TextParser - (C1) input must be string"
-        return {
-            k: np.array(v)[None, ...]
-            for k, v in self.tokenizer(
-                text=x,
-                add_special_tokens=True,
-                max_length=self.max_len,
-                padding="max_length" if self.max_len is not None else False,
-            ).items()
-        }
+        if isinstance(x, str):
+            utils.info(" - TextParser - (C1) string")
+            return {
+                k: np.array(v)[None, ...]
+                for k, v in self.tokenizer(
+                    text=x,
+                    add_special_tokens=True,
+                    max_length=self.max_len,
+                    padding="max_length" if self.max_len is not None else False,
+                ).items()
+            }
+        elif isinstance(x, np.ndarray):
+            utils.info(" - TextParser - (C2) ndarray")
+            return x
+        else:
+            raise ValueError(f"Unsupported type for TextParser: {type(x)}")
 
     def process_dict(self, input_object):
         """takes in a dict and for each key's type call that method"""
