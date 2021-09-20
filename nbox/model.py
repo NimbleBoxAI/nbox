@@ -166,7 +166,7 @@ class Model:
                     if self.category[k] == "image":
                         input_dict[k] = self.image_parser(v)
                     elif self.category[k] == "text":
-                        input_dict[k] = self.text_parser(v)["input_ids"]
+                        input_dict[k] = self.text_parser(v)
                     else:
                         raise ValueError(f"Unsupported category: {self.category[k]}")
             return input_dict
@@ -310,7 +310,7 @@ class Model:
             cache_dir (str, optional): Custom caching directory. Defaults to None.
         """
         # user will always have to pass the input_object
-        nbox_meta, meta_dict = self.get_nbox_meta(input_object, return_kwargs_dict=True)
+        nbox_meta, meta_dict = self.get_nbox_meta(input_object)
 
         # OCD baby!
         network.one_click_deploy(

@@ -34,6 +34,8 @@ def export_to_onnx(
     outputs,
     onnx_model_path,
     input_names,
+    input_shapes,
+    output_shapes,
     dynamic_axes,
     output_names,
     export_params=True,
@@ -56,7 +58,7 @@ def export_to_onnx(
         do_constant_folding=do_constant_folding,  # whether to execute constant folding for optimization
         dynamic_axes=dynamic_axes,
     )
-    meta = get_meta(input_names, args, output_names, outputs)
+    meta = get_meta(input_names, input_shapes, args, output_names, output_shapes, outputs)
     return meta
 
 
