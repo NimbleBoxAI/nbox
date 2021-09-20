@@ -3,20 +3,20 @@
 # from nbox==0.1.10 nbox.Model handles both local and remote models
 
 import json
-from pprint import pprint as pp
+import requests
 from time import time
 from typing import Any
+from pprint import pprint as pp
 
-import numpy as np
-import requests
 import torch
+import numpy as np
 
 from nbox import network
-from nbox.framework.pytorch import get_meta
-from nbox.network import URL
-from nbox.parsers import ImageParser, TextParser
-from nbox.user import secret
 from nbox.utils import Console
+from nbox.parsers import ImageParser, TextParser
+from nbox.network import URL
+from nbox.user import secret
+from nbox.framework.pytorch import get_meta
 
 
 class Model:
@@ -58,12 +58,8 @@ class Model:
         if isinstance(model_or_model_url, str):
             self.__on_cloud = True
             assert isinstance(nbx_api_key, str), "Nbx API key must be a string"
-            assert nbx_api_key.startswith(
-                "nbxdeploy_"
-            ), "Not a valid NBX Api key, please check again."
-            assert model_or_model_url.startswith(
-                "http"
-            ), "Are you sure this is a valid URL?"
+            assert nbx_api_key.startswith("nbxdeploy_"), "Not a valid NBX Api key, please check again."
+            assert model_or_model_url.startswith("http"), "Are you sure this is a valid URL?"
 
             self.model_url = model_or_model_url.rstrip("/")
 
@@ -75,59 +71,36 @@ class Model:
             # if category is "text" or if it is dict then any key is "text"
             tokenizer = None
             max_len = None
-            if self.category == "text" or (
-                isinstance(self.category, dict)
-                and any([x == "text" for x in self.category.values()])
-            ):
+            if self.category == "text" or (isinstance(self.category, dict) and any([x == "text" for x in self.category.values()])):
                 import transformers
 
-                model_key = (
-                    nbox_meta["spec"]["model_key"]
-                    .split("::")[0]
-                    .split("transformers/")[-1]
-                )
+                model_key = nbox_meta["spec"]["model_key"].split("::")[0].split("transformers/")[-1]
                 tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
                 max_len = self.templates["input_ids"][-1]
 
-            self.image_parser = ImageParser(
-                cloud_infer=True,
-                post_proc_fn=lambda x: x.tolist(),
-                templates=self.templates,
-            )
-            self.text_parser = TextParser(
-                tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist()
-            )
+            self.image_parser = ImageParser(cloud_infer=True, post_proc_fn=lambda x: x.tolist(), templates=self.templates)
+            self.text_parser = TextParser(tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist())
 
         else:
             self.__on_cloud = False
-            assert isinstance(
-                model_or_model_url, torch.nn.Module
-            ), "model_or_model_url must be a torch.nn.Module "
+            assert isinstance(model_or_model_url, torch.nn.Module), "model_or_model_url must be a torch.nn.Module "
 
             self.model = model_or_model_url
             self.category = category
             self.model_key = model_key
-            self.model_meta = (
-                model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
-            )
+            self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
 
             assert self.category is not None, "Category must be provided"
 
             # initialise all the parsers
-            self.image_parser = ImageParser(
-                post_proc_fn=lambda x: torch.from_numpy(x).float()
-            )
-            self.text_parser = TextParser(
-                tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int()
-            )
+            self.image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
+            self.text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int())
 
             if isinstance(self.category, dict):
                 assert all([v in ["image", "text"] for v in self.category.values()])
             else:
                 if self.category not in ["image", "text"]:
-                    raise ValueError(
-                        f"Category: {self.category} is not supported yet. Raise a PR!"
-                    )
+                    raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
 
             if self.category == "text":
                 assert tokenizer != None, "tokenizer cannot be none for a text model!"
@@ -136,17 +109,12 @@ class Model:
 
     def fetch_meta_from_nbx_cloud(self):
         self.console.start("Getting model metadata")
-        r = requests.get(
-            f"{URL}/api/model/get_model_meta",
-            params=f"url={self.model_or_model_url}&key={self.nbx_api_key}",
-        )
+        r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={self.model_or_model_url}&key={self.nbx_api_key}")
         try:
             r.raise_for_status()
         except Exception as e:
             print(e)
-            raise ValueError(
-                f"Could not fetch metadata, please check status: {r.status_code}"
-            )
+            raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
 
         # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
         content = json.loads(r.content)["meta"]
@@ -189,9 +157,7 @@ class Model:
     def _handle_input_object(self, input_object):
         """First level handling to convert the input object to a fixed object"""
         if isinstance(self.category, dict):
-            assert isinstance(
-                input_object, dict
-            ), "If category is a dict then input must be a dict"
+            assert isinstance(input_object, dict), "If category is a dict then input must be a dict"
             # check for same keys
             assert set(input_object.keys()) == set(self.category.keys())
             input_dict = {}
@@ -238,21 +204,13 @@ class Model:
         if self.__on_cloud:
             self.console.start("Hitting API")
             st = time()
-            r = requests.post(
-                self.model_url + ":predict",
-                json={"inputs": model_input},
-                headers={"NBX-KEY": self.nbx_api_key},
-            )
+            r = requests.post(self.model_url + ":predict", json={"inputs": model_input}, headers={"NBX-KEY": self.nbx_api_key})
             et = time() - st
 
             try:
                 r.raise_for_status()
                 data_size = len(r.content)
-                secret.update_ocd(
-                    self.model_url,
-                    data_size,
-                    len(r.request.body if r.request.body else []),
-                )
+                secret.update_ocd(self.model_url, data_size, len(r.request.body if r.request.body else []))
                 out = r.json()
 
                 # first try outputs is a key and we can just get the structure from the list
@@ -261,9 +219,7 @@ class Model:
                 elif isinstance(out["outputs"], list):
                     out = np.array(out["outputs"])
                 else:
-                    raise ValueError(
-                        f"Outputs must be a dict or list, got {type(out['outputs'])}"
-                    )
+                    raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
             except:
                 out = r.json()
                 data_size = 0
@@ -279,11 +235,7 @@ class Model:
                     assert isinstance(model_input, torch.Tensor)
                     out = self.model(model_input)
 
-            if (
-                self.model_meta is not None
-                and self.model_meta.get("metadata", False)
-                and self.model_meta["metadata"].get("outputs", False)
-            ):
+            if self.model_meta is not None and self.model_meta.get("metadata", False) and self.model_meta["metadata"].get("outputs", False):
                 outputs = self.model_meta["metadata"]["outputs"]
                 if not isinstance(out, torch.Tensor):
                     assert len(outputs) == len(out)
@@ -297,9 +249,7 @@ class Model:
 
     def get_nbox_meta(self, input_object):
         # this function gets the nbox metadata for the the current model, based on the input_object
-        assert (
-            not self.__on_cloud
-        ), "This function is not supported when using cloud infer"
+        assert not self.__on_cloud, "This function is not supported when using cloud infer"
 
         self.eval()  # covert to eval mode
         model_output, model_input = self(input_object, return_inputs=True)
@@ -333,17 +283,13 @@ class Model:
                 output_names = tuple(mo.keys())
                 output_shapes = tuple([tuple(v.shape) for k, v in mo.items()])
             else:
-                output_names = tuple(
-                    [f"output_{i}" for i, x in enumerate(model_output)]
-                )
+                output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
                 output_shapes = tuple([tuple(v.shape) for v in model_output])
         elif isinstance(model_output, torch.Tensor):
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
-        meta = get_meta(
-            input_names, input_shapes, args, output_names, output_shapes, model_output
-        )
+        meta = get_meta(input_names, input_shapes, args, output_names, output_shapes, model_output)
         out = {
             "input_names": input_names,
             "input_shapes": input_shapes,
@@ -355,13 +301,7 @@ class Model:
         }
         return meta, out
 
-    def deploy(
-        self,
-        input_object: Any,
-        model_name: str = None,
-        cache_dir: str = None,
-        deployment_id: str = None,
-    ):
+    def deploy(self, input_object: Any, model_name: str = None, cache_dir: str = None):
         """OCD your model on NBX platform.
 
         Args:
@@ -379,5 +319,5 @@ class Model:
             category=self.category,
             model_name=model_name,
             cache_dir=cache_dir,
-            deployment_id=deployment_id ** meta_dict,
+            **meta_dict,
         )
