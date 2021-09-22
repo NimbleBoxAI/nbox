@@ -30,17 +30,19 @@ class Model:
         model_meta: dict = None,
         verbose: bool = False,
     ):
-        """Nbox.Model class designed for inference
+        """Model class designed for inference.
 
         Args:
-            model (torch.nn.Module): Model to be wrapped.
-            category (str): Catogory of the model task.
-            tokenizer (str, optional): Tokenizer model if this is an NLP category. Defaults to None.
-            model_key (str, optional): key used to initialise this model. Defaults to None.
+            model_or_model_url ([str, torch.nn.Module]): Model to be wrapped or model url
+            nbx_api_key (str, optional): API key for this deployed model. Defaults to None.
+            category (str, optional): Input categories for each input type to the model. Defaults to None.
+            tokenizer ([transformers.PreTrainedTokenizer], optional): If this is a text model then tokenizer for this. Defaults to None.
+            model_key (str, optional): With what key is this model initialised, useful for public models. Defaults to None.
+            model_meta (dict, optional): Extra metadata when starting the model. Defaults to None.
+            verbose (bool, optional): If true provides detailed prints. Defaults to False.
 
         Raises:
-            ValueError: If the category is incorrect
-            AssertionError: When items required for the each category are not available
+            ValueError: If any category is "text" and tokenizer is not provided.
         """
         # for now just add everything, we will add more things later
         self.model_or_model_url = model_or_model_url
@@ -193,7 +195,6 @@ class Model:
         Args:
             input_object (Any): input to be processed
             return_inputs (bool, optional): whether to return the inputs or not. Defaults to False.
-            verbose (bool, optional): whether to print the inputs or not. Defaults to False.
 
         Returns:
             Any: currently this is output from the model, so if it is tensors and return dicts.
@@ -301,7 +302,14 @@ class Model:
         }
         return meta, out
 
-    def deploy(self, input_object: Any, model_name: str = None, cache_dir: str = None):
+    def deploy(
+        self,
+        input_object: Any,
+        model_name: str = None,
+        cache_dir: str = None,
+        wait_for_deployment: bool = False,
+        deployment_type: str = "ovms2",
+    ):
         """OCD your model on NBX platform.
 
         Args:
@@ -313,11 +321,16 @@ class Model:
         nbox_meta, meta_dict = self.get_nbox_meta(input_object)
 
         # OCD baby!
-        network.one_click_deploy(
+        out = network.one_click_deploy(
             model_key=self.model_key,
             model=self.model,
             category=self.category,
             model_name=model_name,
             cache_dir=cache_dir,
+            wait_for_deployment=wait_for_deployment,
+            deployment_type=deployment_type,
             **meta_dict,
         )
+
+        if out != None:
+            return out

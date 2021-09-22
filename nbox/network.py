@@ -5,7 +5,7 @@ import json
 import requests
 from time import sleep
 from typing import Dict, Tuple
-from pprint import pprint as peepee
+from pprint import pp, pprint as peepee
 
 import torch
 
@@ -30,6 +30,7 @@ def one_click_deploy(
     deployment_type: str = "ovms2",
     model_name: str = None,
     cache_dir: str = None,
+    wait_for_deployment: bool = False,
 ):
     """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
     and then deploys on NBX Platform. Avoid using this function manually and use
@@ -55,7 +56,7 @@ def one_click_deploy(
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
     # perform sanity checks on the input values
-    assert deployment_type in ["ovms2", "nbxs"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+    assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
 
     # intialise the console logger
     console = utils.Console()
@@ -75,7 +76,7 @@ def one_click_deploy(
     if deployment_type == "ovms2":
         export_model_path += ".onnx"
         export_fn = frm_pytorch.export_to_onnx
-    elif deployment_type == "nbxs":
+    elif deployment_type == "nbox":
         export_model_path += ".torchscript"
         export_fn = frm_pytorch.export_to_torchscript
 
@@ -126,10 +127,9 @@ def one_click_deploy(
             "model_name": model_name,
             "convert_args": convert_args,
             "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
-            "deployment_type": deployment_type,  # "nbxs" or "ovms2"
+            "deployment_type": deployment_type,  # "nbox" or "ovms2"
         },
         headers={"Authorization": f"Bearer {access_token}"},
-        verify=False,
     )
     try:
         r.raise_for_status()
@@ -152,7 +152,6 @@ def one_click_deploy(
         url=f"{URL}/api/model/update_model_status",
         json={"upload": True if r.status_code == 204 else False, "model_id": model_id},
         headers={"Authorization": f"Bearer {access_token}"},
-        verify=False,
     )
     console.stop("Webserver informed")
 
@@ -167,8 +166,9 @@ def one_click_deploy(
         total_retries += 1
 
         # don't keep polling for very long, kill after sometime
-        if total_retries > 50:
+        if total_retries > 50 and not wait_for_deployment:
             console._log(f"Stopping polling, please check status at: {URL}/oneclick")
+            break
 
         for i in range(3):
             console(f"Sleeping for {3-i}s ...")
@@ -177,15 +177,13 @@ def one_click_deploy(
         # get the status update
         console(f"Getting updates ...")
         r = requests.get(
-            url=f"{URL}/api/model/get_model_history",
-            params={"model_id": model_id},
-            headers={"Authorization": f"Bearer {access_token}"},
-            verify=False,
+            url=f"{URL}/api/model/get_model_history", params={"model_id": model_id}, headers={"Authorization": f"Bearer {access_token}"}
         )
         try:
             r.raise_for_status()
         except:
             peepee(r.content)
+            raise ValueError("This should not happen, please raise an issue at https://github.com/NimbleBoxAI/nbox/issues with above log!")
 
         updates = r.json()
         statuses = updates["model_history"]
@@ -196,12 +194,8 @@ def one_click_deploy(
                     continue
 
                 # only when this is a new status
-                if "failed" in curr_st:
-                    console._log(f"Status: [{console.T.fail}]{curr_st}")
-                elif "in-progress" in curr_st:
-                    console._log(f"Status: [{console.T.inp}]{curr_st}")
-                else:
-                    console._log(f"Status: [{console.T.st}]{curr_st}")
+                col = {"failed": console.T.fail, "in-progress": console.T.inp, "success": console.T.st}[curr_st.split(".")[-1]]
+                console._log(f"Status: [{col}]{curr_st}")
                 _stat_done.append(curr_st)
 
         # this means the deployment is done
@@ -212,6 +206,8 @@ def one_click_deploy(
                 endpoint = updates["model_data"]["api_url"]
 
                 if endpoint is None:
+                    if wait_for_deployment:
+                        continue
                     console._log("Deployment in proress ...")
                     console._log(f"Endpoint to be setup, please check status at: {URL}/oneclick")
                     break
@@ -228,13 +224,12 @@ def one_click_deploy(
                     model_data_access_key = r.json()["model_data_access_key"]
                     console._log(f"nbx-key: {model_data_access_key}")
                 except:
-                    raise ValueError(f"Failed to get model_data_access_key: {r.content}")
+                    pp(r.content.decode("utf-8"))
+                    raise ValueError(f"Failed to get model_data_access_key, please check status at: {URL}/oneclick")
 
             # keep hitting /metadata and see if model is ready or not
             r = requests.get(
-                url=f"{endpoint}/metadata",
-                headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"},
-                verify=False,
+                url=f"{endpoint}/metadata", headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"}
             )
             if r.status_code == 200:
                 console._log(f"Model is ready")
