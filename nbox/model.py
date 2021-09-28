@@ -1,11 +1,9 @@
 # this file has the code for nbox.Model that is the holy grail of the project
-# seemlessly remove boundaries between local and cloud inference
-# from nbox==0.1.10 nbox.Model handles both local and remote models
 
 import json
 import requests
 from time import time
-from typing import Any
+from typing import Any, Union
 from pprint import pprint as pp
 
 import torch
@@ -16,13 +14,13 @@ from nbox.utils import Console
 from nbox.parsers import ImageParser, TextParser
 from nbox.network import URL
 from nbox.user import secret
-from nbox.framework.pytorch import get_meta
+from nbox.framework import get_meta
 
 
 class Model:
     def __init__(
         self,
-        model_or_model_url,
+        model_or_model_url: Union[str, torch.nn.Module],
         nbx_api_key: str = None,
         category: str = None,
         tokenizer=None,
@@ -30,7 +28,8 @@ class Model:
         model_meta: dict = None,
         verbose: bool = False,
     ):
-        """Model class designed for inference.
+        """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
+        from nbox==0.1.10 nbox.Model handles both local and remote models
 
         Args:
             model_or_model_url ([str, torch.nn.Module]): Model to be wrapped or model url
@@ -58,7 +57,8 @@ class Model:
 
         nbox_meta = None
         if isinstance(model_or_model_url, str):
-            self.__on_cloud = True
+            self.__framework = "nbx"
+
             assert isinstance(nbx_api_key, str), "Nbx API key must be a string"
             assert nbx_api_key.startswith("nbxdeploy_"), "Not a valid NBX Api key, please check again."
             assert model_or_model_url.startswith("http"), "Are you sure this is a valid URL?"
@@ -83,16 +83,18 @@ class Model:
             self.image_parser = ImageParser(cloud_infer=True, post_proc_fn=lambda x: x.tolist(), templates=self.templates)
             self.text_parser = TextParser(tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist())
 
+        # <class 'sklearn.ensemble._forest.RandomForestClassifier'>
+        elif "sklearn" in str(type(model_or_model_url)):
+            self.__framework = "sk"
+        
         else:
-            self.__on_cloud = False
             assert isinstance(model_or_model_url, torch.nn.Module), "model_or_model_url must be a torch.nn.Module "
+            self.__framework = "pt"
+            assert self.category is not None, "Category for inputs must be provided, when loading model manually"
 
-            self.model = model_or_model_url
             self.category = category
             self.model_key = model_key
             self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
-
-            assert self.category is not None, "Category must be provided"
 
             # initialise all the parsers
             self.image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
@@ -115,7 +117,8 @@ class Model:
         try:
             r.raise_for_status()
         except Exception as e:
-            print(e)
+            self.console.stop()
+            self.console._log(e)
             raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
 
         # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
@@ -143,21 +146,22 @@ class Model:
         return nbox_meta, category
 
     def eval(self):
-        assert not self.__on_cloud
-        self.model.eval()
+        if hasattr(self.model_or_model_url, "eval"):
+            self.model_or_model_url.eval()
 
     def train(self):
-        assert not self.__on_cloud
-        self.model.train()
+        if hasattr(self.model_or_model_url, "train"):
+            self.model_or_model_url.train()
 
     def __repr__(self):
-        if not self.__on_cloud:
-            return f"<nbox.Model: {repr(self.model)} >"
-        else:
-            return f"<nbox.Model: {self.model_url} >"
+        return f"<nbox.Model: {self.model_or_model_url} >"
 
     def _handle_input_object(self, input_object):
         """First level handling to convert the input object to a fixed object"""
+        # in case of scikit learn user must ensure that the input_object is model_input
+        if self.__framework == "sk":
+            return input_object
+        
         if isinstance(self.category, dict):
             assert isinstance(input_object, dict), "If category is a dict then input must be a dict"
             # check for same keys
@@ -202,7 +206,7 @@ class Model:
 
         model_input = self._handle_input_object(input_object=input_object)
 
-        if self.__on_cloud:
+        if self.__framework == "nbx":
             self.console.start("Hitting API")
             st = time()
             r = requests.post(self.model_url + ":predict", json={"inputs": model_input}, headers={"NBX-KEY": self.nbx_api_key})
@@ -228,13 +232,16 @@ class Model:
 
             self.console.stop(f"Took {et:.3f} seconds!")
 
-        else:
+        elif self.__framework == "sk":
+            out = self.model_or_model_url.predict(model_input)
+
+        elif self.__framework == "pt":
             with torch.no_grad():
                 if isinstance(model_input, dict):
-                    out = self.model(**model_input)
+                    out = self.model_or_model_url(**model_input)
                 else:
                     assert isinstance(model_input, torch.Tensor)
-                    out = self.model(model_input)
+                    out = self.model_or_model_url(model_input)
 
             if self.model_meta is not None and self.model_meta.get("metadata", False) and self.model_meta["metadata"].get("outputs", False):
                 outputs = self.model_meta["metadata"]["outputs"]
@@ -250,8 +257,9 @@ class Model:
 
     def get_nbox_meta(self, input_object):
         # this function gets the nbox metadata for the the current model, based on the input_object
-        assert not self.__on_cloud, "This function is not supported when using cloud infer"
-
+        if self.__framework == "nbx":
+            return self.nbox_meta
+        
         self.eval()  # covert to eval mode
         model_output, model_input = self(input_object, return_inputs=True)
 
@@ -267,7 +275,7 @@ class Model:
             args = tuple(model_input.values())
             input_names = tuple(model_input.keys())
             input_shapes = tuple([tuple(v.shape) for k, v in model_input.items()])
-        elif isinstance(model_input, torch.Tensor):
+        elif isinstance(model_input, (torch.Tensor, np.ndarray)):
             args = tuple([model_input])
             input_names = tuple(["input_0"])
             input_shapes = tuple([tuple(model_input.shape)])
@@ -286,7 +294,7 @@ class Model:
             else:
                 output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
                 output_shapes = tuple([tuple(v.shape) for v in model_output])
-        elif isinstance(model_output, torch.Tensor):
+        elif isinstance(model_output, (torch.Tensor, np.ndarray)):
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
@@ -317,18 +325,21 @@ class Model:
             model_name (str, optional): custom model name for this model. Defaults to None.
             cache_dir (str, optional): Custom caching directory. Defaults to None.
         """
+        assert self.__framework != "nbx", "This model is already deployed on the cloud"
+
         # user will always have to pass the input_object
         nbox_meta, meta_dict = self.get_nbox_meta(input_object)
 
         # OCD baby!
         out = network.one_click_deploy(
             model_key=self.model_key,
-            model=self.model,
+            model=self.model_or_model_url,
             category=self.category,
             model_name=model_name,
             cache_dir=cache_dir,
             wait_for_deployment=wait_for_deployment,
             deployment_type=deployment_type,
+            src_framework=self.__framework,
             **meta_dict,
         )
 

@@ -104,6 +104,10 @@ def load_transformers_models() -> Dict:
         # initliase the model and tokenizer object
         tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
 
+        # All the tokenizers must contain the pad_token, by default we set it to eos_token
+        if not tokenizer.pad_token:
+            tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
+
         # tokenizer.pad_token = tokenizer.eos_token if not tokenizer.pad_token_id else tokenizer.pad_token
         model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
 

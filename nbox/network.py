@@ -27,6 +27,7 @@ def one_click_deploy(
     output_shapes: Tuple,
     dynamic_axes: Dict,
     category: str,
+    src_framework: str,
     deployment_type: str = "ovms2",
     model_name: str = None,
     cache_dir: str = None,
@@ -55,8 +56,16 @@ def one_click_deploy(
     Returns:
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
+    
+    # First Step: check the args and see if conditionals are correct or not
+    def __check_conditionals():
+        assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+        assert src_framework != "sk", "Scikit is not yet supported"
+        if src_framework == "sk":
+            assert deployment_type == "onnx-rt", "Only ONNX Runtime is supported for SK Framework"
+
     # perform sanity checks on the input values
-    assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+    __check_conditionals()
 
     # intialise the console logger
     console = utils.Console()
@@ -70,10 +79,11 @@ def one_click_deploy(
     _m_hash = utils.hash_(model_key)
     model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
     console(f"model_name: {model_name}")
+    console._log(f"Deployment type", deployment_type)
     spec = {"category": category, "model_key": model_key, "name": model_name}
 
     export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
-    if deployment_type == "ovms2":
+    if deployment_type in ["ovms2", "onnx-rt"]:
         export_model_path += ".onnx"
         export_fn = frm_pytorch.export_to_onnx
     elif deployment_type == "nbox":
@@ -87,7 +97,7 @@ def one_click_deploy(
         outputs=outputs,
         input_shapes=input_shapes,
         output_shapes=output_shapes,
-        onnx_model_path=export_model_path,
+        export_model_path=export_model_path,
         input_names=input_names,
         dynamic_axes=dynamic_axes,
         output_names=output_names,
@@ -115,8 +125,9 @@ def one_click_deploy(
             scale_values = ",".join([f"{name}[28,27,27]" for name in input_names])
             convert_args += f"--mean_values={mean_values} --scale_values={scale_values}"
 
+        console._log("convert_args:", convert_args)
+
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
-    console._log("convert_args:", convert_args)
     console._log("file_size:", file_size)
 
     r = requests.get(

@@ -4,38 +4,11 @@
 import torch
 
 
-def get_meta(
-    input_names,
-    input_shapes,
-    args,
-    output_names,
-    output_shapes,
-    outputs,
-):
-    # get the meta object
-    def __get_struct(names_, shapes_, tensors_):
-        return {
-            name: {
-                "dtype": str(tensor.dtype),
-                "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
-                "name": name,
-            }
-            for name, shapes, tensor in zip(names_, shapes_, tensors_)
-        }
-
-    meta = {"inputs": __get_struct(input_names, input_shapes, args), "outputs": __get_struct(output_names, output_shapes, outputs)}
-
-    return meta
-
-
 def export_to_onnx(
     model,
     args,
-    outputs,
-    onnx_model_path,
+    export_model_path,
     input_names,
-    input_shapes,
-    output_shapes,
     dynamic_axes,
     output_names,
     export_params=True,
@@ -48,7 +21,7 @@ def export_to_onnx(
     torch.onnx.export(
         model,
         args=args,
-        f=onnx_model_path,
+        f=export_model_path,
         input_names=input_names,
         verbose=verbose,
         output_names=output_names,
@@ -58,12 +31,8 @@ def export_to_onnx(
         do_constant_folding=do_constant_folding,  # whether to execute constant folding for optimization
         dynamic_axes=dynamic_axes,
     )
-    meta = get_meta(input_names, input_shapes, args, output_names, output_shapes, outputs)
-    return meta
 
 
-def export_to_torchscript(model, args, outputs, torchscript_model_path, input_names, output_names, **kwargs):
-    traced_model = torch.jit.trace(model.model, args, check_tolerance=0.0001)
-    torch.jit.save(traced_model, torchscript_model_path)
-    meta = get_meta(input_names, args, output_names, outputs)
-    return meta
+def export_to_torchscript(model, args, export_model_path, **kwargs):
+    traced_model = torch.jit.trace(model, args, check_tolerance=0.0001)
+    torch.jit.save(traced_model, export_model_path)

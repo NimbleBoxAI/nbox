@@ -103,11 +103,14 @@ class Console:
 
     def __init__(self):
         self.c = richConsole()
-        self.st = time()
         self._in_status = False
+        self.__reset()
 
     def rule(self):
         self.c.rule(f"[{self.T.nbx}]NBX-OCD[/{self.T.nbx}]", style=self.T.rule)
+
+    def __reset(self):
+        self.st = time()
 
     def __call__(self, x, *y):
         cont = " ".join([str(x)] + [str(_y) for _y in y])
@@ -122,6 +125,7 @@ class Console:
         self.c.print(f"[[{self.T.clk}]{t}[/{self.T.clk}]] {cont}")
 
     def start(self, x="", *y):
+        self.__reset()
         cont = " ".join([str(x)] + [str(_y) for _y in y])
         self.status = self.c.status(f"[{self.T.st}]{cont}[/{self.T.st}]", spinner=self.T.spinner)
         self.status.start()
