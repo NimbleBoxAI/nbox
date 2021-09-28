@@ -18,6 +18,7 @@ from sklearn.ensemble import RandomForestClassifier
 def get_model_nbox(*args, **kwargs):
     return nbox.load(*args, **kwargs)
 
+
 @lru_cache
 def get_model_sk():
     iris = load_iris()
@@ -27,6 +28,7 @@ def get_model_sk():
     clr.fit(X_train, y_train)
     return clr, X_test, y_test
 
+
 class NboxModelTest(unittest.TestCase):
     def test_model_meta_nbox(self):
         # does this work on nbox models
@@ -35,18 +37,30 @@ class NboxModelTest(unittest.TestCase):
         meta, _ = model.get_nbox_meta(image)
         self.assertEqual(
             meta,
-            {'inputs': {'input_0': {'dtype': 'torch.float32',
-                'name': 'input_0',
-                'tensorShape': {'dim': [{'name': '', 'size': 1},
-                                        {'name': '', 'size': 3},
-                                        {'name': '', 'size': 720},
-                                        {'name': '', 'size': 1280}],
-                                'unknownRank': False}}},
-            'outputs': {'output_0': {'dtype': 'torch.float32',
-                'name': 'output_0',
-                'tensorShape': {'dim': [{'name': '', 'size': 1},
-                                        {'name': '', 'size': 1000}],
-                                'unknownRank': False}}}}
+            {
+                "inputs": {
+                    "input_0": {
+                        "dtype": "torch.float32",
+                        "name": "input_0",
+                        "tensorShape": {
+                            "dim": [
+                                {"name": "", "size": 1},
+                                {"name": "", "size": 3},
+                                {"name": "", "size": 720},
+                                {"name": "", "size": 1280},
+                            ],
+                            "unknownRank": False,
+                        },
+                    }
+                },
+                "outputs": {
+                    "output_0": {
+                        "dtype": "torch.float32",
+                        "name": "output_0",
+                        "tensorShape": {"dim": [{"name": "", "size": 1}, {"name": "", "size": 1000}], "unknownRank": False},
+                    }
+                },
+            },
         )
 
     def test_model_meta_sk(self):
@@ -56,13 +70,20 @@ class NboxModelTest(unittest.TestCase):
         meta, _ = model.get_nbox_meta(X_test)
         self.assertEqual(
             meta,
-            {'inputs': {'input_0': {'dtype': 'float64',
-                                'name': 'input_0',
-                                'tensorShape': {'dim': [{'name': '', 'size': 38},
-                                                        {'name': '', 'size': 4}],
-                                                'unknownRank': False}}},
-            'outputs': {'output_0': {'dtype': 'int64',
-                                'name': 'output_0',
-                                'tensorShape': {'dim': [{'name': '', 'size': 38}],
-                                                'unknownRank': False}}}}
+            {
+                "inputs": {
+                    "input_0": {
+                        "dtype": "float64",
+                        "name": "input_0",
+                        "tensorShape": {"dim": [{"name": "", "size": 38}, {"name": "", "size": 4}], "unknownRank": False},
+                    }
+                },
+                "outputs": {
+                    "output_0": {
+                        "dtype": "int64",
+                        "name": "output_0",
+                        "tensorShape": {"dim": [{"name": "", "size": 38}], "unknownRank": False},
+                    }
+                },
+            },
         )

@@ -11,7 +11,7 @@ import torch
 
 from nbox import utils
 from nbox.user import secret
-import nbox.framework.pytorch as frm_pytorch
+from nbox.framework import pytorch as frm_pytorch, sklearn as frm_skl
 
 URL = secret.get("nbx_url")
 
@@ -56,7 +56,7 @@ def one_click_deploy(
     Returns:
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
-    
+
     # First Step: check the args and see if conditionals are correct or not
     def __check_conditionals():
         assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
@@ -75,18 +75,19 @@ def one_click_deploy(
     # getting access token -> now loads directly from the secret file
     access_token = secret.get("access_token")
 
-    # convert the model
+    # convert the model -> create a the spec, get the actual method for conversion
     _m_hash = utils.hash_(model_key)
     model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
     console(f"model_name: {model_name}")
     console._log(f"Deployment type", deployment_type)
     spec = {"category": category, "model_key": model_key, "name": model_name}
-
     export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
+
+    src_module = frm_skl if src_framework == "sk" else frm_pytorch
     if deployment_type in ["ovms2", "onnx-rt"]:
         export_model_path += ".onnx"
-        export_fn = frm_pytorch.export_to_onnx
-    elif deployment_type == "nbox":
+        export_fn = src_module.export_to_onnx
+    elif deployment_type == "nbox": # can only be deployed using pytorch framework
         export_model_path += ".torchscript"
         export_fn = frm_pytorch.export_to_torchscript
 

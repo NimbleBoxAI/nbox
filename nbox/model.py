@@ -86,7 +86,7 @@ class Model:
         # <class 'sklearn.ensemble._forest.RandomForestClassifier'>
         elif "sklearn" in str(type(model_or_model_url)):
             self.__framework = "sk"
-        
+
         else:
             assert isinstance(model_or_model_url, torch.nn.Module), "model_or_model_url must be a torch.nn.Module "
             self.__framework = "pt"
@@ -117,8 +117,7 @@ class Model:
         try:
             r.raise_for_status()
         except Exception as e:
-            self.console.stop()
-            self.console._log(e)
+            self.console.stop(e)
             raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
 
         # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
@@ -161,7 +160,7 @@ class Model:
         # in case of scikit learn user must ensure that the input_object is model_input
         if self.__framework == "sk":
             return input_object
-        
+
         if isinstance(self.category, dict):
             assert isinstance(input_object, dict), "If category is a dict then input must be a dict"
             # check for same keys
@@ -259,7 +258,7 @@ class Model:
         # this function gets the nbox metadata for the the current model, based on the input_object
         if self.__framework == "nbx":
             return self.nbox_meta
-        
+
         self.eval()  # covert to eval mode
         model_output, model_input = self(input_object, return_inputs=True)
 
@@ -272,11 +271,11 @@ class Model:
 
         # need to convert inputs and outputs to list / tuple
         if isinstance(model_input, dict):
-            args = tuple(model_input.values())
+            model_inputs = tuple(model_input.values())
             input_names = tuple(model_input.keys())
             input_shapes = tuple([tuple(v.shape) for k, v in model_input.items()])
         elif isinstance(model_input, (torch.Tensor, np.ndarray)):
-            args = tuple([model_input])
+            model_inputs = tuple([model_input])
             input_names = tuple(["input_0"])
             input_shapes = tuple([tuple(model_input.shape)])
         dynamic_axes = {i: dynamic_axes_dict for i in input_names}
@@ -298,11 +297,11 @@ class Model:
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
-        meta = get_meta(input_names, input_shapes, args, output_names, output_shapes, model_output)
+        meta = get_meta(input_names, input_shapes, model_inputs, output_names, output_shapes, model_output)
         out = {
             "input_names": input_names,
             "input_shapes": input_shapes,
-            "args": args,
+            "args": model_inputs,
             "output_names": output_names,
             "output_shapes": output_shapes,
             "outputs": model_output,

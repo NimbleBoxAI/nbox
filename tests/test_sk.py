@@ -35,4 +35,3 @@ class ImportTest(unittest.TestCase):
         _m, _x, _y = get_model()
         model = nbox.Model(_m)
         out = model({"input": _x})
-        
