@@ -11,7 +11,7 @@ from typing import Dict
 import torch
 
 from nbox.model import Model
-from nbox.utils import is_available, fetch
+from nbox.utils import isthere, fetch
 
 model_key_regex = re.compile(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$")
 
@@ -125,7 +125,7 @@ PRETRAINED_MODELS = {}
 all_repos = ["efficientnet_pytorch", "torchvision", "transformers"]
 
 for repo in all_repos:
-    if is_available(repo):
+    if isthere(repo):
         print(f"Loading pretrained models from {repo}")
         PRETRAINED_MODELS.update(locals()[f"load_{repo}_models"]())
 

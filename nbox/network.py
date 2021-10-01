@@ -29,6 +29,7 @@ def one_click_deploy(
     category: str,
     src_framework: str,
     deployment_type: str = "ovms2",
+    nbox_meta: dict = {},
     model_name: str = None,
     cache_dir: str = None,
     wait_for_deployment: bool = False,
@@ -92,7 +93,7 @@ def one_click_deploy(
         export_fn = frm_pytorch.export_to_torchscript
 
     console.start(f"Converting using: {export_fn}")
-    nbox_meta = export_fn(
+    export_fn(
         model=model,
         args=args,
         outputs=outputs,

@@ -9,7 +9,7 @@ from pprint import pprint as pp
 import torch
 import numpy as np
 
-from nbox import network
+from nbox import network, utils
 from nbox.utils import Console
 from nbox.parsers import ImageParser, TextParser
 from nbox.network import URL
@@ -110,6 +110,7 @@ class Model:
                 assert tokenizer != None, "tokenizer cannot be none for a text model!"
 
         self.nbox_meta = nbox_meta
+        self.__device = "cpu"
 
     def fetch_meta_from_nbx_cloud(self):
         self.console.start("Getting model metadata")
@@ -151,6 +152,11 @@ class Model:
     def train(self):
         if hasattr(self.model_or_model_url, "train"):
             self.model_or_model_url.train()
+
+    def __cuda(self):
+        if self.__framework == "pt":
+            self.model.cuda()
+            self.__device = "cuda"
 
     def __repr__(self):
         return f"<nbox.Model: {self.model_or_model_url} >"
@@ -232,15 +238,27 @@ class Model:
             self.console.stop(f"Took {et:.3f} seconds!")
 
         elif self.__framework == "sk":
+            if str(type(self.model_or_model_url)).startswith("sklearn.neighbors"):
+                out = self.model_or_model_url.kneighbors
             out = self.model_or_model_url.predict(model_input)
 
         elif self.__framework == "pt":
             with torch.no_grad():
                 if isinstance(model_input, dict):
+                    model_input = {k: v.to(self.__device) for k, v in model_input.items()}
                     out = self.model_or_model_url(**model_input)
                 else:
                     assert isinstance(model_input, torch.Tensor)
+                    model_input = model_input.to(self.__device)
                     out = self.model_or_model_url(model_input)
+
+                # # bring back to cpu
+                # if isinstance(out, (tuple, list)):
+                #     out = [x.to("cpu") for x in out]
+                # elif isinstance(out, torch.Tensor):
+                #     out = out.to("cpu")
+                # elif isinstance(out, dict):
+                #     out = {k: v.to("cpu") for k, v in out.items()}
 
             if self.model_meta is not None and self.model_meta.get("metadata", False) and self.model_meta["metadata"].get("outputs", False):
                 outputs = self.model_meta["metadata"]["outputs"]
@@ -339,6 +357,7 @@ class Model:
             wait_for_deployment=wait_for_deployment,
             deployment_type=deployment_type,
             src_framework=self.__framework,
+            nbox_meta=nbox_meta,
             **meta_dict,
         )
 

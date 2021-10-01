@@ -58,12 +58,14 @@ def join(x, *args):
     return os.path.join(x, *args)
 
 
-def is_available(package: str):
+def isthere(package: str):
     import importlib
 
     spam_spec = importlib.util.find_spec(package)
     return spam_spec is not None
 
+is_there_pt = isthere("torch")
+is_there_skl = isthere("sklearn")
 
 def get_random_name():
     import randomname
