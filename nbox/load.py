@@ -165,7 +165,9 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, *
     # check the model key if it is a file path, then check if
     if os.path.exists(model_key_or_url):
         model_path = os.path.abspath(model_key_or_url)
-        model_meta_path = ".".join(model_path.split(".")[:-1] + ["json"])
+        model_meta_path = loader_kwargs.pop("model_meta_path", None)
+        if not model_meta_path:
+            model_meta_path = ".".join(model_path.split(".")[:-1] + ["json"])
         assert os.path.exists(model_meta_path), f"Model meta file not found: {model_meta_path}"
 
         with open(model_meta_path, "r") as f:

@@ -248,7 +248,7 @@ def one_click_deploy(
                 console._log(f"Model is ready")
                 break
 
-        # if failed exit
+
         elif "failed" in statuses[-1]["status"]:
             break
 
