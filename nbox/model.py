@@ -13,7 +13,7 @@ import numpy as np
 from nbox import utils
 from nbox.utils import Console
 from nbox.parsers import ImageParser, TextParser
-from nbox.network import URL, one_click_deploy
+from nbox.network import one_click_deploy
 from nbox.user import secret
 from nbox.framework import get_meta
 from nbox.framework import pytorch as frm_pytorch, sklearn as frm_skl
@@ -117,6 +117,7 @@ class Model:
 
     def fetch_meta_from_nbx_cloud(self):
         self.console.start("Getting model metadata")
+        URL = secret.get("nbx_url")
         r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={self.model_or_model_url}&key={self.nbx_api_key}")
         try:
             r.raise_for_status()
@@ -330,13 +331,7 @@ class Model:
         }
         return meta, out
 
-    def export(
-        self,
-        input_object: Any,
-        export_type: str = "onnx",
-        model_name: str = None,
-        return_convert_args = False
-    ):
+    def export(self, input_object: Any, export_type: str = "onnx", model_name: str = None, cache_dir=None, return_convert_args=False):
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
             assert self.__framework != "nbx", "This model is already deployed on the cloud"
@@ -359,7 +354,13 @@ class Model:
         # convert the model -> create a the spec, get the actual method for conversion
         console(f"model_name: {model_name}")
         console._log(f"Deployment type", export_type)
-        spec = {"category": self.category, "model_key": self.model_key, "name": model_name, "src_framework": self.__framework, "export_type": export_type}
+        spec = {
+            "category": self.category,
+            "model_key": self.model_key,
+            "name": model_name,
+            "src_framework": self.__framework,
+            "export_type": export_type,
+        }
         nbox_meta = {"metadata": nbox_meta, "spec": spec}
         export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
 
@@ -367,7 +368,7 @@ class Model:
         if export_type == "onnx":
             export_model_path += ".onnx"
             export_fn = src_module.export_to_onnx
-        elif export_type == "torchscript": # can only be deployed using pytorch framework
+        elif export_type == "torchscript":  # can only be deployed using pytorch framework
             export_model_path += ".torchscript"
             export_fn = frm_pytorch.export_to_torchscript
 
@@ -377,7 +378,7 @@ class Model:
         console._log("nbox_meta:", nbox_meta)
 
         # construct the output
-        fn_out = (export_model_path, model_name, nbox_meta,)
+        fn_out = [export_model_path, model_name, nbox_meta]
         if return_convert_args:
             # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
             input_ = ",".join(export_kwargs["input_names"])
@@ -390,12 +391,11 @@ class Model:
                 mean_values = ",".join([f"{name}[182,178,172]" for name in export_kwargs["input_names"]])
                 scale_values = ",".join([f"{name}[28,27,27]" for name in export_kwargs["input_names"]])
                 convert_args += f"--mean_values={mean_values} --scale_values={scale_values}"
-            
+
             console._log(convert_args)
-            fn_out += (convert_args,)
+            fn_out = fn_out + [convert_args]
 
         return fn_out
-
 
     def deploy(
         self,
@@ -424,7 +424,7 @@ class Model:
 
         # perform sanity checks on the input values
         __check_conditionals()
-        
+
         export_type = {
             # ("sk", "onnx-rt"): "onnx",
             ("pt", "ovms2"): "onnx",
@@ -433,16 +433,18 @@ class Model:
         }[(self.__framework, deployment_type)]
 
         # user will always have to pass the input_object
-        export_model_path, model_name, nbox_meta, convert_args = self.export(input_object, export_type, model_name, return_convert_args=True)
+        export_model_path, model_name, nbox_meta, convert_args = self.export(
+            input_object, export_type, model_name, cache_dir, return_convert_args=True
+        )
 
         # OCD baby!
         out = one_click_deploy(
-            export_model_path = export_model_path,
-            deployment_type = deployment_type,
-            nbox_meta = nbox_meta,
-            model_name = model_name,
-            wait_for_deployment = wait_for_deployment,
-            convert_args = convert_args
+            export_model_path=export_model_path,
+            deployment_type=deployment_type,
+            nbox_meta=nbox_meta,
+            model_name=model_name,
+            wait_for_deployment=wait_for_deployment,
+            convert_args=convert_args,
         )
 
         if out != None:

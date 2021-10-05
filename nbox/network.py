@@ -9,7 +9,6 @@ from pprint import pp, pprint as peepee
 from nbox import utils
 from nbox.user import secret
 
-URL = secret.get("nbx_url")
 
 class NBXAPIError(Exception):
     pass
@@ -47,14 +46,15 @@ def one_click_deploy(
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
     access_token = secret.get("access_token")
+    URL = secret.get("nbx_url")
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
-    
+
     # intialise the console logger
     console = utils.Console()
     console.rule("NBX Deploy")
     console._log("file_size:", file_size)
     console.start("Getting bucket URL")
-    
+
     # get bucket URL
     r = requests.get(
         url=f"{URL}/api/model/get_upload_url",
@@ -94,7 +94,7 @@ def one_click_deploy(
 
     # polling
     endpoint = None
-    _stat_done = []    # status calls performed
+    _stat_done = []  # status calls performed
     total_retries = 0  # number of hits it took
     model_data_access_key = None  # this key is used for calling the model
     console._log(f"Check your deployment at {URL}/oneclick")
@@ -120,8 +120,6 @@ def one_click_deploy(
         except:
             peepee(r.content)
             raise NBXAPIError("This should not happen, please raise an issue at https://github.com/NimbleBoxAI/nbox/issues with above log!")
-
-        # peepee(updates["model_history"])
 
         # go over all the status updates and check if the deployment is done
         for st in updates["model_history"]:
@@ -170,10 +168,9 @@ def one_click_deploy(
             if r.status_code == 200:
                 console._log(f"Model is ready")
                 break
-            
+
         if curr_st == "ready" or "failed" in curr_st:
             break
-
 
     secret.add_ocd(
         model_id=model_id,
