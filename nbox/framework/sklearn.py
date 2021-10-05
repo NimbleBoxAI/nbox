@@ -25,7 +25,7 @@ def export_to_onnx(model, args, input_names, input_shapes, export_model_path, op
     initial_types = []
     for name, shape, tensor in zip(input_names, input_shapes, args):
         shape = list(shape)
-        shape[0] = None # batching requires the first dimension to be None
+        shape[0] = None  # batching requires the first dimension to be None
         initial_types.append((name, __NP_DTYPE_TO_SKL_DTYPE[str(tensor.dtype)](shape)))
 
     onx = convert_sklearn(model, initial_types=initial_types, target_opset=opset_version)

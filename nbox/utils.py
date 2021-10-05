@@ -6,7 +6,7 @@ import hashlib
 import requests
 import tempfile
 from PIL import Image
-from time import time
+from time import time, sleep as _sleep
 from datetime import timedelta
 from types import SimpleNamespace
 from rich.console import Console as richConsole
@@ -64,8 +64,10 @@ def isthere(package: str):
     spam_spec = importlib.util.find_spec(package)
     return spam_spec is not None
 
+
 is_there_pt = isthere("torch")
 is_there_skl = isthere("sklearn")
+
 
 def get_random_name():
     import randomname
@@ -108,8 +110,8 @@ class Console:
         self._in_status = False
         self.__reset()
 
-    def rule(self):
-        self.c.rule(f"[{self.T.nbx}]NBX-OCD[/{self.T.nbx}]", style=self.T.rule)
+    def rule(self, title: str):
+        self.c.rule(f"[{self.T.nbx}]{title}[/{self.T.nbx}]", style=self.T.rule)
 
     def __reset(self):
         self.st = time()
@@ -120,6 +122,11 @@ class Console:
             self._log(cont)
         else:
             self._update(cont)
+
+    def sleep(self, t: int):
+        for i in range(t):
+            self(f"Sleeping for {t-i}s ...")
+            _sleep(1)
 
     def _log(self, x, *y):
         cont = " ".join([str(x)] + [str(_y) for _y in y])

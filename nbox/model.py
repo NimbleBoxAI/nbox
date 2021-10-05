@@ -1,5 +1,6 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
+import os
 import json
 import requests
 from time import time
@@ -9,12 +10,13 @@ from pprint import pprint as pp
 import torch
 import numpy as np
 
-from nbox import network, utils
+from nbox import utils
 from nbox.utils import Console
 from nbox.parsers import ImageParser, TextParser
-from nbox.network import URL
+from nbox.network import URL, one_click_deploy
 from nbox.user import secret
 from nbox.framework import get_meta
+from nbox.framework import pytorch as frm_pytorch, sklearn as frm_skl
 
 
 class Model:
@@ -111,6 +113,7 @@ class Model:
 
         self.nbox_meta = nbox_meta
         self.__device = "cpu"
+        self.cache_dir = None
 
     def fetch_meta_from_nbx_cloud(self):
         self.console.start("Getting model metadata")
@@ -317,15 +320,82 @@ class Model:
 
         meta = get_meta(input_names, input_shapes, model_inputs, output_names, output_shapes, model_output)
         out = {
-            "input_names": input_names,
-            "input_shapes": input_shapes,
             "args": model_inputs,
-            "output_names": output_names,
-            "output_shapes": output_shapes,
             "outputs": model_output,
+            "input_shapes": input_shapes,
+            "output_shapes": output_shapes,
+            "input_names": input_names,
+            "output_names": output_names,
             "dynamic_axes": dynamic_axes,
         }
         return meta, out
+
+    def export(
+        self,
+        input_object: Any,
+        export_type: str = "onnx",
+        model_name: str = None,
+        return_convert_args = False
+    ):
+        # First Step: check the args and see if conditionals are correct or not
+        def __check_conditionals():
+            assert self.__framework != "nbx", "This model is already deployed on the cloud"
+            assert export_type in ["onnx", "torchscript"], "Export type must be onnx or torchscript"
+            if self.__framework == "sk":
+                assert export_type == "onnx", "Only ONNX export is supported for scikit-learn Framework"
+
+        # perform sanity checks on the input values
+        __check_conditionals()
+
+        nbox_meta, export_kwargs = self.get_nbox_meta(input_object)
+        _m_hash = utils.hash_(self.model_key)
+        model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+
+        # intialise the console logger
+        console = utils.Console()
+        console.rule(f"Exporting {model_name}")
+        cache_dir = "/tmp" if self.cache_dir is None else self.cache_dir
+
+        # convert the model -> create a the spec, get the actual method for conversion
+        console(f"model_name: {model_name}")
+        console._log(f"Deployment type", export_type)
+        spec = {"category": self.category, "model_key": self.model_key, "name": model_name, "src_framework": self.__framework, "export_type": export_type}
+        nbox_meta = {"metadata": nbox_meta, "spec": spec}
+        export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
+
+        src_module = frm_skl if self.__framework == "sk" else frm_pytorch
+        if export_type == "onnx":
+            export_model_path += ".onnx"
+            export_fn = src_module.export_to_onnx
+        elif export_type == "torchscript": # can only be deployed using pytorch framework
+            export_model_path += ".torchscript"
+            export_fn = frm_pytorch.export_to_torchscript
+
+        console.start(f"Converting using: {export_fn}")
+        export_fn(model=self.model_or_model_url, export_model_path=export_model_path, **export_kwargs)
+        console.stop("Conversion Complete")
+        console._log("nbox_meta:", nbox_meta)
+
+        # construct the output
+        fn_out = (export_model_path, model_name, nbox_meta,)
+        if return_convert_args:
+            # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
+            input_ = ",".join(export_kwargs["input_names"])
+            input_shape = ",".join([str(list(x.shape)).replace(" ", "") for x in export_kwargs["args"]])
+            convert_args = f"--data_type=FP32 --input_shape={input_shape} --input={input_} "
+
+            if self.category == "image":
+                # mean and scale have to be defined for every single input
+                # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
+                mean_values = ",".join([f"{name}[182,178,172]" for name in export_kwargs["input_names"]])
+                scale_values = ",".join([f"{name}[28,27,27]" for name in export_kwargs["input_names"]])
+                convert_args += f"--mean_values={mean_values} --scale_values={scale_values}"
+            
+            console._log(convert_args)
+            fn_out += (convert_args,)
+
+        return fn_out
+
 
     def deploy(
         self,
@@ -341,24 +411,38 @@ class Model:
             input_object (Any): input to be processed
             model_name (str, optional): custom model name for this model. Defaults to None.
             cache_dir (str, optional): Custom caching directory. Defaults to None.
+            wait_for_deployment (bool, optional): Wait for deployment to complete. Defaults to False.
+            deployment_type (str, optional): Deployment type. Defaults to "ovms2".
         """
-        assert self.__framework != "nbx", "This model is already deployed on the cloud"
+        # First Step: check the args and see if conditionals are correct or not
+        def __check_conditionals():
+            assert self.__framework != "nbx", "This model is already deployed on the cloud"
+            assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+            assert self.__framework != "sk", "Scikit is not yet supported"
+            if self.__framework == "sk":
+                assert deployment_type == "onnx-rt", "Only ONNX Runtime is supported for scikit-learn Framework"
+
+        # perform sanity checks on the input values
+        __check_conditionals()
+        
+        export_type = {
+            # ("sk", "onnx-rt"): "onnx",
+            ("pt", "ovms2"): "onnx",
+            ("pt", "nbox"): "torchscript",
+            # ("pt", "onnx-rt"): "onnx",
+        }[(self.__framework, deployment_type)]
 
         # user will always have to pass the input_object
-        nbox_meta, meta_dict = self.get_nbox_meta(input_object)
+        export_model_path, model_name, nbox_meta, convert_args = self.export(input_object, export_type, model_name, return_convert_args=True)
 
         # OCD baby!
-        out = network.one_click_deploy(
-            model_key=self.model_key,
-            model=self.model_or_model_url,
-            category=self.category,
-            model_name=model_name,
-            cache_dir=cache_dir,
-            wait_for_deployment=wait_for_deployment,
-            deployment_type=deployment_type,
-            src_framework=self.__framework,
-            nbox_meta=nbox_meta,
-            **meta_dict,
+        out = one_click_deploy(
+            export_model_path = export_model_path,
+            deployment_type = deployment_type,
+            nbox_meta = nbox_meta,
+            model_name = model_name,
+            wait_for_deployment = wait_for_deployment,
+            convert_args = convert_args
         )
 
         if out != None:

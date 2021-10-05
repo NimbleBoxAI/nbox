@@ -12,4 +12,5 @@ __version__ = "0.2.0"
 
 if not (nbox.utils.is_there_pt or nbox.utils.is_there_skl):
     import warnings
+
     warnings.warn("Neither PyTorch nor Scikit-Learn are installed, cannot run local inference")
