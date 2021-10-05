@@ -63,7 +63,7 @@ def one_click_deploy(
         assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
         assert src_framework != "sk", "Scikit is not yet supported"
         if src_framework == "sk":
-            assert deployment_type == "onnx-rt", "Only ONNX Runtime is supported for SK Framework"
+            assert deployment_type == "onnx-rt", "Only ONNX Runtime is supported for scikit-learn Framework"
 
     # perform sanity checks on the input values
     __check_conditionals()
@@ -81,7 +81,7 @@ def one_click_deploy(
     model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
     console(f"model_name: {model_name}")
     console._log(f"Deployment type", deployment_type)
-    spec = {"category": category, "model_key": model_key, "name": model_name}
+    spec = {"category": category, "model_key": model_key, "name": model_name, "src_framework": src_framework, "deployment_type": deployment_type}
     export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
 
     src_module = frm_skl if src_framework == "sk" else frm_pytorch

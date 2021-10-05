@@ -172,6 +172,8 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, *
 
         with open(model_meta_path, "r") as f:
             model_meta = json.load(f)
+            if isinstance(model_meta, str):
+                model_meta = json.loads(model_meta)
             spec = model_meta["spec"]
 
         category = spec["category"]
