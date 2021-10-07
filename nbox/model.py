@@ -157,11 +157,6 @@ class Model:
         if hasattr(self.model_or_model_url, "train"):
             self.model_or_model_url.train()
 
-    def __cuda(self):
-        if self.__framework == "pt":
-            self.model.cuda()
-            self.__device = "cuda"
-
     def __repr__(self):
         return f"<nbox.Model: {self.model_or_model_url} >"
 
@@ -428,10 +423,10 @@ class Model:
         __check_conditionals()
 
         export_type = {
-            # ("sk", "onnx-rt"): "onnx",
+            ("sk", "onnx-rt"): "onnx",
             ("pt", "ovms2"): "onnx",
             ("pt", "nbox"): "torchscript",
-            # ("pt", "onnx-rt"): "onnx",
+            ("pt", "onnx-rt"): "onnx",
         }[(self.__framework, deployment_type)]
 
         # user will always have to pass the input_object
