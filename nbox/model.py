@@ -218,7 +218,9 @@ class Model:
         if self.__framework == "nbx":
             self.console.start("Hitting API")
             st = time()
-            r = requests.post(self.model_url + ":predict", json={"inputs": model_input}, headers={"NBX-KEY": self.nbx_api_key})
+            # OVMS has :predict endpoint and nbox has /predict
+            _p = "/" if "export_type" in self.nbox_meta["spec"] else ":"
+            r = requests.post(self.model_url + f"{_p}predict", json={"inputs": model_input}, headers={"NBX-KEY": self.nbx_api_key})
             et = time() - st
 
             try:
@@ -353,7 +355,7 @@ class Model:
 
         # convert the model -> create a the spec, get the actual method for conversion
         console(f"model_name: {model_name}")
-        console._log(f"Deployment type", export_type)
+        console._log(f"Export type", export_type)
         spec = {
             "category": self.category,
             "model_key": self.model_key,

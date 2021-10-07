@@ -52,6 +52,7 @@ def one_click_deploy(
     # intialise the console logger
     console = utils.Console()
     console.rule("NBX Deploy")
+    console._log("deployment_type:", deployment_type)
     console._log("file_size:", file_size)
     console.start("Getting bucket URL")
 

@@ -80,7 +80,7 @@ def deploy(
             )
 
         # one click deploy
-        endpoint, model_data_access_key = one_click_deploy(
+        endpoint, key = one_click_deploy(
             model_path,
             deployment_type,
             nbox_meta,
@@ -91,8 +91,8 @@ def deploy(
 
         # print to logs if needed
         if wait_for_deployment and print_in_logs:
-            print("             endpoint:", endpoint)
-            print("model_data_access_key:", model_data_access_key)
+            print(" Endpoint:", endpoint)
+            print("Model Key:", key)
 
 
 if __name__ == "__main__":
