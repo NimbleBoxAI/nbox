@@ -5,7 +5,6 @@ import re
 import json
 import inspect
 import warnings
-import requests
 from typing import Dict
 
 import torch
@@ -13,12 +12,17 @@ import torch
 from nbox.model import Model
 from nbox.utils import isthere, fetch
 
-model_key_regex = re.compile(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$")
+model_key_regex = re.compile(r"^(\w+)(\/[\w\/-]+)?(:*[\w+:]+)?$")
 
 # util functions
-def remove_kwargs(pop_list, **kwargs):
-    for p in pop_list:
-        kwargs.pop(p)
+def remove_kwargs(model_fn, kwargs):
+    # compare variables between the model_fn and kwargs if they are different then remove it with warning
+    arg_spec = inspect.getfullargspec(model_fn)
+    if kwargs and arg_spec.varkw != None:
+        diff = set(kwargs.keys()) - set(arg_spec.args)
+        for d in list(diff):
+            warnings.warn(f"Ignoring unknown argument: {d}")
+            kwargs.pop(d)
     return kwargs
 
 
@@ -38,7 +42,7 @@ def remove_kwargs(pop_list, **kwargs):
 # def model_builder() -> (model, model_kwargs)
 
 
-def load_efficientnet_pytorch_models(pop_kwargs=["model_instr"]) -> Dict:
+def load_efficientnet_pytorch_models() -> Dict:
     def model_builder(pretrained=False, **kwargs):
         import efficientnet_pytorch
 
@@ -47,13 +51,13 @@ def load_efficientnet_pytorch_models(pop_kwargs=["model_instr"]) -> Dict:
         else:
             model_fn = efficientnet_pytorch.EfficientNet.from_name
 
-        kwargs = remove_kwargs(pop_kwargs, **kwargs)
+        kwargs = remove_kwargs(model_fn, kwargs)
         return model_fn(**kwargs), {}
 
     return {"efficientnet_pytorch/efficientnet": (model_builder, "image")}
 
 
-def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
+def load_torchvision_models() -> Dict:
     def model_builder(model, pretrained=False, **kwargs):
         # tv_mr = torchvision models registry
         # this is a json object that maps all the models to their respective methods from torchvision
@@ -68,16 +72,7 @@ def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
         import torchvision
 
         model_fn = eval(model_fn)
-        kwargs = remove_kwargs(pop_kwargs, **kwargs)
-
-        # compare variables between the model_fn and kwargs if they are different then remove it with warning
-        arg_spec = inspect.getfullargspec(model_fn)
-        if kwargs and arg_spec.varkw != None:
-            diff = set(kwargs.keys()) - set(arg_spec.args)
-            for d in list(diff):
-                warnings.warn(f"Ignoring unknown argument: {d}")
-                kwargs.pop(d)
-
+        kwargs = remove_kwargs(model_fn, kwargs)
         model = model_fn(pretrained=pretrained, **kwargs)
         return model, {}
 
@@ -133,8 +128,16 @@ for repo in all_repos:
 if not PRETRAINED_MODELS:
     raise ValueError("No pretrained models available. Please install PyTorch or torchvision or transformers to use pretrained models.")
 
+# ---- plug your own models and in extension the methods here
 
-PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
+
+def plug(src_name, builder_fn, cataegory):
+    # check if the source is already present
+    if src_name in PRETRAINED_MODELS:
+        raise ValueError(f"Source: {src_name} already present in the pretrained models index")
+
+    # add the source
+    PRETRAINED_MODELS[src_name] = (builder_fn, cataegory)
 
 
 # ---- load function has to manage everything and return Model object properly initialised
@@ -197,16 +200,21 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, *
             raise ValueError(f"Key: {model_key_or_url} incorrect, please check!")
 
         # this key is valid, now get it's components
-        model_key, src, src_key, model_instr = model_key_parts[0]
-        if src not in PT_SOURCES:
-            raise ValueError(f"Model source: {src} not found. Is this package installed!")
+        src, src_key, model_instr = model_key_parts[0]
+        src_key = src_key.strip("/")  # remove leading and trailing slashes
+        model_instr = model_instr.replace(":", "")  # remove the :
+        model_key = model_key_or_url
 
-        # sometimes you'll find the whole key, sometimes from the source, so check both
-        model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
+        # print("  model_key:", model_key)
+        # print("        src:", src)
+        # print("    src_key:", src_key)
+        # print("model_instr:", model_instr)
+
+        model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
         if model_meta is None:
             model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
             if model_meta is None:
-                raise IndexError(f"Model: {model_key} not found")
+                raise IndexError(f"Model: {src} not found")
 
         # now just load the underlying graph and the model and off you go
         model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)

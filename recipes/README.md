@@ -5,3 +5,4 @@
 1. [[code](./sk_write.py)] Deploying a scikit-learn model
 2. [[code](./torch_resnet18.py)] Deploying a `resnet18` model from torchvision
 3. [[code](./hf_bert.py)] Deploying a huggingface bert model
+4. [[code](./plug_to_nbox.py)] How to add your plug your own models into the `nbox` framework

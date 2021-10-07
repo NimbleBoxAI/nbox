@@ -7,10 +7,13 @@ from sklearn.ensemble import RandomForestClassifier
 
 # ---------
 import nbox
+
 # ---------
 
+
 def hr():
-  print('-' * 80)
+    print("-" * 80)
+
 
 # create a model
 iris = load_iris()
@@ -21,7 +24,7 @@ clr.fit(X_train, y_train)
 acc = clr.score(X_test, y_test)
 hr()
 
-model = nbox.Model(clr) # <--------- load the model
+model = nbox.Model(clr)  # <--------- load the model
 y_nbox = model(X_test)  # <--------- predict by passing numpy arrays
 
 print("Accuracy (vanilla):", acc)
@@ -34,12 +37,8 @@ hr()
 meta, args = model.get_nbox_meta(X)
 pp(meta)
 
-path, _, _  = model.export(X, export_type="onnx")
+path, _, _ = model.export(X, export_type="onnx")
 print("output path:", path)
 hr()
 
-model.deploy(
-  X,
-  wait_for_deployment=True,
-  deployment_type="nbox"
-) # <--------- model is deployed
+model.deploy(X, wait_for_deployment=True, deployment_type="nbox")  # <--------- model is deployed
