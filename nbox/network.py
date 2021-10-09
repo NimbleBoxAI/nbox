@@ -1,17 +1,17 @@
 # this file has methods for netorking related things
 
-import os
 import json
-import requests
+import os
+from pprint import pprint as peepee
 from time import sleep
 from typing import Dict, Tuple
-from pprint import pprint as peepee
 
+import requests
 import torch
 
+import nbox.framework.pytorch as frm_pytorch
 from nbox import utils
 from nbox.user import secret
-import nbox.framework.pytorch as frm_pytorch
 
 URL = secret.get("nbx_url")
 
@@ -30,6 +30,7 @@ def one_click_deploy(
     deployment_type: str = "ovms2",
     model_name: str = None,
     cache_dir: str = None,
+    deployment_id: str = None
 ):
     """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
     and then deploys on NBX Platform. Avoid using this function manually and use
@@ -68,6 +69,15 @@ def one_click_deploy(
     # convert the model
     _m_hash = utils.hash_(model_key)
     model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+    if deployment_id != None:
+        __depl_dict = {"deployment_id": deployment_id}
+    else:
+        deployment_name = f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+        __depl_dict = {"deployment_name": deployment_name}
+
+    # TODO: remove hardcode
+    __depl_dict = {"deployment_id":"8gcjmg2a",}
+    
     console(f"model_name: {model_name}")
     spec = {"category": category, "model_key": model_key, "name": model_name}
 
@@ -127,6 +137,7 @@ def one_click_deploy(
             "convert_args": convert_args,
             "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
             "deployment_type": deployment_type,  # "nbxs" or "ovms2"
+            **__depl_dict
         },
         headers={"Authorization": f"Bearer {access_token}"},
         verify=False,
@@ -137,6 +148,7 @@ def one_click_deploy(
         raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
     out = r.json()
     model_id = out["fields"]["x-amz-meta-model_id"]
+    deployment_id = out["fields"]["x-amz-meta-deployment_id"]
     console.stop("S3 Upload URL obtained")
     console._log("model_id:", model_id)
 
@@ -150,7 +162,7 @@ def one_click_deploy(
     console.start("Verifying upload ...")
     requests.post(
         url=f"{URL}/api/model/update_model_status",
-        json={"upload": True if r.status_code == 204 else False, "model_id": model_id},
+        json={"upload": True if r.status_code == 204 else False, "model_id": model_id, "deployment_id": deployment_id},
         headers={"Authorization": f"Bearer {access_token}"},
         verify=False,
     )

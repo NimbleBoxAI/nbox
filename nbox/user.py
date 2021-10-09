@@ -1,9 +1,10 @@
-import os
 import json
-import requests
+import os
 from getpass import getpass
 
-from nbox.utils import join, Console
+import requests
+
+from nbox.utils import Console, join
 
 
 def get_access_token(nbx_home_url, username, password=None):
@@ -12,7 +13,7 @@ def get_access_token(nbx_home_url, username, password=None):
     console.start("Getting access tokens ...")
     try:
         r = requests.post(
-            url=f"{nbx_home_url}/api/login",
+            url=f"{nbx_home_url}/api/user/login",
             json={"username": username, "password": password},
             verify=False,
         )
@@ -55,7 +56,7 @@ class Secrets:
             # populate with the first time things
             nbx_home_url = input("NimbleBox.ai home URL (default: https://www.nimblebox.ai/): ").strip()
             if not nbx_home_url:
-                nbx_home_url = "https://www.nimblebox.ai/"
+                nbx_home_url = "https://nimblebox.ai/"
             nbx_home_url = nbx_home_url.rstrip("/")
 
             username = input("Username: ")
