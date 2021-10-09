@@ -3,7 +3,6 @@
 import os
 import json
 import requests
-from time import sleep
 from pprint import pp, pprint as peepee
 
 from nbox import utils
@@ -27,20 +26,12 @@ def one_click_deploy(
     `model.deploy()` instead
 
     Args:
-        model_key (str): model_key from NBX model registry
-        model (torch.nn.Module): model to be deployed
-        args (Tuple): input tensor to the model for ONNX export
-        input_names (Tuple): input tensor names to the model for ONNX export
-        input_shapes (Tuple): input tensor shapes to the model for ONNX export
-        output_names (Tuple): output tensor names to the model for ONNX export
-        output_shapes (Tuple): output tensor shapes to the model for ONNX export
-        dynamic_axes (Dict): dictionary with input_name and dynamic axes shape
-        category (str): model category
-        model_name (str, optional): custom model name for this model. Defaults to None.
-        cache_dir (str, optional): Custom caching directory. Defaults to None.
-
-    Raises:
-        ValueError
+        export_model_path (str): path to the file to upload
+        deployment_type (str, optional): type of deployment strategy
+        nbox_meta (dict, optional): metadata for the nbox.Model() object being deployed
+        model_name (str, optional): name of the model being deployed
+        wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
+        convert_args (str, optional): if deployment type == "ovms2" can pass extra arguments to MO
 
     Returns:
         (str, None): if deployment is successful then push then return the URL endpoint else return None
@@ -52,8 +43,10 @@ def one_click_deploy(
     # intialise the console logger
     console = utils.Console()
     console.rule("NBX Deploy")
-    console._log("deployment_type:", deployment_type)
-    console._log("file_size:", file_size)
+    console._log("Deploying on URL:", URL)
+    console._log("Deployment Type:", deployment_type)
+    console._log("Model Path:", export_model_path)
+    console._log("file_size:", file_size, "MBs")
     console.start("Getting bucket URL")
 
     # get bucket URL
@@ -143,7 +136,7 @@ def one_click_deploy(
                 if endpoint is None:
                     if wait_for_deployment:
                         continue
-                    console._log("Deployment in proress ...")
+                    console._log("Deployment in progress ...")
                     console._log(f"Endpoint to be setup, please check status at: {URL}/oneclick")
                     break
 
@@ -170,7 +163,9 @@ def one_click_deploy(
                 console._log(f"Model is ready")
                 break
 
-        if curr_st == "ready" or "failed" in curr_st:
+        # actual break condition happens here: bug in webserver where it does not return ready
+        # curr_st == "ready"
+        if model_data_access_key != None or "failed" in curr_st:
             break
 
     secret.add_ocd(

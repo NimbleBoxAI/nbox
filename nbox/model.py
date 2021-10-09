@@ -22,7 +22,7 @@ from nbox.framework import pytorch as frm_pytorch, sklearn as frm_skl
 class Model:
     def __init__(
         self,
-        model_or_model_url: Union[str, torch.nn.Module],
+        model_or_model_url: Any,
         nbx_api_key: str = None,
         category: str = None,
         tokenizer=None,
@@ -33,10 +33,51 @@ class Model:
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
         from nbox==0.1.10 nbox.Model handles both local and remote models
 
+        Usage:
+            >>> from nbox import Model
+
+            # when on NBX-Deploy
+            >>> model = Model("https://nbx.cloud/model/url", "nbx_api_key")
+
+            # when loading a scikit learn model
+            ```python
+            from sklearn.datasets import load_iris
+            from sklearn.ensemble import RandomForestClassifier
+            iris = load_iris()
+            clr = RandomForestClassifier()
+            clr.fit(iris.data, iris.target)
+            model = nbox.Model(clr)
+            ``
+
+            # when loading a pytorch model
+            ```python
+            import torch
+
+            class DoubleInSingleOut(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.f1 = torch.nn.Linear(2, 4)
+                    self.f2 = torch.nn.Linear(2, 4)
+                    self.logit_scale = torch.nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+
+                def forward(self, x, y):
+                    out = self.f1(x) + self.f2(y)
+                    logit_scale = self.logit_scale.exp()
+                    out = logit_scale - out @ out.t()
+                    return out
+
+            model = nbox.Model(
+                DoubleInSingleOut(),
+                category = {"x": "image", "y": "image"} # <- this is pre-proc type for input
+            )
+            ```
+
+            This ^^^^^^^ is not a good wording, working on it!
+
         Args:
-            model_or_model_url ([str, torch.nn.Module]): Model to be wrapped or model url
-            nbx_api_key (str, optional): API key for this deployed model. Defaults to None.
-            category (str, optional): Input categories for each input type to the model. Defaults to None.
+            model_or_model_url (Any): Model to be wrapped or model url
+            nbx_api_key (str, optional): API key for this deployed model
+            category (str, optional): Input categories for each input type to the model
             tokenizer ([transformers.PreTrainedTokenizer], optional): If this is a text model then tokenizer for this. Defaults to None.
             model_key (str, optional): With what key is this model initialised, useful for public models. Defaults to None.
             model_meta (dict, optional): Extra metadata when starting the model. Defaults to None.
@@ -116,6 +157,7 @@ class Model:
         self.cache_dir = None
 
     def fetch_meta_from_nbx_cloud(self):
+        """When this is on NBX-Deploy cloud, fetch the metadata from the deployment node."""
         self.console.start("Getting model metadata")
         URL = secret.get("nbx_url")
         r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={self.model_or_model_url}&key={self.nbx_api_key}")
@@ -190,6 +232,10 @@ class Model:
             input_dict = self.text_parser(input_object)
             return input_dict
 
+        elif self.category == None and isinstance(input_object, np.ndarray):
+            # this has to be handled better -> to be fixed till 0.2.1
+            return {"input_0": input_object.tolist()}
+
     def __call__(self, input_object: Any, return_inputs=False):
         """This is the most important part of this codebase. The `input_object` can be anything from
         a tensor, an image file, filepath as string, string to process as NLP model. This `__call__`
@@ -232,6 +278,7 @@ class Model:
                 else:
                     raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
             except:
+                print(r.content)
                 out = r.json()
                 data_size = 0
                 print("Error: ", out)
@@ -274,6 +321,11 @@ class Model:
         return out
 
     def get_nbox_meta(self, input_object):
+        """Get the nbox meta and trace args for the model with the given input object
+
+        Args:
+            input_object (Any): input to be processed
+        """
         # this function gets the nbox metadata for the the current model, based on the input_object
         if self.__framework == "nbx":
             return self.nbox_meta
@@ -329,6 +381,17 @@ class Model:
         return meta, out
 
     def export(self, input_object: Any, export_type: str = "onnx", model_name: str = None, cache_dir=None, return_convert_args=False):
+        """Export the model to a particular kind of DAG (ie. like onnx, torchscript, etc.)
+
+        Raises appropriate assertion errors for strict checking of inputs
+
+        Args:
+            input_object (Any): input to be processed
+            export_type (str, optional): export type, see errors (use this first)
+            model_name (str, optional): will be saved to cache_dir/model_name.<export_type>
+            cache_dir (str, optional): cache dir where to dump this file
+            return_convert_args (bool, optional): if True, this structured input to the model
+        """
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
             assert self.__framework != "nbx", "This model is already deployed on the cloud"
@@ -350,7 +413,7 @@ class Model:
 
         # convert the model -> create a the spec, get the actual method for conversion
         console(f"model_name: {model_name}")
-        console._log(f"Export type", export_type)
+        console._log(f"Export type: ", export_type)
         spec = {
             "category": self.category,
             "model_key": self.model_key,
@@ -400,38 +463,37 @@ class Model:
         model_name: str = None,
         cache_dir: str = None,
         wait_for_deployment: bool = False,
+        runtime: str = "onnx",
         deployment_type: str = "ovms2",
     ):
-        """OCD your model on NBX platform.
+        """NBX-Deploy (read more one: https://docs.nimblebox.ai/nbox/nbox-intro/quickstart-with-deployment)
+
+        This deploys the current model onto our managed K8s clusters. This tight product service integration
+        is very crucial for us and is the best way to make deploy a model for usage.
+
+        Raises appropriate assertion errors for strict checking of inputs
 
         Args:
             input_object (Any): input to be processed
-            model_name (str, optional): custom model name for this model. Defaults to None.
-            cache_dir (str, optional): Custom caching directory. Defaults to None.
-            wait_for_deployment (bool, optional): Wait for deployment to complete. Defaults to False.
-            deployment_type (str, optional): Deployment type. Defaults to "ovms2".
+            model_name (str, optional): custom model name for this model
+            cache_dir (str, optional): custom caching directory
+            wait_for_deployment (bool, optional): wait for deployment to complete
+            runtime (str, optional): runtime to use for deployment
+            deployment_type (str, optional): deployment type
         """
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
             assert self.__framework != "nbx", "This model is already deployed on the cloud"
             assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
-            assert self.__framework != "sk", "Scikit is not yet supported"
             if self.__framework == "sk":
-                assert deployment_type == "onnx-rt", "Only ONNX Runtime is supported for scikit-learn Framework"
+                assert deployment_type == "nbox", "Only ONNX Runtime is supported for scikit-learn Framework"
 
         # perform sanity checks on the input values
         __check_conditionals()
 
-        export_type = {
-            ("sk", "onnx-rt"): "onnx",
-            ("pt", "ovms2"): "onnx",
-            ("pt", "nbox"): "torchscript",
-            ("pt", "onnx-rt"): "onnx",
-        }[(self.__framework, deployment_type)]
-
         # user will always have to pass the input_object
         export_model_path, model_name, nbox_meta, convert_args = self.export(
-            input_object, export_type, model_name, cache_dir, return_convert_args=True
+            input_object, runtime, model_name, cache_dir, return_convert_args=True
         )
 
         # OCD baby!

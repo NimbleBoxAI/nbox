@@ -132,6 +132,17 @@ if not PRETRAINED_MODELS:
 
 
 def plug(src_name, builder_fn, cataegory):
+    """Plug your nbox_builder methods here. Once plugged in your codebase, you can use the
+    simplicity of nbox.loaders
+
+    Args:
+        src_name (str): name of the source
+        builder_fn (func): function to be called to build the model
+        cataegory (dict): input categories for the input
+
+    Raises:
+        ValueError: if src_name is already in the index
+    """
     # check if the source is already present
     if src_name in PRETRAINED_MODELS:
         raise ValueError(f"Source: {src_name} already present in the pretrained models index")
@@ -143,19 +154,26 @@ def plug(src_name, builder_fn, cataegory):
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, **loader_kwargs):
-    """Returns nbox.Model from a model (key), can optionally setup a connection to
-    cloud inference on a Nimblebox instance.
+def load(model_key_or_url: str, nbx_api_key: str = None, verbose=False, **loader_kwargs):
+    """This function loads the nbox.Model object from the pretrained models index or NimbleBox.ai's cloud infer
+    service.
 
     Args:
-        model_key_or_url (str, optional): key for which to load the model, the structure looks as follows:
-            ```
-            source/(source/key)::<pre::task::post>
-            ```
-            Defaults to None.
-        nbx_api_key (str, optional): Your Nimblebox API key. Defaults to None.
+        model_key_or_url (str, optional): This is the primary key for the loader. It can perform the following:
+
+            -     `path`: if this is a path to a model file, then it will be loaded. This model should also
+                           have a json file with the same path but with a .json extension.
+            -      `url`: if this is a url to a NimbleBox.ai's deployment
+            - `registry`: key for which to load the model, the structure looks as follows:
+                          ```
+                          source/(source/key)::<pre::task::post>
+                          ```
+
+        nbx_api_key (str, optional): If model_key_or_url has type `url` then pass the key corresponding url
+        verbose (bool, optional): If True, prints logs
         cloud_infer (bool, optional): If true uses Nimblebox deployed inference and logs in
             using `nbx_api_key`. Defaults to False.
+        loader_kwargs (dict, optional): keyword arguments to be passed to the loader function.
 
     Raises:
         ValueError: If `source` is not found
