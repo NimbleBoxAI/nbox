@@ -1,5 +1,5 @@
-nbox.network module
-===================
+Network Methods
+===============
 
 .. automodule:: nbox.network
    :members:

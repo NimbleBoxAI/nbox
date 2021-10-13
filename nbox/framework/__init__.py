@@ -1,17 +1,3 @@
-"""
-# Frameworks
-
-This part concerns itself with managing conversion of frameworks.
-
-Currently there is support for:
-- pytorch
-- sklearn
-
-Methods covered:
-- pytorch: [torchscript, onnx]
-- sklearn: [onnx]
-"""
-
 import nbox.framework.pytorch
 import nbox.framework.sklearn
 

@@ -6,7 +6,6 @@ import requests
 from pprint import pp, pprint as peepee
 
 from nbox import utils
-from nbox.user import secret
 
 
 class NBXAPIError(Exception):
@@ -36,6 +35,8 @@ def one_click_deploy(
     Returns:
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
+    from nbox.user import secret  # it can refresh so add it in the method
+
     access_token = secret.get("access_token")
     URL = secret.get("nbx_url")
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs

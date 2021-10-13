@@ -6,3 +6,5 @@ Writing docs is hard, and a tedious job, but one well worth for refining communi
 2. You don't need anything else love.
 
 Have fun reading the hidden stories!
+
+<!-- https://pdoc3.github.io/pdoc/ -->

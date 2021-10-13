@@ -1,5 +1,5 @@
-nbox.model module
-=================
+nbox Model
+==========
 
 .. automodule:: nbox.model
    :members:

@@ -11,7 +11,7 @@ def get_access_token(nbx_home_url, username, password=None):
     console = Console()
     console.start("Getting access tokens ...")
     try:
-        r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
+        r = requests.post(url=f"{nbx_home_url}/api/login", json={"username": username, "password": password})
     except Exception as e:
         raise Exception(f"Could not connect to NBX. You cannot use any cloud based tool!")
 
@@ -83,6 +83,8 @@ class Secrets:
             f.write(json.dumps(self.secrets, indent=2))
 
     def add_ocd(self, model_id, url, nbox_meta, access_key):
+        if "ocd" not in self.secrets:
+            return
         ocd = list(filter(lambda x: x["url"] == url, self.secrets["ocd"]))
         if ocd:
             # no need to udpate if already present
@@ -134,7 +136,7 @@ def reinit_secret():
     secret = Secrets()
 
 
-if os.getenv("NBX_CLI_MODE", False):
+if os.getenv("NBX_AUTH", False):
     secret = None
 else:
     secret = Secrets()

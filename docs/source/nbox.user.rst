@@ -1,5 +1,5 @@
-nbox.user module
-================
+User
+====
 
 .. automodule:: nbox.user
    :members:

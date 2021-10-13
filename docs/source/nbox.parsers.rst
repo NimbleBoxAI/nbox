@@ -1,5 +1,5 @@
-nbox.parsers module
-===================
+Parsers
+=======
 
 .. automodule:: nbox.parsers
    :members:

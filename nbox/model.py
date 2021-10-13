@@ -31,48 +31,47 @@ class Model:
         verbose: bool = False,
     ):
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
-        from nbox==0.1.10 nbox.Model handles both local and remote models
+        from ``nbox==0.1.10`` ``nbox.Model`` handles both local and remote models
 
         Usage:
-            >>> from nbox import Model
 
-            # when on NBX-Deploy
-            >>> model = Model("https://nbx.cloud/model/url", "nbx_api_key")
+            .. code-block:: python
 
-            # when loading a scikit learn model
-            ```python
-            from sklearn.datasets import load_iris
-            from sklearn.ensemble import RandomForestClassifier
-            iris = load_iris()
-            clr = RandomForestClassifier()
-            clr.fit(iris.data, iris.target)
-            model = nbox.Model(clr)
-            ``
+                from nbox import Model
 
-            # when loading a pytorch model
-            ```python
-            import torch
+                # when on NBX-Deploy
+                model = Model("https://nbx.cloud/model/url", "nbx_api_key")
 
-            class DoubleInSingleOut(torch.nn.Module):
-                def __init__(self):
-                    super().__init__()
-                    self.f1 = torch.nn.Linear(2, 4)
-                    self.f2 = torch.nn.Linear(2, 4)
-                    self.logit_scale = torch.nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+                # when loading a scikit learn model
+                from sklearn.datasets import load_iris
+                from sklearn.ensemble import RandomForestClassifier
+                iris = load_iris()
+                clr = RandomForestClassifier()
+                clr.fit(iris.data, iris.target)
+                model = nbox.Model(clr)
 
-                def forward(self, x, y):
-                    out = self.f1(x) + self.f2(y)
-                    logit_scale = self.logit_scale.exp()
-                    out = logit_scale - out @ out.t()
-                    return out
+                # when loading a pytorch model
+                import torch
 
-            model = nbox.Model(
-                DoubleInSingleOut(),
-                category = {"x": "image", "y": "image"} # <- this is pre-proc type for input
-            )
-            ```
+                class DoubleInSingleOut(torch.nn.Module):
+                    def __init__(self):
+                        super().__init__()
+                        self.f1 = torch.nn.Linear(2, 4)
+                        self.f2 = torch.nn.Linear(2, 4)
+                        self.logit_scale = torch.nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
 
-            This ^^^^^^^ is not a good wording, working on it!
+                    def forward(self, x, y):
+                        out = self.f1(x) + self.f2(y)
+                        logit_scale = self.logit_scale.exp()
+                        out = logit_scale - out @ out.t()
+                        return out
+
+                model = nbox.Model(
+                    DoubleInSingleOut(),
+                    category = {"x": "image", "y": "image"} # <- this is pre-proc type for input
+                )
+                # this is not the best approach, but it works for now
+
 
         Args:
             model_or_model_url (Any): Model to be wrapped or model url
@@ -192,10 +191,12 @@ class Model:
         return nbox_meta, category
 
     def eval(self):
+        """if underlying model has eval method, call it"""
         if hasattr(self.model_or_model_url, "eval"):
             self.model_or_model_url.eval()
 
     def train(self):
+        """if underlying model has train method, call it"""
         if hasattr(self.model_or_model_url, "train"):
             self.model_or_model_url.train()
 
@@ -391,6 +392,15 @@ class Model:
             model_name (str, optional): will be saved to cache_dir/model_name.<export_type>
             cache_dir (str, optional): cache dir where to dump this file
             return_convert_args (bool, optional): if True, this structured input to the model
+
+        Usage:
+
+            .. code-block:: python
+
+                export_model_path, model_name, nbox_meta = model.export(some_input, "onnx", "my_model_name")
+
+        Returns:
+            tuple: ``export_model_path, model_name, nbox_meta`` and ``convert_args`` if ``return_convert_args==True``
         """
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():

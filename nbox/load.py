@@ -16,6 +16,7 @@ model_key_regex = re.compile(r"^(\w+)(\/[\w\/-]+)?(:*[\w+:]+)?$")
 
 # util functions
 def remove_kwargs(model_fn, kwargs):
+    """take in the ``model_fn`` and only keep variables from kwargs that can be consumed"""
     # compare variables between the model_fn and kwargs if they are different then remove it with warning
     arg_spec = inspect.getfullargspec(model_fn)
     if kwargs and arg_spec.varkw != None:
@@ -159,15 +160,18 @@ def load(model_key_or_url: str, nbx_api_key: str = None, verbose=False, **loader
     service.
 
     Args:
+
         model_key_or_url (str, optional): This is the primary key for the loader. It can perform the following:
 
-            -     `path`: if this is a path to a model file, then it will be loaded. This model should also
-                           have a json file with the same path but with a .json extension.
-            -      `url`: if this is a url to a NimbleBox.ai's deployment
-            - `registry`: key for which to load the model, the structure looks as follows:
-                          ```
-                          source/(source/key)::<pre::task::post>
-                          ```
+            #. ``path``: if this is a path to a model file, then it will be loaded. This model should also have a json \
+                file with the same path but with a ``.json`` extension.
+            #. ``url``: if this is a url to a NimbleBox.ai's deployment
+            #. ``registry``: key for which to load the model, the structure looks as follows:
+
+            .. code-block:: python
+                
+                "source/(source/key)::<pre::task::post>"
+
 
         nbx_api_key (str, optional): If model_key_or_url has type `url` then pass the key corresponding url
         verbose (bool, optional): If True, prints logs

@@ -1,5 +1,5 @@
-nbox package
-============
+nbox
+====
 
 .. automodule:: nbox
    :members:
@@ -18,7 +18,7 @@ Submodules
 ----------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
 
    nbox.load
    nbox.model
