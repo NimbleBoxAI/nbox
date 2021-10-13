@@ -39,6 +39,15 @@ out = model([Image.open('cat.jpg'), np.array(Image.open('cat.jpg'))])
 tuple(out.shape) == (2, 1000)
 ```
 
+## CLI
+
+Just add this to your dockerfile
+
+```
+nbox login john_adams my-fancy-password
+nbox deploy --model
+```
+
 ## Things for Repo
 
 - Using [`poetry`](https://python-poetry.org/) for proper package management as @cshubhamrao says.

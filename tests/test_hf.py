@@ -22,7 +22,7 @@ class ImportTest(unittest.TestCase):
     def test_hf_string(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        model = get_model("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation", cache_dir=cache_dir)
+        model = get_model("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM", cache_dir=cache_dir)
         model.eval()
         out = model("Hello world")
         self.assertEqual(out.logits.topk(4).indices.tolist(), [[[16046, 17192, 38361, 43423], [16046, 17192, 38361, 43423]]])
@@ -30,7 +30,7 @@ class ImportTest(unittest.TestCase):
     def test_hf_string_batch(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        model = get_model("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation", cache_dir=cache_dir)
+        model = get_model("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM", cache_dir=cache_dir)
         out = model(["Hello world", "my foot"])
         self.assertEqual(out.logits.argmax(-1).tolist(), [[16046, 16046], [16046, 16046]])
 
@@ -41,21 +41,21 @@ class ImportTest(unittest.TestCase):
         out = model("hello world")
         self.assertEqual(out.logits.argmax(-1).tolist(), [[1012, 7592, 2088, 1012]])
 
-    @unittest.expectedFailure
     def test_hf_numpy(self):
         import numpy as np
 
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        model = get_model("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation", cache_dir=cache_dir)
-        out = model(np.random.randint(low=0, high=100, size=(12,)))
+        model = get_model("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM", cache_dir=cache_dir)
+        out = model(np.array([[0, 1, 1, 2, 4, 5, 6, 6, 7, 8, 0]]))
+        self.assertEqual(out.logits.argmax(-1).tolist(), [[16046, 16046, 16046, 5087, 16046, 16046, 5087, 5087, 16046, 16046, 16046]])
 
 
 class ParserTest(unittest.TestCase):
     def test_string(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation", cache_dir=cache_dir)
+        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM", cache_dir=cache_dir)
         out = parser("hello world")
 
         self.assertEqual(
@@ -72,7 +72,7 @@ class ParserTest(unittest.TestCase):
     def test_list_string(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation", cache_dir=cache_dir)
+        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM", cache_dir=cache_dir)
         out = parser(["wabba lubba dub dub", "BoJack Horseman - A wise man told me that", "I can't believe you just did that!"])
 
         self.assertEqual(
@@ -89,7 +89,7 @@ class ParserTest(unittest.TestCase):
     def test_dict_strings(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation", cache_dir=cache_dir)
+        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM", cache_dir=cache_dir)
         out = parser({"input_sentence": "hello world", "target_sentence": "wabba lubba dub dub"})
 
         self.assertEqual(
@@ -118,7 +118,7 @@ class ParserTest(unittest.TestCase):
     def test_dict_list_strings(self):
         cache_dir = os.path.join(utils.folder(__file__), "__ignore/")
         os.makedirs(cache_dir, exist_ok=True)
-        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM::generation", cache_dir=cache_dir)
+        parser = get_parser("transformers/sshleifer/tiny-gpt2::AutoModelForCausalLM", cache_dir=cache_dir)
         out = parser(
             {"input_sentence": "hello world", "target_sentences": ["wabba lubba dub dub", "BoJack Horseman - A wise man told me that"]}
         )

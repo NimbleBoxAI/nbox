@@ -5,20 +5,25 @@ import re
 import json
 import inspect
 import warnings
-import requests
 from typing import Dict
 
 import torch
 
 from nbox.model import Model
-from nbox.utils import is_available, fetch
+from nbox.utils import isthere, fetch
 
-model_key_regex = re.compile(r"^((\w+)\/([\w\/-]+)):*([\w+:]+)?$")
+model_key_regex = re.compile(r"^(\w+)(\/[\w\/-]+)?(:*[\w+:]+)?$")
 
 # util functions
-def remove_kwargs(pop_list, **kwargs):
-    for p in pop_list:
-        kwargs.pop(p)
+def remove_kwargs(model_fn, kwargs):
+    """take in the ``model_fn`` and only keep variables from kwargs that can be consumed"""
+    # compare variables between the model_fn and kwargs if they are different then remove it with warning
+    arg_spec = inspect.getfullargspec(model_fn)
+    if kwargs and arg_spec.varkw != None:
+        diff = set(kwargs.keys()) - set(arg_spec.args)
+        for d in list(diff):
+            warnings.warn(f"Ignoring unknown argument: {d}")
+            kwargs.pop(d)
     return kwargs
 
 
@@ -38,7 +43,7 @@ def remove_kwargs(pop_list, **kwargs):
 # def model_builder() -> (model, model_kwargs)
 
 
-def load_efficientnet_pytorch_models(pop_kwargs=["model_instr"]) -> Dict:
+def load_efficientnet_pytorch_models() -> Dict:
     def model_builder(pretrained=False, **kwargs):
         import efficientnet_pytorch
 
@@ -47,13 +52,13 @@ def load_efficientnet_pytorch_models(pop_kwargs=["model_instr"]) -> Dict:
         else:
             model_fn = efficientnet_pytorch.EfficientNet.from_name
 
-        kwargs = remove_kwargs(pop_kwargs, **kwargs)
+        kwargs = remove_kwargs(model_fn, kwargs)
         return model_fn(**kwargs), {}
 
     return {"efficientnet_pytorch/efficientnet": (model_builder, "image")}
 
 
-def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
+def load_torchvision_models() -> Dict:
     def model_builder(model, pretrained=False, **kwargs):
         # tv_mr = torchvision models registry
         # this is a json object that maps all the models to their respective methods from torchvision
@@ -68,16 +73,7 @@ def load_torchvision_models(pop_kwargs=["model_instr"]) -> Dict:
         import torchvision
 
         model_fn = eval(model_fn)
-        kwargs = remove_kwargs(pop_kwargs, **kwargs)
-
-        # compare variables between the model_fn and kwargs if they are different then remove it with warning
-        arg_spec = inspect.getfullargspec(model_fn)
-        if kwargs and arg_spec.varkw != None:
-            diff = set(kwargs.keys()) - set(arg_spec.args)
-            for d in list(diff):
-                warnings.warn(f"Ignoring unknown argument: {d}")
-                kwargs.pop(d)
-
+        kwargs = remove_kwargs(model_fn, kwargs)
         model = model_fn(pretrained=pretrained, **kwargs)
         return model, {}
 
@@ -104,6 +100,10 @@ def load_transformers_models() -> Dict:
         # initliase the model and tokenizer object
         tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
 
+        # All the tokenizers must contain the pad_token, by default we set it to eos_token
+        if not tokenizer.pad_token:
+            tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
+
         # tokenizer.pad_token = tokenizer.eos_token if not tokenizer.pad_token_id else tokenizer.pad_token
         model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
 
@@ -121,7 +121,7 @@ PRETRAINED_MODELS = {}
 all_repos = ["efficientnet_pytorch", "torchvision", "transformers"]
 
 for repo in all_repos:
-    if is_available(repo):
+    if isthere(repo):
         print(f"Loading pretrained models from {repo}")
         PRETRAINED_MODELS.update(locals()[f"load_{repo}_models"]())
 
@@ -129,26 +129,55 @@ for repo in all_repos:
 if not PRETRAINED_MODELS:
     raise ValueError("No pretrained models available. Please install PyTorch or torchvision or transformers to use pretrained models.")
 
+# ---- plug your own models and in extension the methods here
 
-PT_SOURCES = list(set([x.split("/")[0] for x in PRETRAINED_MODELS]))
+
+def plug(src_name, builder_fn, cataegory):
+    """Plug your nbox_builder methods here. Once plugged in your codebase, you can use the
+    simplicity of nbox.loaders
+
+    Args:
+        src_name (str): name of the source
+        builder_fn (func): function to be called to build the model
+        cataegory (dict): input categories for the input
+
+    Raises:
+        ValueError: if src_name is already in the index
+    """
+    # check if the source is already present
+    if src_name in PRETRAINED_MODELS:
+        raise ValueError(f"Source: {src_name} already present in the pretrained models index")
+
+    # add the source
+    PRETRAINED_MODELS[src_name] = (builder_fn, cataegory)
 
 
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, **loader_kwargs):
-    """Returns nbox.Model from a model (key), can optionally setup a connection to
-    cloud inference on a Nimblebox instance.
+def load(model_key_or_url: str, nbx_api_key: str = None, verbose=False, **loader_kwargs):
+    """This function loads the nbox.Model object from the pretrained models index or NimbleBox.ai's cloud infer
+    service.
 
     Args:
-        model_key_or_url (str, optional): key for which to load the model, the structure looks as follows:
-            ```
-            source/(source/key)::<pre::task::post>
-            ```
-            Defaults to None.
-        nbx_api_key (str, optional): Your Nimblebox API key. Defaults to None.
+
+        model_key_or_url (str, optional): This is the primary key for the loader. It can perform the following:
+
+            #. ``path``: if this is a path to a model file, then it will be loaded. This model should also have a json \
+                file with the same path but with a ``.json`` extension.
+            #. ``url``: if this is a url to a NimbleBox.ai's deployment
+            #. ``registry``: key for which to load the model, the structure looks as follows:
+
+            .. code-block:: python
+                
+                "source/(source/key)::<pre::task::post>"
+
+
+        nbx_api_key (str, optional): If model_key_or_url has type `url` then pass the key corresponding url
+        verbose (bool, optional): If True, prints logs
         cloud_infer (bool, optional): If true uses Nimblebox deployed inference and logs in
             using `nbx_api_key`. Defaults to False.
+        loader_kwargs (dict, optional): keyword arguments to be passed to the loader function.
 
     Raises:
         ValueError: If `source` is not found
@@ -161,11 +190,15 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, *
     # check the model key if it is a file path, then check if
     if os.path.exists(model_key_or_url):
         model_path = os.path.abspath(model_key_or_url)
-        model_meta_path = ".".join(model_path.split(".")[:-1] + ["json"])
+        model_meta_path = loader_kwargs.pop("model_meta_path", None)
+        if not model_meta_path:
+            model_meta_path = ".".join(model_path.split(".")[:-1] + ["json"])
         assert os.path.exists(model_meta_path), f"Model meta file not found: {model_meta_path}"
 
         with open(model_meta_path, "r") as f:
             model_meta = json.load(f)
+            if isinstance(model_meta, str):
+                model_meta = json.loads(model_meta)
             spec = model_meta["spec"]
 
         category = spec["category"]
@@ -189,16 +222,21 @@ def load(model_key_or_url: str = None, nbx_api_key: str = None, verbose=False, *
             raise ValueError(f"Key: {model_key_or_url} incorrect, please check!")
 
         # this key is valid, now get it's components
-        model_key, src, src_key, model_instr = model_key_parts[0]
-        if src not in PT_SOURCES:
-            raise ValueError(f"Model source: {src} not found. Is this package installed!")
+        src, src_key, model_instr = model_key_parts[0]
+        src_key = src_key.strip("/")  # remove leading and trailing slashes
+        model_instr = model_instr.replace(":", "")  # remove the :
+        model_key = model_key_or_url
 
-        # sometimes you'll find the whole key, sometimes from the source, so check both
-        model_fn, model_meta = PRETRAINED_MODELS.get(model_key, (None, None))
+        # print("  model_key:", model_key)
+        # print("        src:", src)
+        # print("    src_key:", src_key)
+        # print("model_instr:", model_instr)
+
+        model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
         if model_meta is None:
             model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
             if model_meta is None:
-                raise IndexError(f"Model: {model_key} not found")
+                raise IndexError(f"Model: {src} not found")
 
         # now just load the underlying graph and the model and off you go
         model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)

@@ -148,3 +148,6 @@ serve_fp.py
 *.pt
 *.onnx
 *.pb
+
+# you have recipes, and then you have dark magic!
+__dark_magic/

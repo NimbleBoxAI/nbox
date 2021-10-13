@@ -3,121 +3,54 @@
 import os
 import json
 import requests
-from time import sleep
-from typing import Dict, Tuple
-from pprint import pprint as peepee
-
-import torch
+from pprint import pp, pprint as peepee
 
 from nbox import utils
-from nbox.user import secret
-import nbox.framework.pytorch as frm_pytorch
 
-URL = secret.get("nbx_url")
+
+class NBXAPIError(Exception):
+    pass
 
 
 def one_click_deploy(
-    model_key: str,
-    model: torch.nn.Module,
-    args: Tuple,
-    outputs: Tuple,
-    input_names: Tuple,
-    input_shapes: Tuple,
-    output_names: Tuple,
-    output_shapes: Tuple,
-    dynamic_axes: Dict,
-    category: str,
+    export_model_path: str,
     deployment_type: str = "ovms2",
+    nbox_meta: dict = {},
     model_name: str = None,
-    cache_dir: str = None,
+    wait_for_deployment: bool = False,
+    convert_args: str = None,
 ):
     """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
     and then deploys on NBX Platform. Avoid using this function manually and use
     `model.deploy()` instead
 
     Args:
-        model_key (str): model_key from NBX model registry
-        model (torch.nn.Module): model to be deployed
-        args (Tuple): input tensor to the model for ONNX export
-        input_names (Tuple): input tensor names to the model for ONNX export
-        input_shapes (Tuple): input tensor shapes to the model for ONNX export
-        output_names (Tuple): output tensor names to the model for ONNX export
-        output_shapes (Tuple): output tensor shapes to the model for ONNX export
-        dynamic_axes (Dict): dictionary with input_name and dynamic axes shape
-        category (str): model category
-        model_name (str, optional): custom model name for this model. Defaults to None.
-        cache_dir (str, optional): Custom caching directory. Defaults to None.
-
-    Raises:
-        ValueError
+        export_model_path (str): path to the file to upload
+        deployment_type (str, optional): type of deployment strategy
+        nbox_meta (dict, optional): metadata for the nbox.Model() object being deployed
+        model_name (str, optional): name of the model being deployed
+        wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
+        convert_args (str, optional): if deployment type == "ovms2" can pass extra arguments to MO
 
     Returns:
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
-    # perform sanity checks on the input values
-    assert deployment_type in ["ovms2", "nbxs"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+    from nbox.user import secret  # it can refresh so add it in the method
+
+    access_token = secret.get("access_token")
+    URL = secret.get("nbx_url")
+    file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
 
     # intialise the console logger
     console = utils.Console()
-    console.rule()
-    cache_dir = "/tmp" if cache_dir is None else cache_dir
+    console.rule("NBX Deploy")
+    console._log("Deploying on URL:", URL)
+    console._log("Deployment Type:", deployment_type)
+    console._log("Model Path:", export_model_path)
+    console._log("file_size:", file_size, "MBs")
+    console.start("Getting bucket URL")
 
-    # getting access token -> now loads directly from the secret file
-    access_token = secret.get("access_token")
-
-    # convert the model
-    _m_hash = utils.hash_(model_key)
-    model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
-    console(f"model_name: {model_name}")
-    spec = {"category": category, "model_key": model_key, "name": model_name}
-
-    export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
-    if deployment_type == "ovms2":
-        export_model_path += ".onnx"
-        export_fn = frm_pytorch.export_to_onnx
-    elif deployment_type == "nbxs":
-        export_model_path += ".torchscript"
-        export_fn = frm_pytorch.export_to_torchscript
-
-    console.start(f"Converting using: {export_fn}")
-    nbox_meta = export_fn(
-        model=model,
-        args=args,
-        outputs=outputs,
-        input_shapes=input_shapes,
-        output_shapes=output_shapes,
-        onnx_model_path=export_model_path,
-        input_names=input_names,
-        dynamic_axes=dynamic_axes,
-        output_names=output_names,
-    )
-    console.stop("Conversion Complete")
-    nbox_meta = {
-        "metadata": nbox_meta,
-        "spec": spec,
-    }
-    console._log("nbox_meta:", nbox_meta)
-
-    # get the one-time-url from webserver
-    console.start("Getting upload URL ...")
-    convert_args = ""
-    if deployment_type == "ovms2":
-        # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
-        input_ = ",".join(input_names)
-        input_shape = ",".join([str(list(x.shape)).replace(" ", "") for x in args])
-        convert_args += f"--data_type=FP32 --input_shape={input_shape} --input={input_} "
-
-        if category == "image":
-            # mean and scale have to be defined for every single input
-            # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
-            mean_values = ",".join([f"{name}[182,178,172]" for name in input_names])
-            scale_values = ",".join([f"{name}[28,27,27]" for name in input_names])
-            convert_args += f"--mean_values={mean_values} --scale_values={scale_values}"
-
-    file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
-    console._log("convert_args:", convert_args)
-    console._log("file_size:", file_size)
-
+    # get bucket URL
     r = requests.get(
         url=f"{URL}/api/model/get_upload_url",
         params={
@@ -126,10 +59,9 @@ def one_click_deploy(
             "model_name": model_name,
             "convert_args": convert_args,
             "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
-            "deployment_type": deployment_type,  # "nbxs" or "ovms2"
+            "deployment_type": deployment_type,  # "nbox" or "ovms2"
         },
         headers={"Authorization": f"Bearer {access_token}"},
-        verify=False,
     )
     try:
         r.raise_for_status()
@@ -152,7 +84,6 @@ def one_click_deploy(
         url=f"{URL}/api/model/update_model_status",
         json={"upload": True if r.status_code == 204 else False, "model_id": model_id},
         headers={"Authorization": f"Bearer {access_token}"},
-        verify=False,
     )
     console.stop("Webserver informed")
 
@@ -167,52 +98,46 @@ def one_click_deploy(
         total_retries += 1
 
         # don't keep polling for very long, kill after sometime
-        if total_retries > 50:
+        if total_retries > 50 and not wait_for_deployment:
             console._log(f"Stopping polling, please check status at: {URL}/oneclick")
+            break
 
-        for i in range(3):
-            console(f"Sleeping for {3-i}s ...")
-            sleep(1)
+        console.sleep(5)
 
         # get the status update
         console(f"Getting updates ...")
         r = requests.get(
-            url=f"{URL}/api/model/get_model_history",
-            params={"model_id": model_id},
-            headers={"Authorization": f"Bearer {access_token}"},
-            verify=False,
+            url=f"{URL}/api/model/get_model_history", params={"model_id": model_id}, headers={"Authorization": f"Bearer {access_token}"}
         )
         try:
             r.raise_for_status()
+            updates = r.json()
         except:
             peepee(r.content)
+            raise NBXAPIError("This should not happen, please raise an issue at https://github.com/NimbleBoxAI/nbox/issues with above log!")
 
-        updates = r.json()
-        statuses = updates["model_history"]
-        if len(statuses) != len(_stat_done):
-            for _st in statuses:
-                curr_st = _st["status"]
-                if curr_st in _stat_done:
-                    continue
+        # go over all the status updates and check if the deployment is done
+        for st in updates["model_history"]:
+            curr_st = st["status"]
+            if curr_st in _stat_done:
+                continue
 
-                # only when this is a new status
-                if "failed" in curr_st:
-                    console._log(f"Status: [{console.T.fail}]{curr_st}")
-                elif "in-progress" in curr_st:
-                    console._log(f"Status: [{console.T.inp}]{curr_st}")
-                else:
-                    console._log(f"Status: [{console.T.st}]{curr_st}")
-                _stat_done.append(curr_st)
+            # only when this is a new status
+            col = {"failed": console.T.fail, "in-progress": console.T.inp, "success": console.T.st, "ready": console.T.st}[
+                curr_st.split(".")[-1]
+            ]
+            console._log(f"Status: [{col}]{curr_st}")
+            _stat_done.append(curr_st)
 
-        # this means the deployment is done
-        if statuses[-1]["status"] == "deployment.success":
-
+        if curr_st == "deployment.success":
             # if we do not have api key then query web server for it
             if model_data_access_key is None:
                 endpoint = updates["model_data"]["api_url"]
 
                 if endpoint is None:
-                    console._log("Deployment in proress ...")
+                    if wait_for_deployment:
+                        continue
+                    console._log("Deployment in progress ...")
                     console._log(f"Endpoint to be setup, please check status at: {URL}/oneclick")
                     break
 
@@ -228,20 +153,20 @@ def one_click_deploy(
                     model_data_access_key = r.json()["model_data_access_key"]
                     console._log(f"nbx-key: {model_data_access_key}")
                 except:
-                    raise ValueError(f"Failed to get model_data_access_key: {r.content}")
+                    pp(r.content.decode("utf-8"))
+                    raise ValueError(f"Failed to get model_data_access_key, please check status at: {URL}/oneclick")
 
             # keep hitting /metadata and see if model is ready or not
             r = requests.get(
-                url=f"{endpoint}/metadata",
-                headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"},
-                verify=False,
+                url=f"{endpoint}/metadata", headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"}
             )
             if r.status_code == 200:
                 console._log(f"Model is ready")
                 break
 
-        # if failed exit
-        elif "failed" in statuses[-1]["status"]:
+        # actual break condition happens here: bug in webserver where it does not return ready
+        # curr_st == "ready"
+        if model_data_access_key != None or "failed" in curr_st:
             break
 
     secret.add_ocd(
@@ -252,5 +177,5 @@ def one_click_deploy(
     )
 
     console.stop("Process Complete")
-    console.rule()
+    console.rule("NBX Deploy")
     return endpoint, model_data_access_key

@@ -13,17 +13,16 @@ from nbox import utils
 class BaseParser:
     """This is the base parser class which has the required methods to process
     the three kind of structures:
-    * None
-    * list: process_list()
-    * dict: process_dict()
+
+    #. None
+    #. list: ``process_list()``
+    #. dict: ``process_dict()``
 
     and a function dedicated to processing the primitives
-    * process_primitive()
 
-    These functions are called from the __call__ method.
+    #. ``process_primitive()``
 
-    read more about parsers in docs:
-        https://docs.nimblebox.ai/nbox/python-api/inference-parsing
+    These functions are called from the ``__call__`` method.
     """
 
     def __init__(self):

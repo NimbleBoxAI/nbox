@@ -6,7 +6,7 @@ import hashlib
 import requests
 import tempfile
 from PIL import Image
-from time import time
+from time import time, sleep as _sleep
 from datetime import timedelta
 from types import SimpleNamespace
 from rich.console import Console as richConsole
@@ -58,11 +58,15 @@ def join(x, *args):
     return os.path.join(x, *args)
 
 
-def is_available(package: str):
+def isthere(package: str):
     import importlib
 
     spam_spec = importlib.util.find_spec(package)
     return spam_spec is not None
+
+
+is_there_pt = isthere("torch")
+is_there_skl = isthere("sklearn")
 
 
 def get_random_name():
@@ -103,11 +107,14 @@ class Console:
 
     def __init__(self):
         self.c = richConsole()
-        self.st = time()
         self._in_status = False
+        self.__reset()
 
-    def rule(self):
-        self.c.rule(f"[{self.T.nbx}]NBX-OCD[/{self.T.nbx}]", style=self.T.rule)
+    def rule(self, title: str):
+        self.c.rule(f"[{self.T.nbx}]{title}[/{self.T.nbx}]", style=self.T.rule)
+
+    def __reset(self):
+        self.st = time()
 
     def __call__(self, x, *y):
         cont = " ".join([str(x)] + [str(_y) for _y in y])
@@ -116,12 +123,18 @@ class Console:
         else:
             self._update(cont)
 
+    def sleep(self, t: int):
+        for i in range(t):
+            self(f"Sleeping for {t-i}s ...")
+            _sleep(1)
+
     def _log(self, x, *y):
         cont = " ".join([str(x)] + [str(_y) for _y in y])
         t = str(timedelta(seconds=int(time() - self.st)))[2:]
         self.c.print(f"[[{self.T.clk}]{t}[/{self.T.clk}]] {cont}")
 
     def start(self, x="", *y):
+        self.__reset()
         cont = " ".join([str(x)] + [str(_y) for _y in y])
         self.status = self.c.status(f"[{self.T.st}]{cont}[/{self.T.st}]", spinner=self.T.spinner)
         self.status.start()

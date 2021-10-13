@@ -11,17 +11,14 @@ def get_access_token(nbx_home_url, username, password=None):
     console = Console()
     console.start("Getting access tokens ...")
     try:
-        r = requests.post(
-            url=f"{nbx_home_url}/api/login",
-            json={"username": username, "password": password},
-            verify=False,
-        )
+        r = requests.post(url=f"{nbx_home_url}/api/login", json={"username": username, "password": password})
     except Exception as e:
         raise Exception(f"Could not connect to NBX. You cannot use any cloud based tool!")
 
     if r.status_code == 401:
         console.stop("Invalid username/password")
         print("::" * 20 + " Invalid username/password. Please try again!")
+        return False
     elif r.status_code == 200:
         access_packet = r.json()
         access_token = access_packet.get("access_token", None)
@@ -30,6 +27,14 @@ def get_access_token(nbx_home_url, username, password=None):
     else:
         console.stop(f"Unknown error: {r.status_code}")
         raise Exception(f"Unknown error: {r.status_code}")
+
+
+def create_secret_file(username, access_token, nbx_url):
+    folder = join(os.path.expanduser("~"), ".nbx")
+    os.makedirs(folder, exist_ok=True)
+    fp = join(folder, "secrets.json")
+    with open(fp, "w") as f:
+        f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}))
 
 
 class Secrets:
@@ -53,14 +58,10 @@ class Secrets:
                 raise Exception(f"Could not connect to NBX. You cannot use any cloud based tool!")
 
             # populate with the first time things
-            nbx_home_url = input("NimbleBox.ai home URL (default: https://www.nimblebox.ai/): ").strip()
-            if not nbx_home_url:
-                nbx_home_url = "https://www.nimblebox.ai/"
-            nbx_home_url = nbx_home_url.rstrip("/")
-
+            nbx_home_url = "https://www.nimblebox.ai"
             username = input("Username: ")
             access_token = None
-            while access_token is None:
+            while not access_token:
                 access_token = get_access_token(nbx_home_url, username)
                 self.secrets["access_token"] = access_token
             self.secrets["username"] = username
@@ -82,6 +83,8 @@ class Secrets:
             f.write(json.dumps(self.secrets, indent=2))
 
     def add_ocd(self, model_id, url, nbox_meta, access_key):
+        if "ocd" not in self.secrets:
+            return
         ocd = list(filter(lambda x: x["url"] == url, self.secrets["ocd"]))
         if ocd:
             # no need to udpate if already present
@@ -128,4 +131,12 @@ class Secrets:
         self.save()
 
 
-secret = Secrets()
+def reinit_secret():
+    global secret
+    secret = Secrets()
+
+
+if os.getenv("NBX_AUTH", False):
+    secret = None
+else:
+    secret = Secrets()
