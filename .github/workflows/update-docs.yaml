@@ -14,7 +14,7 @@ jobs:
       - name: Install Sphinx and furo
         run: |
           sudo apt-get -y install python3-sphinx
-          pip install furo nbox
+          pip install furo randomname==0.1.3 rich==10.7.0 requests==2.25.1 numpy==1.19.5 Pillow==^8.3.2 skl2onnx==1.9.3
       - name: Make html
         working-directory: "docs-src/"
         run: |
