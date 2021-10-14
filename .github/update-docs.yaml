@@ -1,0 +1,24 @@
+name: Update nbox docs
+on:
+  push:
+    branches: [master, docs]
+    paths:
+      - "docs-src/**"
+    workflow_dispatch:
+jobs:
+  docs-gen:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the files
+        uses: actions/checkout@v2
+      - name: Make html
+        working-directory: "docs-src/"
+        run: |
+          make github
+      - name: Commit docs
+        run: |
+          git config --global user.name "NimbleBox Research"
+          git config --global user.email 'research@nimblebox.ai'
+          git add docs/
+          git commit -m "Update Docs"
+          git push
