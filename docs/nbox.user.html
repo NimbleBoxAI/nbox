@@ -2,8 +2,7 @@
 <html class="no-js">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="prev" title="Utils" href="nbox.utils.html" />
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="prev" title="Utils" href="nbox.utils.html" />
 
     <meta name="generator" content="sphinx-4.2.0, furo 2021.10.09"/>
         <title>User - nbox 0.2.0 documentation</title>
@@ -200,54 +199,9 @@
           </label>
         </div>
         <article role="main">
-          <section id="module-nbox.user">
-<span id="user"></span><h1>User<a class="headerlink" href="#module-nbox.user" title="Permalink to this headline">¶</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.user.get_access_token">
-<span class="sig-prename descclassname"><span class="pre">nbox.user.</span></span><span class="sig-name descname"><span class="pre">get_access_token</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nbx_home_url</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.get_access_token" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.user.create_secret_file">
-<span class="sig-prename descclassname"><span class="pre">nbox.user.</span></span><span class="sig-name descname"><span class="pre">create_secret_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">username</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access_token</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbx_url</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.create_secret_file" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py class">
-<dt class="sig sig-object py" id="nbox.user.Secrets">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">nbox.user.</span></span><span class="sig-name descname"><span class="pre">Secrets</span></span><a class="headerlink" href="#nbox.user.Secrets" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.user.Secrets.get">
-<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.Secrets.get" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.user.Secrets.save">
-<span class="sig-name descname"><span class="pre">save</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.Secrets.save" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.user.Secrets.add_ocd">
-<span class="sig-name descname"><span class="pre">add_ocd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">url</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbox_meta</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">access_key</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.Secrets.add_ocd" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.user.Secrets.update_ocd">
-<span class="sig-name descname"><span class="pre">update_ocd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">url</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bytes_recieved</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bytes_sent</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.Secrets.update_ocd" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.user.Secrets.get_ocd">
-<span class="sig-name descname"><span class="pre">get_ocd</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">url</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.Secrets.get_ocd" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.user.Secrets.update_access_token">
-<span class="sig-name descname"><span class="pre">update_access_token</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">access_token</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.Secrets.update_access_token" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.user.Secrets.update_username">
-<span class="sig-name descname"><span class="pre">update_username</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">username</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.Secrets.update_username" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-</dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.user.reinit_secret">
-<span class="sig-prename descclassname"><span class="pre">nbox.user.</span></span><span class="sig-name descname"><span class="pre">reinit_secret</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.user.reinit_secret" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-</section>
+          <div class="section" id="user">
+<h1>User<a class="headerlink" href="#user" title="Permalink to this headline">¶</a></h1>
+</div>
 
         </article>
       </div>

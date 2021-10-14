@@ -2,8 +2,7 @@
 <html class="no-js">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="nbox Model" href="nbox.model.html" /><link rel="prev" title="How to nboxCLI" href="nbox.cli.html" />
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="nbox Model" href="nbox.model.html" /><link rel="prev" title="How to nboxCLI" href="nbox.cli.html" />
 
     <meta name="generator" content="sphinx-4.2.0, furo 2021.10.09"/>
         <title>Loading models - nbox 0.2.0 documentation</title>
@@ -200,84 +199,9 @@
           </label>
         </div>
         <article role="main">
-          <section id="module-nbox.load">
-<span id="loading-models"></span><h1>Loading models<a class="headerlink" href="#module-nbox.load" title="Permalink to this headline">¶</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.load.remove_kwargs">
-<span class="sig-prename descclassname"><span class="pre">nbox.load.</span></span><span class="sig-name descname"><span class="pre">remove_kwargs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.load.remove_kwargs" title="Permalink to this definition">¶</a></dt>
-<dd><p>take in the <code class="docutils literal notranslate"><span class="pre">model_fn</span></code> and only keep variables from kwargs that can be consumed</p>
-</dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.load.load_efficientnet_pytorch_models">
-<span class="sig-prename descclassname"><span class="pre">nbox.load.</span></span><span class="sig-name descname"><span class="pre">load_efficientnet_pytorch_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">→</span> <span class="sig-return-typehint"><span class="pre">Dict</span></span></span><a class="headerlink" href="#nbox.load.load_efficientnet_pytorch_models" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.load.load_torchvision_models">
-<span class="sig-prename descclassname"><span class="pre">nbox.load.</span></span><span class="sig-name descname"><span class="pre">load_torchvision_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">→</span> <span class="sig-return-typehint"><span class="pre">Dict</span></span></span><a class="headerlink" href="#nbox.load.load_torchvision_models" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.load.load_transformers_models">
-<span class="sig-prename descclassname"><span class="pre">nbox.load.</span></span><span class="sig-name descname"><span class="pre">load_transformers_models</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">→</span> <span class="sig-return-typehint"><span class="pre">Dict</span></span></span><a class="headerlink" href="#nbox.load.load_transformers_models" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.load.plug">
-<span class="sig-prename descclassname"><span class="pre">nbox.load.</span></span><span class="sig-name descname"><span class="pre">plug</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">src_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">builder_fn</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cataegory</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.load.plug" title="Permalink to this definition">¶</a></dt>
-<dd><p>Plug your nbox_builder methods here. Once plugged in your codebase, you can use the
-simplicity of nbox.loaders</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>src_name</strong> (<em>str</em>) – name of the source</p></li>
-<li><p><strong>builder_fn</strong> (<em>func</em>) – function to be called to build the model</p></li>
-<li><p><strong>cataegory</strong> (<em>dict</em>) – input categories for the input</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises</dt>
-<dd class="field-even"><p><strong>ValueError</strong> – if src_name is already in the index</p>
-</dd>
-</dl>
-</dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.load.load">
-<span class="sig-prename descclassname"><span class="pre">nbox.load.</span></span><span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_key_or_url</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbx_api_key</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">loader_kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.load.load" title="Permalink to this definition">¶</a></dt>
-<dd><p>This function loads the nbox.Model object from the pretrained models index or NimbleBox.ai’s cloud infer
-service.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model_key_or_url</strong> (<em>str</em><em>, </em><em>optional</em>) – <p>This is the primary key for the loader. It can perform the following:</p>
-<ol class="arabic simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">path</span></code>: if this is a path to a model file, then it will be loaded. This model should also have a json                 file with the same path but with a <code class="docutils literal notranslate"><span class="pre">.json</span></code> extension.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">url</span></code>: if this is a url to a NimbleBox.ai’s deployment</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">registry</span></code>: key for which to load the model, the structure looks as follows:</p></li>
-</ol>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="s2">"source/(source/key)::&lt;pre::task::post&gt;"</span>
-</pre></div>
+          <div class="section" id="loading-models">
+<h1>Loading models<a class="headerlink" href="#loading-models" title="Permalink to this headline">¶</a></h1>
 </div>
-</p></li>
-<li><p><strong>nbx_api_key</strong> (<em>str</em><em>, </em><em>optional</em>) – If model_key_or_url has type <cite>url</cite> then pass the key corresponding url</p></li>
-<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>optional</em>) – If True, prints logs</p></li>
-<li><p><strong>cloud_infer</strong> (<em>bool</em><em>, </em><em>optional</em>) – If true uses Nimblebox deployed inference and logs in
-using <cite>nbx_api_key</cite>. Defaults to False.</p></li>
-<li><p><strong>loader_kwargs</strong> (<em>dict</em><em>, </em><em>optional</em>) – keyword arguments to be passed to the loader function.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises</dt>
-<dd class="field-even"><ul class="simple">
-<li><p><strong>ValueError</strong> – If <cite>source</cite> is not found</p></li>
-<li><p><strong>IndexError</strong> – If <cite>source</cite> is found but <cite>source/key</cite> is not found</p></li>
-</ul>
-</dd>
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p>when using local inference
-nbox.NBXApi: when using cloud inference</p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>nbox.Model</p>
-</dd>
-</dl>
-</dd></dl>
-</section>
 
         </article>
       </div>

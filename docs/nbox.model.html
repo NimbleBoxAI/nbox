@@ -2,8 +2,7 @@
 <html class="no-js">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Parsers" href="nbox.parsers.html" /><link rel="prev" title="Loading models" href="nbox.load.html" />
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Parsers" href="nbox.parsers.html" /><link rel="prev" title="Loading models" href="nbox.load.html" />
 
     <meta name="generator" content="sphinx-4.2.0, furo 2021.10.09"/>
         <title>nbox Model - nbox 0.2.0 documentation</title>
@@ -200,147 +199,9 @@
           </label>
         </div>
         <article role="main">
-          <section id="module-nbox.model">
-<span id="nbox-model"></span><h1>nbox Model<a class="headerlink" href="#module-nbox.model" title="Permalink to this headline">¶</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="nbox.model.Model">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">nbox.model.</span></span><span class="sig-name descname"><span class="pre">Model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">model_or_model_url</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbx_api_key</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">category</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_key</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_meta</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">dict</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verbose</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.model.Model" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
-from <code class="docutils literal notranslate"><span class="pre">nbox==0.1.10</span></code> <code class="docutils literal notranslate"><span class="pre">nbox.Model</span></code> handles both local and remote models</p>
-<p>Usage:</p>
-<blockquote>
-<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">nbox</span> <span class="kn">import</span> <span class="n">Model</span>
-
-<span class="c1"># when on NBX-Deploy</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">Model</span><span class="p">(</span><span class="s2">"https://nbx.cloud/model/url"</span><span class="p">,</span> <span class="s2">"nbx_api_key"</span><span class="p">)</span>
-
-<span class="c1"># when loading a scikit learn model</span>
-<span class="kn">from</span> <span class="nn">sklearn.datasets</span> <span class="kn">import</span> <span class="n">load_iris</span>
-<span class="kn">from</span> <span class="nn">sklearn.ensemble</span> <span class="kn">import</span> <span class="n">RandomForestClassifier</span>
-<span class="n">iris</span> <span class="o">=</span> <span class="n">load_iris</span><span class="p">()</span>
-<span class="n">clr</span> <span class="o">=</span> <span class="n">RandomForestClassifier</span><span class="p">()</span>
-<span class="n">clr</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">iris</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="n">iris</span><span class="o">.</span><span class="n">target</span><span class="p">)</span>
-<span class="n">model</span> <span class="o">=</span> <span class="n">nbox</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span><span class="n">clr</span><span class="p">)</span>
-
-<span class="c1"># when loading a pytorch model</span>
-<span class="kn">import</span> <span class="nn">torch</span>
-
-<span class="k">class</span> <span class="nc">DoubleInSingleOut</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
-    <span class="k">def</span> <span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">f1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">f2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Linear</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">logit_scale</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">torch</span><span class="o">.</span><span class="n">ones</span><span class="p">([])</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span> <span class="o">/</span> <span class="mf">0.07</span><span class="p">))</span>
-
-    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">f1</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">f2</span><span class="p">(</span><span class="n">y</span><span class="p">)</span>
-        <span class="n">logit_scale</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">logit_scale</span><span class="o">.</span><span class="n">exp</span><span class="p">()</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">logit_scale</span> <span class="o">-</span> <span class="n">out</span> <span class="o">@</span> <span class="n">out</span><span class="o">.</span><span class="n">t</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">out</span>
-
-<span class="n">model</span> <span class="o">=</span> <span class="n">nbox</span><span class="o">.</span><span class="n">Model</span><span class="p">(</span>
-    <span class="n">DoubleInSingleOut</span><span class="p">(),</span>
-    <span class="n">category</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"x"</span><span class="p">:</span> <span class="s2">"image"</span><span class="p">,</span> <span class="s2">"y"</span><span class="p">:</span> <span class="s2">"image"</span><span class="p">}</span> <span class="c1"># &lt;- this is pre-proc type for input</span>
-<span class="p">)</span>
-<span class="c1"># this is not the best approach, but it works for now</span>
-</pre></div>
+          <div class="section" id="nbox-model">
+<h1>nbox Model<a class="headerlink" href="#nbox-model" title="Permalink to this headline">¶</a></h1>
 </div>
-</div></blockquote>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>model_or_model_url</strong> (<em>Any</em>) – Model to be wrapped or model url</p></li>
-<li><p><strong>nbx_api_key</strong> (<em>str</em><em>, </em><em>optional</em>) – API key for this deployed model</p></li>
-<li><p><strong>category</strong> (<em>str</em><em>, </em><em>optional</em>) – Input categories for each input type to the model</p></li>
-<li><p><strong>tokenizer</strong> (<em>[</em><em>transformers.PreTrainedTokenizer</em><em>]</em><em>, </em><em>optional</em>) – If this is a text model then tokenizer for this. Defaults to None.</p></li>
-<li><p><strong>model_key</strong> (<em>str</em><em>, </em><em>optional</em>) – With what key is this model initialised, useful for public models. Defaults to None.</p></li>
-<li><p><strong>model_meta</strong> (<em>dict</em><em>, </em><em>optional</em>) – Extra metadata when starting the model. Defaults to None.</p></li>
-<li><p><strong>verbose</strong> (<em>bool</em><em>, </em><em>optional</em>) – If true provides detailed prints. Defaults to False.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Raises</dt>
-<dd class="field-even"><p><strong>ValueError</strong> – If any category is “text” and tokenizer is not provided.</p>
-</dd>
-</dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.model.Model.fetch_meta_from_nbx_cloud">
-<span class="sig-name descname"><span class="pre">fetch_meta_from_nbx_cloud</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.model.Model.fetch_meta_from_nbx_cloud" title="Permalink to this definition">¶</a></dt>
-<dd><p>When this is on NBX-Deploy cloud, fetch the metadata from the deployment node.</p>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.model.Model.eval">
-<span class="sig-name descname"><span class="pre">eval</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.model.Model.eval" title="Permalink to this definition">¶</a></dt>
-<dd><p>if underlying model has eval method, call it</p>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.model.Model.train">
-<span class="sig-name descname"><span class="pre">train</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.model.Model.train" title="Permalink to this definition">¶</a></dt>
-<dd><p>if underlying model has train method, call it</p>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.model.Model.get_nbox_meta">
-<span class="sig-name descname"><span class="pre">get_nbox_meta</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_object</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.model.Model.get_nbox_meta" title="Permalink to this definition">¶</a></dt>
-<dd><p>Get the nbox meta and trace args for the model with the given input object</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>input_object</strong> (<em>Any</em>) – input to be processed</p>
-</dd>
-</dl>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.model.Model.export">
-<span class="sig-name descname"><span class="pre">export</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_object</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">export_type</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">'onnx'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_convert_args</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.model.Model.export" title="Permalink to this definition">¶</a></dt>
-<dd><p>Export the model to a particular kind of DAG (ie. like onnx, torchscript, etc.)</p>
-<p>Raises appropriate assertion errors for strict checking of inputs</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_object</strong> (<em>Any</em>) – input to be processed</p></li>
-<li><p><strong>export_type</strong> (<em>str</em><em>, </em><em>optional</em>) – export type, see errors (use this first)</p></li>
-<li><p><strong>model_name</strong> (<em>str</em><em>, </em><em>optional</em>) – will be saved to cache_dir/model_name.&lt;export_type&gt;</p></li>
-<li><p><strong>cache_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – cache dir where to dump this file</p></li>
-<li><p><strong>return_convert_args</strong> (<em>bool</em><em>, </em><em>optional</em>) – if True, this structured input to the model</p></li>
-</ul>
-</dd>
-</dl>
-<p>Usage:</p>
-<blockquote>
-<div><div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">export_model_path</span><span class="p">,</span> <span class="n">model_name</span><span class="p">,</span> <span class="n">nbox_meta</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="n">some_input</span><span class="p">,</span> <span class="s2">"onnx"</span><span class="p">,</span> <span class="s2">"my_model_name"</span><span class="p">)</span>
-</pre></div>
-</div>
-</div></blockquote>
-<dl class="field-list simple">
-<dt class="field-odd">Returns</dt>
-<dd class="field-odd"><p><code class="docutils literal notranslate"><span class="pre">export_model_path,</span> <span class="pre">model_name,</span> <span class="pre">nbox_meta</span></code> and <code class="docutils literal notranslate"><span class="pre">convert_args</span></code> if <code class="docutils literal notranslate"><span class="pre">return_convert_args==True</span></code></p>
-</dd>
-<dt class="field-even">Return type</dt>
-<dd class="field-even"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.model.Model.deploy">
-<span class="sig-name descname"><span class="pre">deploy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_object</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Any</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait_for_deployment</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">runtime</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">'onnx'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deployment_type</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">'ovms2'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.model.Model.deploy" title="Permalink to this definition">¶</a></dt>
-<dd><p>NBX-Deploy (read more one: <a class="reference external" href="https://docs.nimblebox.ai/nbox/nbox-intro/quickstart-with-deployment">https://docs.nimblebox.ai/nbox/nbox-intro/quickstart-with-deployment</a>)</p>
-<p>This deploys the current model onto our managed K8s clusters. This tight product service integration
-is very crucial for us and is the best way to make deploy a model for usage.</p>
-<p>Raises appropriate assertion errors for strict checking of inputs</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>input_object</strong> (<em>Any</em>) – input to be processed</p></li>
-<li><p><strong>model_name</strong> (<em>str</em><em>, </em><em>optional</em>) – custom model name for this model</p></li>
-<li><p><strong>cache_dir</strong> (<em>str</em><em>, </em><em>optional</em>) – custom caching directory</p></li>
-<li><p><strong>wait_for_deployment</strong> (<em>bool</em><em>, </em><em>optional</em>) – wait for deployment to complete</p></li>
-<li><p><strong>runtime</strong> (<em>str</em><em>, </em><em>optional</em>) – runtime to use for deployment</p></li>
-<li><p><strong>deployment_type</strong> (<em>str</em><em>, </em><em>optional</em>) – deployment type</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-</dd></dl>
-</section>
 
         </article>
       </div>

@@ -2,8 +2,7 @@
 <html class="no-js">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Utils" href="nbox.utils.html" /><link rel="prev" title="sklearn specific methods" href="nbox.framework.sklearn.html" />
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Utils" href="nbox.utils.html" /><link rel="prev" title="sklearn specific methods" href="nbox.framework.sklearn.html" />
 
     <meta name="generator" content="sphinx-4.2.0, furo 2021.10.09"/>
         <title>Network Methods - nbox 0.2.0 documentation</title>
@@ -200,39 +199,9 @@
           </label>
         </div>
         <article role="main">
-          <section id="module-nbox.network">
-<span id="network-methods"></span><h1>Network Methods<a class="headerlink" href="#module-nbox.network" title="Permalink to this headline">¶</a></h1>
-<dl class="py exception">
-<dt class="sig sig-object py" id="nbox.network.NBXAPIError">
-<em class="property"><span class="pre">exception</span> </em><span class="sig-prename descclassname"><span class="pre">nbox.network.</span></span><span class="sig-name descname"><span class="pre">NBXAPIError</span></span><a class="headerlink" href="#nbox.network.NBXAPIError" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">Exception</span></code></p>
-</dd></dl>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.network.one_click_deploy">
-<span class="sig-prename descclassname"><span class="pre">nbox.network.</span></span><span class="sig-name descname"><span class="pre">one_click_deploy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">export_model_path</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deployment_type</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">str</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">'ovms2'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbox_meta</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">dict</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">{}</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait_for_deployment</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convert_args</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.network.one_click_deploy" title="Permalink to this definition">¶</a></dt>
-<dd><p>One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
-and then deploys on NBX Platform. Avoid using this function manually and use
-<cite>model.deploy()</cite> instead</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>export_model_path</strong> (<em>str</em>) – path to the file to upload</p></li>
-<li><p><strong>deployment_type</strong> (<em>str</em><em>, </em><em>optional</em>) – type of deployment strategy</p></li>
-<li><p><strong>nbox_meta</strong> (<em>dict</em><em>, </em><em>optional</em>) – metadata for the nbox.Model() object being deployed</p></li>
-<li><p><strong>model_name</strong> (<em>str</em><em>, </em><em>optional</em>) – name of the model being deployed</p></li>
-<li><p><strong>wait_for_deployment</strong> (<em>bool</em><em>, </em><em>optional</em>) – if true, acts like a blocking call (sync vs async)</p></li>
-<li><p><strong>convert_args</strong> (<em>str</em><em>, </em><em>optional</em>) – if deployment type == “ovms2” can pass extra arguments to MO</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>if deployment is successful then push then return the URL endpoint else return None</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>(str, None)</p>
-</dd>
-</dl>
-</dd></dl>
-</section>
+          <div class="section" id="network-methods">
+<h1>Network Methods<a class="headerlink" href="#network-methods" title="Permalink to this headline">¶</a></h1>
+</div>
 
         </article>
       </div>

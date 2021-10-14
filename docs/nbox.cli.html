@@ -2,8 +2,7 @@
 <html class="no-js">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Loading models" href="nbox.load.html" /><link rel="prev" title="Scikit Learn Models" href="quick_skl.html" />
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Loading models" href="nbox.load.html" /><link rel="prev" title="Scikit Learn Models" href="quick_skl.html" />
 
     <meta name="generator" content="sphinx-4.2.0, furo 2021.10.09"/>
         <title>How to nboxCLI - nbox 0.2.0 documentation</title>
@@ -200,7 +199,7 @@
           </label>
         </div>
         <article role="main">
-          <section id="how-to-nboxcli">
+          <div class="section" id="how-to-nboxcli">
 <h1>How to nboxCLI<a class="headerlink" href="#how-to-nboxcli" title="Permalink to this headline">¶</a></h1>
 <p><code class="docutils literal notranslate"><span class="pre">nbox</span></code> provides a simple and effective CLI commands that you can add to your current CI/CD pipeline.</p>
 <p>As of this writing there is only one task that <code class="docutils literal notranslate"><span class="pre">nbox</span></code> CLI does, deployment of models. It directly calls the <code class="docutils literal notranslate"><span class="pre">nbox.network.one_click_deploy</span></code> method along, if needed with authentication for single line in your CI/CD. When in an automated pipeline, file <code class="docutils literal notranslate"><span class="pre">secrets.json</span></code> might not be available so set <code class="docutils literal notranslate"><span class="pre">NBX_AUTH=1</span></code> when using CLI.</p>
@@ -208,46 +207,10 @@
 </pre></div>
 </div>
 <p>We use <code class="docutils literal notranslate"><span class="pre">fire</span></code> for converting the below method to CLI so a quick go through of the method will tell you enough about the input. All you need is to convert each <code class="docutils literal notranslate"><span class="pre">kwarg</span></code> to <code class="docutils literal notranslate"><span class="pre">--kwarg</span></code> in your CLI.</p>
-<section id="module-nbox.cli">
-<span id="methods"></span><h2>Methods<a class="headerlink" href="#module-nbox.cli" title="Permalink to this headline">¶</a></h2>
-<dl class="py function">
-<dt class="sig sig-object py" id="nbox.cli.deploy">
-<span class="sig-prename descclassname"><span class="pre">nbox.cli.</span></span><span class="sig-name descname"><span class="pre">deploy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_path</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_name</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbox_meta</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">deployment_type</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">convert_args</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wait_for_deployment</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">print_in_logs</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">bool</span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span> <span class="o"><span class="pre">=</span></span> <span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nbx_home_url</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'https://nimblebox.ai'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.cli.deploy" title="Permalink to this definition">¶</a></dt>
-<dd><p>Deploy a model from nbox CLI. Add this to your actions and see the magic happen!
-If you are using a config file then data will be loaded from there and other kwargs will be ignored.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>config_path</strong> (<em>str</em><em>, </em><em>optional</em>) – path to your config file, if provided, everything else is ignored</p></li>
-<li><p><strong>model_path</strong> (<em>str</em><em>, </em><em>optional</em>) – path to your model</p></li>
-<li><p><strong>model_name</strong> (<em>str</em><em>, </em><em>optional</em>) – name of your model</p></li>
-<li><p><strong>nbox_meta</strong> (<em>[</em><em>str</em><em>, </em><em>dict</em><em>]</em><em>, </em><em>optional</em>) – path to your nbox_meta json file or can be a dict if using config_path</p></li>
-<li><p><strong>deployment_type</strong> (<em>str</em><em>, </em><em>optional</em>) – type of deployment, can be one of: ovms2, nbox</p></li>
-<li><p><strong>convert_args</strong> (<em>str</em><em>, </em><em>optional</em>) – if using ovms2 deployment type, you must pass convertion CLI args</p></li>
-<li><p><strong>wait_for_deployment</strong> (<em>bool</em><em>, </em><em>optional</em>) – wait for deployment to finish, if False this behaves async</p></li>
-<li><p><strong>print_in_logs</strong> (<em>bool</em><em>, </em><em>optional</em>) – print logs in stdout</p></li>
-<li><p><strong>username</strong> (<em>str</em><em>, </em><em>optional</em>) – your NimbleBox.ai username</p></li>
-<li><p><strong>password</strong> (<em>str</em><em>, </em><em>optional</em>) – your password for corresponding <code class="docutils literal notranslate"><span class="pre">username</span></code></p></li>
-</ul>
-</dd>
-</dl>
-<dl class="simple">
-<dt>Usage:</dt><dd><p>Convert each <code class="docutils literal notranslate"><span class="pre">kwarg</span></code> to <code class="docutils literal notranslate"><span class="pre">--kwarg</span></code> for CLI. eg. if you want to pass value for <code class="docutils literal notranslate"><span class="pre">model_path</span></code>             in cli it becomes like <code class="docutils literal notranslate"><span class="pre">...</span> <span class="pre">--model_path="my_model_path"</span> <span class="pre">...</span></code></p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Raises</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>Exception</strong> – if deployment type is not supported</p></li>
-<li><p><strong>Exception</strong> – if model path is not found</p></li>
-<li><p><strong>Exception</strong> – if nbox_meta is incorrect</p></li>
-<li><p><strong>Exception</strong> – if deployment_type == “ovms2” but convert_args is not provided</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-</section>
-</section>
+<div class="section" id="methods">
+<h2>Methods<a class="headerlink" href="#methods" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
 
         </article>
       </div>
@@ -303,7 +266,7 @@ If you are using a config file then data will be loaded from there and other kwa
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">How to nboxCLI</a><ul>
-<li><a class="reference internal" href="#module-nbox.cli">Methods</a></li>
+<li><a class="reference internal" href="#methods">Methods</a></li>
 </ul>
 </li>
 </ul>

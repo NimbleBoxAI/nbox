@@ -2,8 +2,7 @@
 <html class="no-js">
   <head><meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width,initial-scale=1"/>
-    <meta name="color-scheme" content="light dark"><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
-<link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Frameworks" href="nbox.framework.html" /><link rel="prev" title="nbox Model" href="nbox.model.html" />
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="genindex.html" /><link rel="search" title="Search" href="search.html" /><link rel="next" title="Frameworks" href="nbox.framework.html" /><link rel="prev" title="nbox Model" href="nbox.model.html" />
 
     <meta name="generator" content="sphinx-4.2.0, furo 2021.10.09"/>
         <title>Parsers - nbox 0.2.0 documentation</title>
@@ -200,90 +199,9 @@
           </label>
         </div>
         <article role="main">
-          <section id="module-nbox.parsers">
-<span id="parsers"></span><h1>Parsers<a class="headerlink" href="#module-nbox.parsers" title="Permalink to this headline">¶</a></h1>
-<dl class="py class">
-<dt class="sig sig-object py" id="nbox.parsers.BaseParser">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">nbox.parsers.</span></span><span class="sig-name descname"><span class="pre">BaseParser</span></span><a class="headerlink" href="#nbox.parsers.BaseParser" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>This is the base parser class which has the required methods to process
-the three kind of structures:</p>
-<ol class="arabic simple">
-<li><p>None</p></li>
-<li><p>list: <code class="docutils literal notranslate"><span class="pre">process_list()</span></code></p></li>
-<li><p>dict: <code class="docutils literal notranslate"><span class="pre">process_dict()</span></code></p></li>
-</ol>
-<p>and a function dedicated to processing the primitives</p>
-<ol class="arabic simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">process_primitive()</span></code></p></li>
-</ol>
-<p>These functions are called from the <code class="docutils literal notranslate"><span class="pre">__call__</span></code> method.</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.BaseParser.process_primitive">
-<span class="sig-name descname"><span class="pre">process_primitive</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.BaseParser.process_primitive" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.BaseParser.process_dict">
-<span class="sig-name descname"><span class="pre">process_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.BaseParser.process_dict" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.BaseParser.process_list">
-<span class="sig-name descname"><span class="pre">process_list</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.BaseParser.process_list" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-</dd></dl>
-<dl class="py class">
-<dt class="sig sig-object py" id="nbox.parsers.ImageParser">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">nbox.parsers.</span></span><span class="sig-name descname"><span class="pre">ImageParser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">post_proc_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cloud_infer</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.ImageParser" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#nbox.parsers.BaseParser" title="nbox.parsers.BaseParser"><code class="xref py py-class docutils literal notranslate"><span class="pre">nbox.parsers.BaseParser</span></code></a></p>
-<p>single unified Image parser that consumes different types of data
-and returns a processed numpy array</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.ImageParser.rescale">
-<span class="sig-name descname"><span class="pre">rescale</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">numpy.ndarray</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.ImageParser.rescale" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.ImageParser.rearrange">
-<span class="sig-name descname"><span class="pre">rearrange</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span> <span class="n"><span class="pre">numpy.ndarray</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.ImageParser.rearrange" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.ImageParser.process_primitive">
-<span class="sig-name descname"><span class="pre">process_primitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.ImageParser.process_primitive" title="Permalink to this definition">¶</a></dt>
-<dd><p>primitive can be string, array, Image</p>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.ImageParser.process_dict">
-<span class="sig-name descname"><span class="pre">process_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.ImageParser.process_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>takes in a dict, check if values are list, if list send to process_list
-else process_primitive</p>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.ImageParser.process_list">
-<span class="sig-name descname"><span class="pre">process_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_object</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_shape</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">r_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.ImageParser.process_list" title="Permalink to this definition">¶</a></dt>
-<dd><p>takes in a list. This function is very tricky because the input
-can be a list or a p-list, so we first check if input is not a string, Image or dict</p>
-</dd></dl>
-</dd></dl>
-<dl class="py class">
-<dt class="sig sig-object py" id="nbox.parsers.TextParser">
-<em class="property"><span class="pre">class</span> </em><span class="sig-prename descclassname"><span class="pre">nbox.parsers.</span></span><span class="sig-name descname"><span class="pre">TextParser</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tokenizer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_len</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">post_proc_fn</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.TextParser" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#nbox.parsers.BaseParser" title="nbox.parsers.BaseParser"><code class="xref py py-class docutils literal notranslate"><span class="pre">nbox.parsers.BaseParser</span></code></a></p>
-<p>Unified Text parsing engine, returns tokenized dictionaries</p>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.TextParser.process_primitive">
-<span class="sig-name descname"><span class="pre">process_primitive</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">x</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.TextParser.process_primitive" title="Permalink to this definition">¶</a></dt>
-<dd></dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.TextParser.process_dict">
-<span class="sig-name descname"><span class="pre">process_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_object</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.TextParser.process_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>takes in a dict and for each key’s type call that method</p>
-</dd></dl>
-<dl class="py method">
-<dt class="sig sig-object py" id="nbox.parsers.TextParser.process_list">
-<span class="sig-name descname"><span class="pre">process_list</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">input_object</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#nbox.parsers.TextParser.process_list" title="Permalink to this definition">¶</a></dt>
-<dd><p>takes in and tokenises the strings</p>
-</dd></dl>
-</dd></dl>
-</section>
+          <div class="section" id="parsers">
+<h1>Parsers<a class="headerlink" href="#parsers" title="Permalink to this headline">¶</a></h1>
+</div>
 
         </article>
       </div>
