@@ -20,6 +20,9 @@ jobs:
         working-directory: "docs-src/"
         run: |
           make github
+        env:
+          NBX_AUTH: 1
+          
       - name: Commit docs
         run: |
           git config --global user.name "NimbleBox Research"
