@@ -30,7 +30,7 @@ def one_click_deploy(
     deployment_type: str = "ovms2",
     model_name: str = None,
     cache_dir: str = None,
-    deployment_id: str = None
+    deployment_id: str = None,
 ):
     """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
     and then deploys on NBX Platform. Avoid using this function manually and use
@@ -56,7 +56,10 @@ def one_click_deploy(
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
     # perform sanity checks on the input values
-    assert deployment_type in ["ovms2", "nbxs"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+    assert deployment_type in [
+        "ovms2",
+        "nbxs",
+    ], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
 
     # intialise the console logger
     console = utils.Console()
@@ -68,16 +71,17 @@ def one_click_deploy(
 
     # convert the model
     _m_hash = utils.hash_(model_key)
-    model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+    model_name = (
+        model_name
+        if model_name is not None
+        else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+    )
     if deployment_id != None:
         __depl_dict = {"deployment_id": deployment_id}
     else:
         deployment_name = f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
         __depl_dict = {"deployment_name": deployment_name}
 
-    # TODO: remove hardcode
-    __depl_dict = {"deployment_id":"8gcjmg2a",}
-    
     console(f"model_name: {model_name}")
     spec = {"category": category, "model_key": model_key, "name": model_name}
 
@@ -115,7 +119,9 @@ def one_click_deploy(
         # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
         input_ = ",".join(input_names)
         input_shape = ",".join([str(list(x.shape)).replace(" ", "") for x in args])
-        convert_args += f"--data_type=FP32 --input_shape={input_shape} --input={input_} "
+        convert_args += (
+            f"--data_type=FP32 --input_shape={input_shape} --input={input_} "
+        )
 
         if category == "image":
             # mean and scale have to be defined for every single input
@@ -135,9 +141,11 @@ def one_click_deploy(
             "file_type": export_model_path.split(".")[-1],
             "model_name": model_name,
             "convert_args": convert_args,
-            "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
+            "nbox_meta": json.dumps(
+                nbox_meta
+            ),  # annoying, but otherwise only the first key would be sent
             "deployment_type": deployment_type,  # "nbxs" or "ovms2"
-            **__depl_dict
+            **__depl_dict,
         },
         headers={"Authorization": f"Bearer {access_token}"},
         verify=False,
@@ -154,7 +162,11 @@ def one_click_deploy(
 
     # upload the file to a S3 -> don't raise for status here
     console.start("Uploading model to S3 ...")
-    r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(export_model_path, "rb"))})
+    r = requests.post(
+        url=out["url"],
+        data=out["fields"],
+        files={"file": (out["fields"]["key"], open(export_model_path, "rb"))},
+    )
     console.stop(f"Upload to S3 complete")
 
     # checking if file is successfully uploaded on S3 and tell webserver
@@ -162,7 +174,11 @@ def one_click_deploy(
     console.start("Verifying upload ...")
     requests.post(
         url=f"{URL}/api/model/update_model_status",
-        json={"upload": True if r.status_code == 204 else False, "model_id": model_id, "deployment_id": deployment_id},
+        json={
+            "upload": True if r.status_code == 204 else False,
+            "model_id": model_id,
+            "deployment_id": deployment_id,
+        },
         headers={"Authorization": f"Bearer {access_token}"},
         verify=False,
     )
@@ -225,10 +241,14 @@ def one_click_deploy(
 
                 if endpoint is None:
                     console._log("Deployment in proress ...")
-                    console._log(f"Endpoint to be setup, please check status at: {URL}/oneclick")
+                    console._log(
+                        f"Endpoint to be setup, please check status at: {URL}/oneclick"
+                    )
                     break
 
-                console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
+                console._log(
+                    f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}"
+                )
 
                 r = requests.get(
                     url=f"{URL}/api/model/get_model_access_key",
@@ -240,12 +260,17 @@ def one_click_deploy(
                     model_data_access_key = r.json()["model_data_access_key"]
                     console._log(f"nbx-key: {model_data_access_key}")
                 except:
-                    raise ValueError(f"Failed to get model_data_access_key: {r.content}")
+                    raise ValueError(
+                        f"Failed to get model_data_access_key: {r.content}"
+                    )
 
             # keep hitting /metadata and see if model is ready or not
             r = requests.get(
                 url=f"{endpoint}/metadata",
-                headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"},
+                headers={
+                    "NBX-KEY": model_data_access_key,
+                    "Authorization": f"Bearer {access_token}",
+                },
                 verify=False,
             )
             if r.status_code == 200:
