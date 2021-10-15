@@ -3,7 +3,7 @@ on:
   push:
     branches: [master, docs]
     paths:
-      - "docs-src/**"
+      - "docs/**"
   workflow_dispatch:
 jobs:
   docs-gen:
@@ -11,22 +11,41 @@ jobs:
     steps:
       - name: Checkout the files
         uses: actions/checkout@v2
+        with:
+          submodules: true
+
+      - uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.local/lib/python3.8/site-packages
+          key: ${{ hashFiles('setup.py') }}-v2-${{ hashFiles('requirements.txt') }}
+
       - name: Install Sphinx, furo, nbox-dependencies
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
-          sudo apt-get -y install python3-sphinx
-          pip install furo
-          pip install -r requirements.txt
-      - name: Make html
-        working-directory: "docs-src/"
+          # sudo apt-get -y install python3-sphinx
+          pip install furo sphinx~=4.0
+          pip install --upgrade protobuf #fix for skl2onnx
+          pip install --upgrade --upgrade-strategy eager -r requirements.txt
+
+      - name: switch branch
+        uses: actions/checkout@v2
+        with:
+          path: docs/build/html
+          ref: gh-pages
+
+      - name: Make sphinx docs
+        working-directory: "docs/"
         run: |
-          make github
+          make html
         env:
           NBX_AUTH: 1
-          
+
       - name: Commit docs
+        working-directory: docs/build/html
         run: |
           git config --global user.name "NimbleBox Research"
           git config --global user.email 'research@nimblebox.ai'
-          git add docs/
-          git commit -m "Update Docs"
-          git subtree push --prefix docs origin gh-pages
+          git add .
+          git commit -am "Update Docs ${GITHUB_SHA::8}" || echo up to date
+          git push origin HEAD:gh-pages
