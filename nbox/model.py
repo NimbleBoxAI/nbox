@@ -301,7 +301,7 @@ class Model:
         }
         return meta, out
 
-    def deploy(self, input_object: Any, model_name: str = None, cache_dir: str = None):
+    def deploy(self, input_object: Any, model_name: str = None, cache_dir: str = None, deployment_id: str = None):
         """OCD your model on NBX platform.
 
         Args:
@@ -319,5 +319,6 @@ class Model:
             category=self.category,
             model_name=model_name,
             cache_dir=cache_dir,
-            **meta_dict,
+            deployment_id=deployment_id,
+            ** meta_dict,
         )

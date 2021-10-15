@@ -30,6 +30,7 @@ def one_click_deploy(
     deployment_type: str = "ovms2",
     model_name: str = None,
     cache_dir: str = None,
+    deployment_id: str = None,
 ):
     """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
     and then deploys on NBX Platform. Avoid using this function manually and use
@@ -68,6 +69,12 @@ def one_click_deploy(
     # convert the model
     _m_hash = utils.hash_(model_key)
     model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+    if deployment_id != None:
+        __depl_dict = {"deployment_id": deployment_id}
+    else:
+        deployment_name = f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+        __depl_dict = {"deployment_name": deployment_name}
+
     console(f"model_name: {model_name}")
     spec = {"category": category, "model_key": model_key, "name": model_name}
 
