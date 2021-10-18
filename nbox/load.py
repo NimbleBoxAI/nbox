@@ -155,7 +155,7 @@ def plug(src_name, builder_fn, cataegory):
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model_key_or_url: str, nbx_api_key: str = None, verbose=False, **loader_kwargs):
+def load(model_key_or_url, nbx_api_key=None, verbose=False, **loader_kwargs):
     """This function loads the nbox.Model object from the pretrained models index or NimbleBox.ai's cloud infer
     service.
 

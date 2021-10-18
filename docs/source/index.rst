@@ -50,7 +50,7 @@ When loading ``nbox`` for the first time, it will prompt you the username and pa
 
 ``nbox`` can load any underlying model from package and can consume anything (eg. code above) whether it is ``filepaths``\ , ``PIL.Image`` or just a ``numpy array``.
 
-The objective is to make usage 🥶. Hope you enjoy this.
+The objective is to make using ML models 🥶. Hope you enjoy this.
 
 **Yash Bonde** (NimbleBox.ai R&D)
 

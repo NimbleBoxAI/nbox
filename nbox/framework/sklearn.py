@@ -1,3 +1,4 @@
+import joblib
 from skl2onnx import convert_sklearn
 import skl2onnx.common.data_types as dt
 
@@ -32,3 +33,11 @@ def export_to_onnx(model, args, input_names, input_shapes, export_model_path, op
 
     with open(export_model_path, "wb") as f:
         f.write(onx.SerializeToString())
+
+
+def export_to_pkl(model, export_model_path, **kwargs):
+    # sklearn models are pure python methods (though underlying contains bindings to C++)
+    # and so we can use joblib for this
+    # we use the joblib instead of pickle
+    with open(export_model_path, "wb") as f:
+        joblib.dump(model, f)

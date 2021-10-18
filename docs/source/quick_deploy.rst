@@ -26,10 +26,7 @@ First you need to do some imports and you can load your own model, for this tuto
    from nbox.utils import get_image
 
    # load pretrained model
-   model = nbox.load(
-       "torchvision/resnet18",
-       pretrained=True,
-   )
+   model = nbox.load("torchvision/resnet18", pretrained=True,)
 
    # literally pass model a URL and it will process it
    image_url = "https://github.com/NimbleBoxAI/nbox/raw/master/tests/assets/cat.jpg"
@@ -47,7 +44,8 @@ Now comes the cool part, i.e. deploying models. There is already support for dep
        wait_till_deployment=True,  # this will return the url endpoint and key
    )
 
-Now wait for the deployment to complete. You can check out the dashboard till then and once deployed you will see the URL and API key for your model.
+Now wait for the deployment to complete. You can check out the dashboard till then and once deployed you will see
+the URL and API key for your model. Read more about deployment and runtimes `here <nbox.model.html>`_
 
 .. code-block:: python
 

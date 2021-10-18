@@ -16,20 +16,11 @@ from nbox.parsers import ImageParser, TextParser
 from nbox.network import one_click_deploy
 from nbox.user import secret
 from nbox.framework import get_meta
-from nbox.framework import pytorch as frm_pytorch, sklearn as frm_skl
+from nbox.framework import pytorch as frm_pytorch, sklearn as frm_sk
 
 
 class Model:
-    def __init__(
-        self,
-        model_or_model_url: Any,
-        nbx_api_key: str = None,
-        category: str = None,
-        tokenizer=None,
-        model_key: str = None,
-        model_meta: dict = None,
-        verbose: bool = False,
-    ):
+    def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, model_meta=None, verbose=False):
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
         from ``nbox==0.1.10`` ``nbox.Model`` handles both local and remote models
 
@@ -237,10 +228,11 @@ class Model:
             # this has to be handled better -> to be fixed till 0.2.1
             return {"input_0": input_object.tolist()}
 
-    def __call__(self, input_object: Any, return_inputs=False):
-        """This is the most important part of this codebase. The `input_object` can be anything from
-        a tensor, an image file, filepath as string, string to process as NLP model. This `__call__`
-        should understand the different usecases and manage accordingly.
+    def __call__(self, input_object, return_inputs=False, method=None):
+        r"""This is the most important part of this codebase. The ``input_object`` can be anything from
+        a tensor, an image file, filepath as string, string and must be processed automatically by a
+        well written ``nbox.parser.BaseParser`` object . This ``__call__`` should understand the different
+        usecases and manage accordingly.
 
         The current idea is that what ever the input, based on the category (image, text, audio, smell)
         it will be parsed through dedicated parsers that can make ingest anything.
@@ -250,6 +242,8 @@ class Model:
         Args:
             input_object (Any): input to be processed
             return_inputs (bool, optional): whether to return the inputs or not. Defaults to False.
+            method(str, optional): specifically for sklearn models, this is the method to be called
+                if nothing is provided then we call ``.predict()`` method.
 
         Returns:
             Any: currently this is output from the model, so if it is tensors and return dicts.
@@ -262,7 +256,9 @@ class Model:
             st = time()
             # OVMS has :predict endpoint and nbox has /predict
             _p = "/" if "export_type" in self.nbox_meta["spec"] else ":"
-            r = requests.post(self.model_url + f"{_p}predict", json={"inputs": model_input}, headers={"NBX-KEY": self.nbx_api_key})
+            r = requests.post(
+                self.model_url + f"{_p}predict", json={"inputs": model_input, "method": method}, headers={"NBX-KEY": self.nbx_api_key}
+            )
             et = time() - st
 
             try:
@@ -287,9 +283,10 @@ class Model:
             self.console.stop(f"Took {et:.3f} seconds!")
 
         elif self.__framework == "sk":
-            if str(type(self.model_or_model_url)).startswith("sklearn.neighbors"):
-                out = self.model_or_model_url.kneighbors
-            out = self.model_or_model_url.predict(model_input)
+            # if str(type(self.model_or_model_url)).startswith("sklearn.neighbors"):
+            #     out = self.model_or_model_url.kneighbors
+            method = getattr(self.model_or_model_url, "predict") if method == None else getattr(self.model_or_model_url, method)
+            out = method(model_input)
 
         elif self.__framework == "pt":
             with torch.no_grad():
@@ -381,7 +378,7 @@ class Model:
         }
         return meta, out
 
-    def export(self, input_object: Any, export_type: str = "onnx", model_name: str = None, cache_dir=None, return_convert_args=False):
+    def export(self, input_object, export_type="onnx", model_name=None, cache_dir=None, return_convert_args=False):
         """Export the model to a particular kind of DAG (ie. like onnx, torchscript, etc.)
 
         Raises appropriate assertion errors for strict checking of inputs
@@ -405,9 +402,9 @@ class Model:
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
             assert self.__framework != "nbx", "This model is already deployed on the cloud"
-            assert export_type in ["onnx", "torchscript"], "Export type must be onnx or torchscript"
+            assert export_type in ["onnx", "torchscript", "pkl"], "Export type must be onnx, torchscript or pickle"
             if self.__framework == "sk":
-                assert export_type == "onnx", "Only ONNX export is supported for scikit-learn Framework"
+                assert export_type in ["onnx", "pkl"], "Export type must be onnx or pkl"
 
         # perform sanity checks on the input values
         __check_conditionals()
@@ -434,13 +431,11 @@ class Model:
         nbox_meta = {"metadata": nbox_meta, "spec": spec}
         export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
 
-        src_module = frm_skl if self.__framework == "sk" else frm_pytorch
-        if export_type == "onnx":
-            export_model_path += ".onnx"
-            export_fn = src_module.export_to_onnx
-        elif export_type == "torchscript":  # can only be deployed using pytorch framework
-            export_model_path += ".torchscript"
-            export_fn = frm_pytorch.export_to_torchscript
+        # load the required framework and the export method
+        export_fn = getattr(globals()[f"frm_{self.__framework}"], f"export_to_{export_type}", None)
+        if export_fn == None:
+            raise KeyError(f"Export type {export_type} not supported for {self.__framework}")
+        export_model_path += f".{export_type}"
 
         console.start(f"Converting using: {export_fn}")
         export_fn(model=self.model_or_model_url, export_model_path=export_model_path, **export_kwargs)
@@ -467,16 +462,8 @@ class Model:
 
         return fn_out
 
-    def deploy(
-        self,
-        input_object: Any,
-        model_name: str = None,
-        cache_dir: str = None,
-        wait_for_deployment: bool = False,
-        runtime: str = "onnx",
-        deployment_type: str = "ovms2",
-    ):
-        """NBX-Deploy (read more one: https://docs.nimblebox.ai/nbox/nbox-intro/quickstart-with-deployment)
+    def deploy(self, input_object, model_name=None, cache_dir=None, wait_for_deployment=False, runtime="onnx", deployment_type="nbox"):
+        """NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
 
         This deploys the current model onto our managed K8s clusters. This tight product service integration
         is very crucial for us and is the best way to make deploy a model for usage.
@@ -488,8 +475,8 @@ class Model:
             model_name (str, optional): custom model name for this model
             cache_dir (str, optional): custom caching directory
             wait_for_deployment (bool, optional): wait for deployment to complete
-            runtime (str, optional): runtime to use for deployment
-            deployment_type (str, optional): deployment type
+            runtime (str, optional): runtime to use for deployment should be one of ``["onnx", "torchscript"]``, default is ``onnx``
+            deployment_type (str, optional): deployment type should be one of ``['ovms2', 'nbox']``, default is ``nbox``
         """
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
@@ -497,11 +484,13 @@ class Model:
             assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
             if self.__framework == "sk":
                 assert deployment_type == "nbox", "Only ONNX Runtime is supported for scikit-learn Framework"
+            assert runtime in ["onnx", "torchscript", "pkl"], "Runtime must be onnx, torchscript or pkl"
 
         # perform sanity checks on the input values
         __check_conditionals()
 
         # user will always have to pass the input_object
+        runtime = "onnx" if deployment_type == "ovms2" else runtime  # force convert to onnx if ovms2
         export_model_path, model_name, nbox_meta, convert_args = self.export(
             input_object, runtime, model_name, cache_dir, return_convert_args=True
         )

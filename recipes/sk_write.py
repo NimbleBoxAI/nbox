@@ -1,9 +1,11 @@
 import sys
+import numpy as np
 from pprint import pprint as pp
 
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+from transformers.utils.dummy_pt_objects import XLMForTokenClassification
 
 # ---------
 import nbox
@@ -37,8 +39,27 @@ hr()
 meta, args = model.get_nbox_meta(X)
 pp(meta)
 
-path, _, _ = model.export(X, export_type="onnx")
+out = model(X, method="predict_proba")
+print(out.shape)
+
+# print(model.model_or_model_url.predict_proba(X).shape)
+# print(np.array(model.model_or_model_url.predict_log_proba(X).tolist()))
+
+path, _, _ = model.export(X, export_type="pkl")
 print("output path:", path)
 hr()
 
-model.deploy(X, wait_for_deployment=True, deployment_type="nbox")  # <--------- model is deployed
+# We are using `nbox` as the server type and `onnx` as the runtime
+# read more: https://nimbleboxai.github.io/nbox/nbox.model.html
+url, key = model.deploy(X, wait_for_deployment=True, runtime = "pkl", deployment_type="nbox")
+
+# In RandomForest there are 3 different methods of forward pass that can be used
+# predict(X):          Predict class for X.
+# predict_log_proba(X) Predict class log-probabilities for X.
+# predict_proba(X)     Predict class probabilities for X.
+# By default I use `predict` and in order to use these over the api you will have to
+# tell which method you want to call
+cloud_model = nbox.load(url, key)
+out = cloud_model(X, method="predict")
+out = cloud_model(X, method="predict_log_proba")
+out = cloud_model(X, method="predict_proba")
