@@ -41,13 +41,6 @@ tuple(out.shape) == (2, 1000)
 
 ## CLI
 
-<<<<<<< HEAD
-Just add this to your dockerfile
-
-```
-nbox login john_adams my-fancy-password
-nbox deploy --model
-=======
 Just add this to your dockerfile or github actions.
 
 ```
@@ -56,7 +49,6 @@ NBX_AUTH=1 python -m nbox deploy --model_path=my/model.onnx --deployment_type="n
 # or for more details
 
 python -m nbox --help
->>>>>>> master
 ```
 
 ## Things for Repo
