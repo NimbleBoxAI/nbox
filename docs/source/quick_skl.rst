@@ -29,15 +29,40 @@ Then all you need is to load to ``nbox.Model``\ :
 
 .. code-block:: python
 
-   model = nbox.Model(clr) # <--------- load the model
-   y_nbox = model(X_test)  # <--------- predict by passing numpy arrays
+   model = nbox.Model(clr) # load the model
+   y_nbox = model(X_test)  # predict by passing numpy arrays
 
    meta, args = model.get_nbox_meta(X) # same method to get the nbox_meta
 
-Finally you can export and deploy this with state of the art simplicity:
+By default we call ``.predict()`` method, however you might want to call ``.predict_proba()``
+in that case you can override by telling with ``method`` keyword as follows:
 
 .. code-block:: python
 
+   out = model(X, method="predict") # default
+   out = model(X, method="predict_log_proba")
+   out = model(X, method="predict_proba")
 
+Finally you can export or deploy this with state of the art simplicity:
+
+.. code-block:: python
+
+   # export the model as "onnx"
    path, _, _ = model.export(X, export_type="onnx")
-   model.deploy(X, wait_for_deployment=True, runtime="onnx", deployment_type="nbox")  # <--------- model is deployed
+   
+   # deploy the model on our managed kubernetes
+   # written as a first class method to "nbox.Model" for paramount simplicity
+   model.deploy(X, runtime="onnx", deployment_type="nbox")
+
+Once the model is deployed you can directly load and use the model as follows:
+
+.. code-block:: python
+
+   # load the model
+   cloud_model = nbox.load(url, key)
+
+   # use cloud model along with "method" keyword for specific 
+   out = cloud_model(X, method="predict")
+   out = cloud_model(X, method="predict_log_proba")
+   out = cloud_model(X, method="predict_proba")
+

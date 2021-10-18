@@ -104,6 +104,8 @@ class Secrets:
         self.save()
 
     def update_ocd(self, url, bytes_recieved, bytes_sent):
+        if not hasattr(self.secrets, "ocd"):
+            return None
         ocd = list(filter(lambda x: x["url"] == url, self.secrets["ocd"]))
         if not ocd:
             # raise IndexError(f"URL {url} not found in secrets.json")

@@ -8,6 +8,17 @@ A library that makes using a host of models provided by the opensource community
 pip install nbox
 ```
 
+#### Current LoC
+
+```
+SLOC	Directory	SLOC-by-Language (Sorted)
+971     top_dir         python=971
+88      framework       python=88
+
+Totals grouped by language (dominant language first):
+python:        1059 (100.00%)
+```
+
 ## Usage
 
 ```python

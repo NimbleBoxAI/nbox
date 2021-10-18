@@ -1,7 +1,6 @@
 nbox Model
 ==========
 
-<<<<<<< HEAD
 ``nbox.Model`` is a simple wrapper on top of your ``pytorch`` and ``scikit-learn`` models that simplifies
 using the model based functionalities and products from NimbleBox.ai dead-simple to use. These include
 deploying models onto a fully autoscaling kubernetes pods, exporting models between multiple different
@@ -53,13 +52,8 @@ Documentation
 -------------
 
 
-=======
->>>>>>> master
 .. automodule:: nbox.model
    :members:
    :undoc-members:
    :show-inheritance:
-<<<<<<< HEAD
    :special-members: __call__
-=======
->>>>>>> master

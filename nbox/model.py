@@ -4,7 +4,6 @@ import os
 import json
 import requests
 from time import time
-from typing import Any, Union
 from pprint import pprint as pp
 
 import torch
@@ -224,9 +223,15 @@ class Model:
             input_dict = self.text_parser(input_object)
             return input_dict
 
+        # Code below this part is super buggy and is useful for sklearn model,
+        # please improve this as more usecases come up
         elif self.category == None and isinstance(input_object, np.ndarray):
             # this has to be handled better -> to be fixed till 0.2.1
-            return {"input_0": input_object.tolist()}
+            return input_object.tolist()
+
+        # when user gives a list as an input, it's better just to pass it as is
+        # but when the input becomes a dict, this might fail.
+        return input_object
 
     def __call__(self, input_object, return_inputs=False, method=None):
         r"""This is the most important part of this codebase. The ``input_object`` can be anything from
@@ -256,15 +261,15 @@ class Model:
             st = time()
             # OVMS has :predict endpoint and nbox has /predict
             _p = "/" if "export_type" in self.nbox_meta["spec"] else ":"
-            r = requests.post(
-                self.model_url + f"{_p}predict", json={"inputs": model_input, "method": method}, headers={"NBX-KEY": self.nbx_api_key}
-            )
+            json = {"inputs": model_input}
+            if "export_type" in self.nbox_meta["spec"]:
+                json["method"] = method
+            r = requests.post(self.model_url + f"{_p}predict", json=json, headers={"NBX-KEY": self.nbx_api_key})
             et = time() - st
 
             try:
                 r.raise_for_status()
-                data_size = len(r.content)
-                secret.update_ocd(self.model_url, data_size, len(r.request.body if r.request.body else []))
+                secret.update_ocd(self.model_url, len(r.content), len(r.request.body if r.request.body else []))
                 out = r.json()
 
                 # first try outputs is a key and we can just get the structure from the list
@@ -274,13 +279,9 @@ class Model:
                     out = np.array(out["outputs"])
                 else:
                     raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
-            except:
-                print(r.content)
-                out = r.json()
-                data_size = 0
-                print("Error: ", out)
-
-            self.console.stop(f"Took {et:.3f} seconds!")
+                self.console.stop(f"Took {et:.3f} seconds!")
+            except Exception as e:
+                self.console.stop(f"Failed: {str(e)} | {r.content}")
 
         elif self.__framework == "sk":
             # if str(type(self.model_or_model_url)).startswith("sklearn.neighbors"):

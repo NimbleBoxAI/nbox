@@ -39,10 +39,9 @@ def deploy(
             in cli it becomes like ``... --model_path="my_model_path" ...``
 
     Raises:
-        Exception: if deployment type is not supported
-        Exception: if model path is not found
-        Exception: if nbox_meta is incorrect
-        Exception: if deployment_type == "ovms2" but convert_args is not provided
+        ValueError: if ``deployment_type`` is not supported
+        AssertionError: if model path is not found or ``nbox_meta`` is incorrect
+        Exception: if ``deployment_type == "ovms2"`` but ``convert_args`` is not provided
     """
     if not os.path.exists(join(os.path.expanduser("~"), ".nbx", "secrets.json")):
         # if secrets file is not found
@@ -59,7 +58,7 @@ def deploy(
     else:
         # is model path valid and given
         if not os.path.exists(model_path):
-            raise Exception(f"Model path {model_path} does not exist")
+            assert os.path.exists(model_path), "model path not found"
 
         # check if nbox_meta is correct
         if nbox_meta == None:
@@ -71,7 +70,7 @@ def deploy(
 
         if isinstance(nbox_meta, str):
             if not os.path.exists(nbox_meta):
-                raise Exception(f"Nbox meta path {nbox_meta} does not exist. see nbox.Model.get_nbox_meta()")
+                raise ValueError(f"Nbox meta path {nbox_meta} does not exist. see nbox.Model.get_nbox_meta()")
             with open(nbox_meta, "r") as f:
                 nbox_meta = json.load(f)
         else:
