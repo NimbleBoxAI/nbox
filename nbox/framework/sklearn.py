@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 import joblib
-=======
->>>>>>> master
 from skl2onnx import convert_sklearn
 import skl2onnx.common.data_types as dt
 
