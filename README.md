@@ -2,7 +2,7 @@
 
 A library that makes using a host of models provided by the opensource community a lot more easier. 
 
-> The entire purpose of this package is to make inference chill.
+> The entire purpose of this package is to make using models 🥶.
 
 ```
 pip install nbox
@@ -41,11 +41,22 @@ tuple(out.shape) == (2, 1000)
 
 ## CLI
 
+<<<<<<< HEAD
 Just add this to your dockerfile
 
 ```
 nbox login john_adams my-fancy-password
 nbox deploy --model
+=======
+Just add this to your dockerfile or github actions.
+
+```
+NBX_AUTH=1 python -m nbox deploy --model_path=my/model.onnx --deployment_type="nbox"
+
+# or for more details
+
+python -m nbox --help
+>>>>>>> master
 ```
 
 ## Things for Repo
@@ -55,19 +66,14 @@ nbox deploy --model
   - When pushing to pypi just do `poetry build && poetry publish` this manages all the things around
 - Install `pytest` and then run `pytest tests/ -v`.
 - Using `black` for formatting, VSCode to the moon.
+- To make the docs:
+  ```
+  # from current folder
+  sphinx-apidoc -o docs/source/ ./nbox/ -M -e
+  cd docs && make html
+  cd ../build/html && python3 -m http.server 80
+  ```
 
 # License
 
-The code in thist repo is licensed as [BSD 3-Clause](./LICENSE). Please check for individual repositories for licenses. Here are some of them:
-
-### Requirements
-
-- [`rich`](https://github.com/willmcgugan/rich/blob/master/LICENSE)
-
-### Model Sources
-
-99% of the credit for `nbox` goes to the amazing people behind these projects:
-
-- [`torch`](https://github.com/pytorch/pytorch/blob/master/LICENSE)
-- [`transformers`](https://github.com/huggingface/transformers/blob/master/LICENSE)
-- [`efficientnet-pytorch`](https://github.com/lukemelas/EfficientNet-PyTorch/blob/master/LICENSE)
+The code in thist repo is licensed as [BSD 3-Clause](./LICENSE). Please check for individual repositories for licenses.

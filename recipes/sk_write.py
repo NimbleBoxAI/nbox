@@ -1,11 +1,17 @@
 import sys
+<<<<<<< HEAD
 import numpy as np
+=======
+>>>>>>> master
 from pprint import pprint as pp
 
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
+<<<<<<< HEAD
 from transformers.utils.dummy_pt_objects import XLMForTokenClassification
+=======
+>>>>>>> master
 
 # ---------
 import nbox
