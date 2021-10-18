@@ -66,10 +66,15 @@ class BaseParser:
 
 
 class ImageParser(BaseParser):
-    """single unified Image parser that consumes different types of data
-    and returns a processed numpy array"""
-
     def __init__(self, post_proc_fn=None, cloud_infer=False, **kwargs):
+        """single unified Image parser that consumes different types of data and returns a processed numpy array
+
+        Args:
+            post_proc_fn (callable, optional): post processing function, this takes in the torch tensor and performs
+                operation
+            cloud_infer (bool, optional): whether the input is from cloud inference
+            kwargs (dict, optional): keyword arguments to store here
+        """
         super().__init__()
         self.post_proc_fn = post_proc_fn
         self.cloud_infer = cloud_infer
@@ -206,14 +211,19 @@ class ImageParser(BaseParser):
 
 
 class TextParser(BaseParser):
-    """Unified Text parsing engine, returns tokenized dictionaries"""
+    def __init__(self, tokenizer, max_len=None, **kwargs):
+        """Unified Text parsing engine, returns tokenized dictionaries
 
-    def __init__(self, tokenizer, max_len=None, post_proc_fn=None):
+        Args:
+            tokenizer (Tokenizer): tokenizer object for the text
+            max_len (int): maximum length of the text
+        """
         super().__init__()
         # tokenizer is supposed to be AutoTokenizer object, check that
         self.tokenizer = tokenizer
         self.max_len = max_len
-        self.post_proc_fn = post_proc_fn
+        for k, v in kwargs.items():
+            setattr(self, k, v)
 
     def process_primitive(self, x):
         # in case of text this is quite simple because only primitive is strings

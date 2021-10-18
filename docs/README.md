@@ -7,4 +7,6 @@ Writing docs is hard, and a tedious job, but one well worth for refining communi
 
 Have fun reading the hidden stories!
 
+Use this command in `/nbox`: `sphinx-apidoc -o docs/source/ ./nbox/ -M -e` to add base plates for something new. Use https://docutils.sourceforge.io/docs/user/rst/quickref.html to get quick tools.
+
 <!-- https://pdoc3.github.io/pdoc/ -->

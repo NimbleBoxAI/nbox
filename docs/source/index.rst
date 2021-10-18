@@ -50,13 +50,35 @@ When loading ``nbox`` for the first time, it will prompt you the username and pa
 
 ``nbox`` can load any underlying model from package and can consume anything (eg. code above) whether it is ``filepaths``\ , ``PIL.Image`` or just a ``numpy array``.
 
-The objective is to make usage 🥶. Hope you enjoy this.
+The objective is to make using ML models 🥶. For this it is paramount that the number of lines of code
+be very small. If it is very small, a smart engineer can open it up and debug it. The metric to always
+aim for is total lines of code which should stand below 1000 for ``top_dir``, other submodules can
+contain ``dicts`` that occupy a large % of code.
+
+As of ``nbox == 0.2.1`` this is where the stats stand!
+
+.. code-block::
+
+   SLOC	Directory	SLOC-by-Language (Sorted)
+   971     top_dir         python=971
+   88      framework       python=88
+
+   Totals grouped by language (dominant language first):
+   python:        1059 (100.00%)
+
+
+If you want to see something be added or found bug, `raise an issue <https://github.com/NimbleBoxAI/nbox/issues/new>`_.
+
+
+Hope you enjoy this.
 
 **Yash Bonde** (NimbleBox.ai R&D)
 
 
-Indices and tables
-==================
+
+
+Index
+=====
 
 .. toctree::
    :maxdepth: 2
@@ -69,7 +91,7 @@ Indices and tables
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents
+   :caption: Documentations
 
    nbox.load
    nbox.model
@@ -78,6 +100,13 @@ Indices and tables
    nbox.network
    nbox.utils
    nbox.user
+
+
+.. toctree::
+   :maxdepth: 2
+   :caption: R&D
+
+   in_progress
 
 
 * :ref:`genindex`

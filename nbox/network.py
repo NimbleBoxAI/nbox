@@ -13,12 +13,7 @@ class NBXAPIError(Exception):
 
 
 def one_click_deploy(
-    export_model_path: str,
-    deployment_type: str = "ovms2",
-    nbox_meta: dict = {},
-    model_name: str = None,
-    wait_for_deployment: bool = False,
-    convert_args: str = None,
+    export_model_path, deployment_type="ovms2", nbox_meta={}, model_name=None, wait_for_deployment=False, convert_args=None
 ):
     """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
     and then deploys on NBX Platform. Avoid using this function manually and use
@@ -169,12 +164,7 @@ def one_click_deploy(
         if model_data_access_key != None or "failed" in curr_st:
             break
 
-    secret.add_ocd(
-        model_id=model_id,
-        url=endpoint,
-        nbox_meta=nbox_meta,
-        access_key=model_data_access_key,
-    )
+    secret.add_ocd(model_id=model_id, url=endpoint, nbox_meta=nbox_meta, access_key=model_data_access_key)
 
     console.stop("Process Complete")
     console.rule("NBX Deploy")
