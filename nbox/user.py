@@ -11,9 +11,9 @@ def get_access_token(nbx_home_url, username, password=None):
     console = Console()
     console.start("Getting access tokens ...")
     try:
-        r = requests.post(url=f"{nbx_home_url}/api/login", json={"username": username, "password": password})
+        r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
     except Exception as e:
-        raise Exception(f"Could not connect to NBX. You cannot use any cloud based tool!")
+        raise Exception(f"Could not connect to NBX | {str(e)}")
 
     if r.status_code == 401:
         console.stop("Invalid username/password")
