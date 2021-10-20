@@ -8,4 +8,4 @@ from nbox.model import Model
 from nbox.load import load, plug, PRETRAINED_MODELS
 from nbox.parsers import ImageParser, TextParser
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"

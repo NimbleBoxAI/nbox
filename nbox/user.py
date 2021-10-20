@@ -34,7 +34,7 @@ def create_secret_file(username, access_token, nbx_url):
     os.makedirs(folder, exist_ok=True)
     fp = join(folder, "secrets.json")
     with open(fp, "w") as f:
-        f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}))
+        f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}, indent=2))
 
 
 class Secrets:
@@ -135,7 +135,9 @@ class Secrets:
 
 def reinit_secret():
     global secret
+    print("ASDFASDFASDFASDFASDFASDFASDFASDFASDFASDF", secret)
     secret = Secrets()
+    print("----------------------------------------", secret)
 
 
 if os.getenv("NBX_AUTH", False):

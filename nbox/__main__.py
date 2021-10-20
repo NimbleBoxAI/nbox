@@ -1,5 +1,5 @@
 import fire
-from .cli import login, deploy
+from .cli import deploy
 
 if __name__ == "__main__":
-    fire.Fire({"login": login, "deploy": deploy})
+    fire.Fire({"deploy": deploy})
