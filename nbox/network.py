@@ -14,7 +14,7 @@ class NBXAPIError(Exception):
 
 def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbox_meta={}, wait_for_deployment=False, convert_args=None):
     """One-Click-Deploy method v1 that takes in the torch model, converts to ONNX and then deploys on NBX Platform.
-    
+
     Avoid using this function manually and use `model.deploy()` instead
 
     Args:

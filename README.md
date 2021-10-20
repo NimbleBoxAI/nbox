@@ -12,11 +12,11 @@ pip install nbox
 
 ```
 SLOC	Directory	SLOC-by-Language (Sorted)
-971     top_dir         python=971
+996     top_dir         python=996
 88      framework       python=88
 
 Totals grouped by language (dominant language first):
-python:        1059 (100.00%)
+python:        1084 (100.00%)
 ```
 
 ## Usage
