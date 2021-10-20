@@ -12,18 +12,16 @@ class NBXAPIError(Exception):
     pass
 
 
-def one_click_deploy(
-    export_model_path, deployment_type="ovms2", nbox_meta={}, model_name=None, wait_for_deployment=False, convert_args=None
-):
-    """One-Click-Deploy (OCD) method v0 that takes in the torch model, converts to ONNX
-    and then deploys on NBX Platform. Avoid using this function manually and use
-    `model.deploy()` instead
+def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbox_meta={}, wait_for_deployment=False, convert_args=None):
+    """One-Click-Deploy method v1 that takes in the torch model, converts to ONNX and then deploys on NBX Platform.
+    
+    Avoid using this function manually and use `model.deploy()` instead
 
     Args:
         export_model_path (str): path to the file to upload
+        model_name (str): name of the model to be dislpayed on NBX Platform
         deployment_type (str, optional): type of deployment strategy
         nbox_meta (dict, optional): metadata for the nbox.Model() object being deployed
-        model_name (str, optional): name of the model being deployed
         wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
         convert_args (str, optional): if deployment type == "ovms2" can pass extra arguments to MO
 
@@ -31,6 +29,8 @@ def one_click_deploy(
         (str, None): if deployment is successful then push then return the URL endpoint else return None
     """
     from nbox.user import secret  # it can refresh so add it in the method
+
+    print(secret)
 
     access_token = secret.get("access_token")
     URL = secret.get("nbx_url")

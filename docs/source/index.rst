@@ -55,7 +55,7 @@ be very small. If it is very small, a smart engineer can open it up and debug it
 aim for is total lines of code which should stand below 1000 for ``top_dir``, other submodules can
 contain ``dicts`` that occupy a large % of code.
 
-As of ``nbox == 0.2.1`` this is where the stats stand!
+As of ``nbox == 0.2.3`` this is where the stats stand!
 
 .. code-block::
 
@@ -84,6 +84,7 @@ Index
    :maxdepth: 2
    :caption: Tutorials
 
+   quick
    quick_deploy
    quick_plug
    quick_skl
