@@ -1,9 +1,9 @@
-import os
 import json
+import os
 
-from nbox.utils import get_random_name
 from nbox.network import one_click_deploy
-from nbox.user import get_access_token, create_secret_file, reinit_secret
+from nbox.user import create_secret_file, get_access_token, reinit_secret
+from nbox.utils import get_random_name
 
 
 def deploy(
@@ -12,6 +12,8 @@ def deploy(
     model_name: str = None,
     nbox_meta: str = None,
     deployment_type: str = None,
+    deployment_id: str = None,
+    deployment_name: str = None,
     convert_args: str = None,
     wait_for_deployment: bool = False,
     print_in_logs: bool = False,
@@ -48,7 +50,9 @@ def deploy(
 
     if secret is None or secret.get("access_token", None) == None:
         # if secrets file is not found
-        assert username != None and password != None, "secrets.json not found need to provide username password for auth"
+        assert (
+            username != None and password != None
+        ), "secrets.json not found need to provide username password for auth"
         access_token = get_access_token(nbx_home_url, username, password)
         create_secret_file(username, access_token, nbx_home_url)
         reinit_secret()  # reintialize secret variable as it will be used everywhere
@@ -73,14 +77,19 @@ def deploy(
 
         if isinstance(nbox_meta, str):
             if not os.path.exists(nbox_meta):
-                raise ValueError(f"Nbox meta path {nbox_meta} does not exist. see nbox.Model.get_nbox_meta()")
+                raise ValueError(
+                    f"Nbox meta path {nbox_meta} does not exist. see nbox.Model.get_nbox_meta()"
+                )
             with open(nbox_meta, "r") as f:
                 nbox_meta = json.load(f)
         else:
             assert isinstance(nbox_meta, dict), "nbox_meta must be a dict"
 
         # validation of deployment_type
-        assert deployment_type in ["ovms2", "nbox"], "Deployment type must be one of: ovms2, nbox"
+        assert deployment_type in (
+            "ovms2",
+            "nbox",
+        ), "Deployment type must be one of: ovms2, nbox"
         if deployment_type == "ovms2":
             assert convert_args is not None, (
                 "Please provide convert args when using OVMS deployment, "
@@ -88,7 +97,9 @@ def deploy(
             )
 
         # one click deploy
-        model_name = get_random_name().replace("-", "_") if model_name == None else model_name
+        model_name = (
+            get_random_name().replace("-", "_") if model_name == None else model_name
+        )
         endpoint, key = one_click_deploy(
             export_model_path=model_path,
             model_name=model_name,
@@ -96,6 +107,8 @@ def deploy(
             nbox_meta=nbox_meta,
             wait_for_deployment=wait_for_deployment,
             convert_args=convert_args,
+            deployment_id=deployment_id,
+            deployment_name=deployment_name,
         )
 
         # print to logs if needed

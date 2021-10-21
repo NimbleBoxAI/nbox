@@ -1,9 +1,11 @@
 # this file has methods for netorking related things
 
-import os
 import json
+import os
+from pprint import pp
+from pprint import pprint as peepee
+
 import requests
-from pprint import pp, pprint as peepee
 
 from nbox import utils
 
@@ -12,7 +14,16 @@ class NBXAPIError(Exception):
     pass
 
 
-def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbox_meta={}, wait_for_deployment=False, convert_args=None):
+def one_click_deploy(
+    export_model_path,
+    model_name,
+    deployment_type="ovms2",
+    nbox_meta={},
+    wait_for_deployment=False,
+    convert_args=None,
+    deployment_id=None,
+    deployment_name=None,
+):
     """One-Click-Deploy method v1 that takes in the torch model, converts to ONNX and then deploys on NBX Platform.
 
     Avoid using this function manually and use `model.deploy()` instead
@@ -24,6 +35,9 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
         nbox_meta (dict, optional): metadata for the nbox.Model() object being deployed
         wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
         convert_args (str, optional): if deployment type == "ovms2" can pass extra arguments to MO
+        deployment_id (str, optional): ``deployment_id`` to put this model under
+        deployment_name (str, optional): if ``deployment_id`` is not given and you want to create a new
+            deployment group (ie. webserver will create a new ``deployment_id``) you must pass this.
 
     Returns:
         (str, None): if deployment is successful then push then return the URL endpoint else return None
@@ -35,6 +49,11 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
     access_token = secret.get("access_token")
     URL = secret.get("nbx_url")
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
+
+    if deployment_id != None and deployment_name != None:
+        raise ValueError("Either provide deployment_id or deployment_name")
+    if deployment_id == None:
+        deployment_name = utils.get_random_name().replace("-", "_")
 
     # intialise the console logger
     console = utils.Console()
@@ -55,6 +74,8 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
             "convert_args": convert_args,
             "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
             "deployment_type": deployment_type,  # "nbox" or "ovms2"
+            "deployment_id": deployment_id,
+            "deployment_name": deployment_name,
         },
         headers={"Authorization": f"Bearer {access_token}"},
     )
@@ -64,12 +85,18 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
         raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
     out = r.json()
     model_id = out["fields"]["x-amz-meta-model_id"]
+    deployment_id = out["fields"]["x-amz-meta-deployment_id"]
     console.stop("S3 Upload URL obtained")
     console._log("model_id:", model_id)
+    console._log("deployment_id:", deployment_id)
 
     # upload the file to a S3 -> don't raise for status here
     console.start("Uploading model to S3 ...")
-    r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(export_model_path, "rb"))})
+    r = requests.post(
+        url=out["url"],
+        data=out["fields"],
+        files={"file": (out["fields"]["key"], open(export_model_path, "rb"))},
+    )
     console.stop(f"Upload to S3 complete")
 
     # checking if file is successfully uploaded on S3 and tell webserver
@@ -102,7 +129,9 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
         # get the status update
         console(f"Getting updates ...")
         r = requests.get(
-            url=f"{URL}/api/model/get_model_history", params={"model_id": model_id}, headers={"Authorization": f"Bearer {access_token}"}
+            url=f"{URL}/api/model/get_model_history",
+            params={"model_id": model_id, "deployment_id": deployment_id},
+            headers={"Authorization": f"Bearer {access_token}"},
         )
         try:
             r.raise_for_status()
@@ -118,9 +147,12 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
                 continue
 
             # only when this is a new status
-            col = {"failed": console.T.fail, "in-progress": console.T.inp, "success": console.T.st, "ready": console.T.st}[
-                curr_st.split(".")[-1]
-            ]
+            col = {
+                "failed": console.T.fail,
+                "in-progress": console.T.inp,
+                "success": console.T.st,
+                "ready": console.T.st,
+            }[curr_st.split(".")[-1]]
             console._log(f"Status: [{col}]{curr_st}")
             _stat_done.append(curr_st)
 
@@ -153,7 +185,11 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
 
             # keep hitting /metadata and see if model is ready or not
             r = requests.get(
-                url=f"{endpoint}/metadata", headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"}
+                url=f"{endpoint}/metadata",
+                headers={
+                    "NBX-KEY": model_data_access_key,
+                    "Authorization": f"Bearer {access_token}",
+                },
             )
             if r.status_code == 200:
                 console._log(f"Model is ready")
@@ -164,7 +200,12 @@ def one_click_deploy(export_model_path, model_name, deployment_type="ovms2", nbo
         if model_data_access_key != None or "failed" in curr_st:
             break
 
-    secret.add_ocd(model_id=model_id, url=endpoint, nbox_meta=nbox_meta, access_key=model_data_access_key)
+    secret.add_ocd(
+        model_id=model_id,
+        url=endpoint,
+        nbox_meta=nbox_meta,
+        access_key=model_data_access_key,
+    )
 
     console.stop("Process Complete")
     console.rule("NBX Deploy")

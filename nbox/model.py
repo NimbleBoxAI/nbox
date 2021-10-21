@@ -1,25 +1,35 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
-import os
 import json
-import requests
-from time import time
+import os
 from pprint import pprint as pp
+from time import time
 
-import torch
 import numpy as np
+import requests
+import torch
 
 from nbox import utils
-from nbox.utils import Console
-from nbox.parsers import ImageParser, TextParser
-from nbox.network import one_click_deploy
-from nbox.user import secret
 from nbox.framework import get_meta
-from nbox.framework import pytorch as frm_pytorch, sklearn as frm_sk
+from nbox.framework import pytorch as frm_pytorch
+from nbox.framework import sklearn as frm_sk
+from nbox.network import one_click_deploy
+from nbox.parsers import ImageParser, TextParser
+from nbox.user import secret
+from nbox.utils import Console
 
 
 class Model:
-    def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, model_meta=None, verbose=False):
+    def __init__(
+        self,
+        model_or_model_url,
+        nbx_api_key=None,
+        category=None,
+        tokenizer=None,
+        model_key=None,
+        model_meta=None,
+        verbose=False,
+    ):
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
         from ``nbox==0.1.10`` ``nbox.Model`` handles both local and remote models
 
@@ -92,8 +102,12 @@ class Model:
             self.__framework = "nbx"
 
             assert isinstance(nbx_api_key, str), "Nbx API key must be a string"
-            assert nbx_api_key.startswith("nbxdeploy_"), "Not a valid NBX Api key, please check again."
-            assert model_or_model_url.startswith("http"), "Are you sure this is a valid URL?"
+            assert nbx_api_key.startswith(
+                "nbxdeploy_"
+            ), "Not a valid NBX Api key, please check again."
+            assert model_or_model_url.startswith(
+                "http"
+            ), "Are you sure this is a valid URL?"
 
             self.model_url = model_or_model_url.rstrip("/")
 
@@ -105,38 +119,63 @@ class Model:
             # if category is "text" or if it is dict then any key is "text"
             tokenizer = None
             max_len = None
-            if self.category == "text" or (isinstance(self.category, dict) and any([x == "text" for x in self.category.values()])):
+            if self.category == "text" or (
+                isinstance(self.category, dict)
+                and any([x == "text" for x in self.category.values()])
+            ):
                 import transformers
 
-                model_key = nbox_meta["spec"]["model_key"].split("::")[0].split("transformers/")[-1]
+                model_key = (
+                    nbox_meta["spec"]["model_key"]
+                    .split("::")[0]
+                    .split("transformers/")[-1]
+                )
                 tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
                 max_len = self.templates["input_ids"][-1]
 
-            self.image_parser = ImageParser(cloud_infer=True, post_proc_fn=lambda x: x.tolist(), templates=self.templates)
-            self.text_parser = TextParser(tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist())
+            self.image_parser = ImageParser(
+                cloud_infer=True,
+                post_proc_fn=lambda x: x.tolist(),
+                templates=self.templates,
+            )
+            self.text_parser = TextParser(
+                tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist()
+            )
 
         # <class 'sklearn.ensemble._forest.RandomForestClassifier'>
         elif "sklearn" in str(type(model_or_model_url)):
             self.__framework = "sk"
 
         else:
-            assert isinstance(model_or_model_url, torch.nn.Module), "model_or_model_url must be a torch.nn.Module "
+            assert isinstance(
+                model_or_model_url, torch.nn.Module
+            ), "model_or_model_url must be a torch.nn.Module "
             self.__framework = "pt"
-            assert self.category is not None, "Category for inputs must be provided, when loading model manually"
+            assert (
+                self.category is not None
+            ), "Category for inputs must be provided, when loading model manually"
 
             self.category = category
             self.model_key = model_key
-            self.model_meta = model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
+            self.model_meta = (
+                model_meta  # this is a big dictionary (~ same) as TF-Serving metadata
+            )
 
             # initialise all the parsers
-            self.image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
-            self.text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int())
+            self.image_parser = ImageParser(
+                post_proc_fn=lambda x: torch.from_numpy(x).float()
+            )
+            self.text_parser = TextParser(
+                tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int()
+            )
 
             if isinstance(self.category, dict):
                 assert all([v in ["image", "text"] for v in self.category.values()])
             else:
                 if self.category not in ["image", "text"]:
-                    raise ValueError(f"Category: {self.category} is not supported yet. Raise a PR!")
+                    raise ValueError(
+                        f"Category: {self.category} is not supported yet. Raise a PR!"
+                    )
 
             if self.category == "text":
                 assert tokenizer != None, "tokenizer cannot be none for a text model!"
@@ -149,12 +188,17 @@ class Model:
         """When this is on NBX-Deploy cloud, fetch the metadata from the deployment node."""
         self.console.start("Getting model metadata")
         URL = secret.get("nbx_url")
-        r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={self.model_or_model_url}&key={self.nbx_api_key}")
+        r = requests.get(
+            f"{URL}/api/model/get_model_meta",
+            params=f"url={self.model_or_model_url}&key={self.nbx_api_key}",
+        )
         try:
             r.raise_for_status()
         except Exception as e:
             self.console.stop(e)
-            raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
+            raise ValueError(
+                f"Could not fetch metadata, please check status: {r.status_code}"
+            )
 
         # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
         content = json.loads(r.content)["meta"]
@@ -200,7 +244,9 @@ class Model:
             return input_object
 
         if isinstance(self.category, dict):
-            assert isinstance(input_object, dict), "If category is a dict then input must be a dict"
+            assert isinstance(
+                input_object, dict
+            ), "If category is a dict then input must be a dict"
             # check for same keys
             assert set(input_object.keys()) == set(self.category.keys())
             input_dict = {}
@@ -264,12 +310,20 @@ class Model:
             json = {"inputs": model_input}
             if "export_type" in self.nbox_meta["spec"]:
                 json["method"] = method
-            r = requests.post(self.model_url + f"{_p}predict", json=json, headers={"NBX-KEY": self.nbx_api_key})
+            r = requests.post(
+                self.model_url + f"{_p}predict",
+                json=json,
+                headers={"NBX-KEY": self.nbx_api_key},
+            )
             et = time() - st
 
             try:
                 r.raise_for_status()
-                secret.update_ocd(self.model_url, len(r.content), len(r.request.body if r.request.body else []))
+                secret.update_ocd(
+                    self.model_url,
+                    len(r.content),
+                    len(r.request.body if r.request.body else []),
+                )
                 out = r.json()
 
                 # first try outputs is a key and we can just get the structure from the list
@@ -278,7 +332,9 @@ class Model:
                 elif isinstance(out["outputs"], list):
                     out = np.array(out["outputs"])
                 else:
-                    raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
+                    raise ValueError(
+                        f"Outputs must be a dict or list, got {type(out['outputs'])}"
+                    )
                 self.console.stop(f"Took {et:.3f} seconds!")
             except Exception as e:
                 self.console.stop(f"Failed: {str(e)} | {r.content}")
@@ -286,13 +342,19 @@ class Model:
         elif self.__framework == "sk":
             # if str(type(self.model_or_model_url)).startswith("sklearn.neighbors"):
             #     out = self.model_or_model_url.kneighbors
-            method = getattr(self.model_or_model_url, "predict") if method == None else getattr(self.model_or_model_url, method)
+            method = (
+                getattr(self.model_or_model_url, "predict")
+                if method == None
+                else getattr(self.model_or_model_url, method)
+            )
             out = method(model_input)
 
         elif self.__framework == "pt":
             with torch.no_grad():
                 if isinstance(model_input, dict):
-                    model_input = {k: v.to(self.__device) for k, v in model_input.items()}
+                    model_input = {
+                        k: v.to(self.__device) for k, v in model_input.items()
+                    }
                     out = self.model_or_model_url(**model_input)
                 else:
                     assert isinstance(model_input, torch.Tensor)
@@ -307,7 +369,11 @@ class Model:
                 # elif isinstance(out, dict):
                 #     out = {k: v.to("cpu") for k, v in out.items()}
 
-            if self.model_meta is not None and self.model_meta.get("metadata", False) and self.model_meta["metadata"].get("outputs", False):
+            if (
+                self.model_meta is not None
+                and self.model_meta.get("metadata", False)
+                and self.model_meta["metadata"].get("outputs", False)
+            ):
                 outputs = self.model_meta["metadata"]["outputs"]
                 if not isinstance(out, torch.Tensor):
                     assert len(outputs) == len(out)
@@ -361,13 +427,22 @@ class Model:
                 output_names = tuple(mo.keys())
                 output_shapes = tuple([tuple(v.shape) for k, v in mo.items()])
             else:
-                output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
+                output_names = tuple(
+                    [f"output_{i}" for i, x in enumerate(model_output)]
+                )
                 output_shapes = tuple([tuple(v.shape) for v in model_output])
         elif isinstance(model_output, (torch.Tensor, np.ndarray)):
             output_names = tuple(["output_0"])
             output_shapes = (tuple(model_output.shape),)
 
-        meta = get_meta(input_names, input_shapes, model_inputs, output_names, output_shapes, model_output)
+        meta = get_meta(
+            input_names,
+            input_shapes,
+            model_inputs,
+            output_names,
+            output_shapes,
+            model_output,
+        )
         out = {
             "args": model_inputs,
             "outputs": model_output,
@@ -379,7 +454,14 @@ class Model:
         }
         return meta, out
 
-    def export(self, input_object, export_type="onnx", model_name=None, cache_dir=None, return_convert_args=False):
+    def export(
+        self,
+        input_object,
+        export_type="onnx",
+        model_name=None,
+        cache_dir=None,
+        return_convert_args=False,
+    ):
         """Export the model to a particular kind of DAG (ie. like onnx, torchscript, etc.)
 
         Raises appropriate assertion errors for strict checking of inputs
@@ -402,8 +484,14 @@ class Model:
         """
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
-            assert self.__framework != "nbx", "This model is already deployed on the cloud"
-            assert export_type in ["onnx", "torchscript", "pkl"], "Export type must be onnx, torchscript or pickle"
+            assert (
+                self.__framework != "nbx"
+            ), "This model is already deployed on the cloud"
+            assert export_type in [
+                "onnx",
+                "torchscript",
+                "pkl",
+            ], "Export type must be onnx, torchscript or pickle"
             if self.__framework == "sk":
                 assert export_type in ["onnx", "pkl"], "Export type must be onnx or pkl"
 
@@ -412,7 +500,11 @@ class Model:
 
         nbox_meta, export_kwargs = self.get_nbox_meta(input_object)
         _m_hash = utils.hash_(self.model_key)
-        model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+        model_name = (
+            model_name
+            if model_name is not None
+            else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
+        )
 
         # intialise the console logger
         console = utils.Console()
@@ -433,13 +525,21 @@ class Model:
         export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
 
         # load the required framework and the export method
-        export_fn = getattr(globals()[f"frm_{self.__framework}"], f"export_to_{export_type}", None)
+        export_fn = getattr(
+            globals()[f"frm_{self.__framework}"], f"export_to_{export_type}", None
+        )
         if export_fn == None:
-            raise KeyError(f"Export type {export_type} not supported for {self.__framework}")
+            raise KeyError(
+                f"Export type {export_type} not supported for {self.__framework}"
+            )
         export_model_path += f".{export_type}"
 
         console.start(f"Converting using: {export_fn}")
-        export_fn(model=self.model_or_model_url, export_model_path=export_model_path, **export_kwargs)
+        export_fn(
+            model=self.model_or_model_url,
+            export_model_path=export_model_path,
+            **export_kwargs,
+        )
         console.stop("Conversion Complete")
         console._log("nbox_meta:", nbox_meta)
 
@@ -448,22 +548,42 @@ class Model:
         if return_convert_args:
             # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
             input_ = ",".join(export_kwargs["input_names"])
-            input_shape = ",".join([str(list(x.shape)).replace(" ", "") for x in export_kwargs["args"]])
-            convert_args = f"--data_type=FP32 --input_shape={input_shape} --input={input_} "
+            input_shape = ",".join(
+                [str(list(x.shape)).replace(" ", "") for x in export_kwargs["args"]]
+            )
+            convert_args = (
+                f"--data_type=FP32 --input_shape={input_shape} --input={input_} "
+            )
 
             if self.category == "image":
                 # mean and scale have to be defined for every single input
                 # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
-                mean_values = ",".join([f"{name}[182,178,172]" for name in export_kwargs["input_names"]])
-                scale_values = ",".join([f"{name}[28,27,27]" for name in export_kwargs["input_names"]])
-                convert_args += f"--mean_values={mean_values} --scale_values={scale_values}"
+                mean_values = ",".join(
+                    [f"{name}[182,178,172]" for name in export_kwargs["input_names"]]
+                )
+                scale_values = ",".join(
+                    [f"{name}[28,27,27]" for name in export_kwargs["input_names"]]
+                )
+                convert_args += (
+                    f"--mean_values={mean_values} --scale_values={scale_values}"
+                )
 
             console._log(convert_args)
             fn_out = fn_out + [convert_args]
 
         return fn_out
 
-    def deploy(self, input_object, model_name=None, cache_dir=None, wait_for_deployment=False, runtime="onnx", deployment_type="nbox"):
+    def deploy(
+        self,
+        input_object,
+        model_name=None,
+        cache_dir=None,
+        wait_for_deployment=False,
+        runtime="onnx",
+        deployment_type="nbox",
+        deployment_id=None,
+        deployment_name=None,
+    ):
         """NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
 
         This deploys the current model onto our managed K8s clusters. This tight product service integration
@@ -481,17 +601,30 @@ class Model:
         """
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
-            assert self.__framework != "nbx", "This model is already deployed on the cloud"
-            assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
+            assert (
+                self.__framework != "nbx"
+            ), "This model is already deployed on the cloud"
+            assert deployment_type in [
+                "ovms2",
+                "nbox",
+            ], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
             if self.__framework == "sk":
-                assert deployment_type == "nbox", "Only ONNX Runtime is supported for scikit-learn Framework"
-            assert runtime in ["onnx", "torchscript", "pkl"], "Runtime must be onnx, torchscript or pkl"
+                assert (
+                    deployment_type == "nbox"
+                ), "Only ONNX Runtime is supported for scikit-learn Framework"
+            assert runtime in [
+                "onnx",
+                "torchscript",
+                "pkl",
+            ], "Runtime must be onnx, torchscript or pkl"
 
         # perform sanity checks on the input values
         __check_conditionals()
 
         # user will always have to pass the input_object
-        runtime = "onnx" if deployment_type == "ovms2" else runtime  # force convert to onnx if ovms2
+        runtime = (
+            "onnx" if deployment_type == "ovms2" else runtime
+        )  # force convert to onnx if ovms2
         export_model_path, model_name, nbox_meta, convert_args = self.export(
             input_object, runtime, model_name, cache_dir, return_convert_args=True
         )
@@ -504,6 +637,8 @@ class Model:
             model_name=model_name,
             wait_for_deployment=wait_for_deployment,
             convert_args=convert_args,
+            deployment_id=deployment_id,
+            deployment_name=deployment_name,
         )
 
         if out != None:
