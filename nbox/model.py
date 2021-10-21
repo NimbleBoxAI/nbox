@@ -226,7 +226,7 @@ class Model:
         # Code below this part is super buggy and is useful for sklearn model,
         # please improve this as more usecases come up
         elif self.category == None and isinstance(input_object, np.ndarray):
-            # this has to be handled better -> to be fixed till 0.2.1
+            # this has to be handled better -> to be fixed till 0.3.0
             return input_object.tolist()
 
         # when user gives a list as an input, it's better just to pass it as is

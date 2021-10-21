@@ -11,9 +11,9 @@ def get_access_token(nbx_home_url, username, password=None):
     console = Console()
     console.start("Getting access tokens ...")
     try:
-        r = requests.post(url=f"{nbx_home_url}/api/login", json={"username": username, "password": password})
+        r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
     except Exception as e:
-        raise Exception(f"Could not connect to NBX. You cannot use any cloud based tool!")
+        raise Exception(f"Could not connect to NBX | {str(e)}")
 
     if r.status_code == 401:
         console.stop("Invalid username/password")
@@ -34,7 +34,7 @@ def create_secret_file(username, access_token, nbx_url):
     os.makedirs(folder, exist_ok=True)
     fp = join(folder, "secrets.json")
     with open(fp, "w") as f:
-        f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}))
+        f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}, indent=2))
 
 
 class Secrets:
@@ -135,7 +135,9 @@ class Secrets:
 
 def reinit_secret():
     global secret
+    print("ASDFASDFASDFASDFASDFASDFASDFASDFASDFASDF", secret)
     secret = Secrets()
+    print("----------------------------------------", secret)
 
 
 if os.getenv("NBX_AUTH", False):

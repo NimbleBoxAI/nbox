@@ -1,7 +1,7 @@
 import os
 import json
 
-from nbox.utils import join
+from nbox.utils import get_random_name
 from nbox.network import one_click_deploy
 from nbox.user import get_access_token, create_secret_file, reinit_secret
 
@@ -19,14 +19,15 @@ def deploy(
     password: str = None,
     nbx_home_url="https://nimblebox.ai",
 ):
-    """Deploy a model from nbox CLI. Add this to your actions and see the magic happen!
+    r"""Deploy a model from nbox CLI. Add this to your actions and see the magic happen!
     If you are using a config file then data will be loaded from there and other kwargs will be ignored.
 
     Args:
         config_path (str, optional): path to your config file, if provided, everything else is ignored
         model_path (str, optional): path to your model
         model_name (str, optional): name of your model
-        nbox_meta ([str, dict], optional): path to your nbox_meta json file or can be a dict if using config_path
+        nbox_meta ([str, dict], optional): path to your nbox_meta json file, if None tries to find by replacing
+          ``model_path`` extension with ``.json`` or can be a dict if using ``config_path``
         deployment_type (str, optional): type of deployment, can be one of: ovms2, nbox
         convert_args (str, optional): if using ovms2 deployment type, you must pass convertion CLI args
         wait_for_deployment (bool, optional): wait for deployment to finish, if False this behaves async
@@ -43,7 +44,9 @@ def deploy(
         AssertionError: if model path is not found or ``nbox_meta`` is incorrect
         Exception: if ``deployment_type == "ovms2"`` but ``convert_args`` is not provided
     """
-    if not os.path.exists(join(os.path.expanduser("~"), ".nbx", "secrets.json")):
+    from nbox.user import secret  # it can refresh so add it in the method
+
+    if secret is None or secret.get("access_token", None) == None:
         # if secrets file is not found
         assert username != None and password != None, "secrets.json not found need to provide username password for auth"
         access_token = get_access_token(nbx_home_url, username, password)
@@ -85,6 +88,7 @@ def deploy(
             )
 
         # one click deploy
+        model_name = get_random_name().replace("-", "_") if model_name == None else model_name
         endpoint, key = one_click_deploy(model_path, deployment_type, nbox_meta, model_name, wait_for_deployment, convert_args)
 
         # print to logs if needed
