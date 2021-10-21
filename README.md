@@ -1,5 +1,7 @@
 # Nbox
 
+`master` code is working, pypi `nbox` is breaking.
+
 A library that makes using a host of models provided by the opensource community a lot more easier. 
 
 > The entire purpose of this package is to make using models 🥶.

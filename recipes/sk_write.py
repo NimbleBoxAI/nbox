@@ -45,7 +45,7 @@ hr()
 
 # We are using `nbox` as the server type and `onnx` as the runtime
 # read more: https://nimbleboxai.github.io/nbox/nbox.model.html
-url, key = model.deploy(X, wait_for_deployment=True, runtime="pkl", deployment_type="nbox")
+url, key = model.deploy(X, wait_for_deployment=True, runtime="onnx", deployment_type="nbox")
 
 # In RandomForest there are 3 different methods of forward pass that can be used
 # predict(X):          Predict class for X.

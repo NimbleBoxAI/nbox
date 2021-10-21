@@ -3,6 +3,7 @@
 import os
 import json
 import requests
+import inspect
 from time import time
 from pprint import pprint as pp
 
@@ -14,8 +15,7 @@ from nbox.utils import Console
 from nbox.parsers import ImageParser, TextParser
 from nbox.network import one_click_deploy
 from nbox.user import secret
-from nbox.framework import get_meta
-from nbox.framework import pytorch as frm_pytorch, sklearn as frm_sk
+from nbox.framework import get_meta, pytorch as frm_pt, sklearn as frm_sk
 
 
 class Model:
@@ -329,6 +329,11 @@ class Model:
         if self.__framework == "nbx":
             return self.nbox_meta
 
+        args = None
+        if self.__framework == "pt":
+            args = inspect.getfullargspec(self.model_or_model_url.forward).args
+            args.remove("self")
+
         self.eval()  # covert to eval mode
         model_output, model_input = self(input_object, return_inputs=True)
 
@@ -346,7 +351,7 @@ class Model:
             input_shapes = tuple([tuple(v.shape) for k, v in model_input.items()])
         elif isinstance(model_input, (torch.Tensor, np.ndarray)):
             model_inputs = tuple([model_input])
-            input_names = tuple(["input_0"])
+            input_names = tuple(["input_0"]) if args is None else tuple(args)
             input_shapes = tuple([tuple(model_input.shape)])
         dynamic_axes = {i: dynamic_axes_dict for i in input_names}
 
@@ -405,7 +410,9 @@ class Model:
             assert self.__framework != "nbx", "This model is already deployed on the cloud"
             assert export_type in ["onnx", "torchscript", "pkl"], "Export type must be onnx, torchscript or pickle"
             if self.__framework == "sk":
-                assert export_type in ["onnx", "pkl"], "Export type must be onnx or pkl"
+                assert export_type in ["onnx", "pkl"], f"Export type must be onnx or pkl | got {export_type}"
+            if self.__framework == "pt":
+                assert export_type in ["onnx", "torchscript"], f"Export type must be onnx or torchscript | got {export_type}"
 
         # perform sanity checks on the input values
         __check_conditionals()
@@ -417,7 +424,8 @@ class Model:
         # intialise the console logger
         console = utils.Console()
         console.rule(f"Exporting {model_name}")
-        cache_dir = "/tmp" if self.cache_dir is None else self.cache_dir
+        cache_dir = cache_dir if cache_dir else self.cache_dir
+        cache_dir = cache_dir if cache_dir else "/tmp"
 
         # convert the model -> create a the spec, get the actual method for conversion
         console(f"model_name: {model_name}")
@@ -430,7 +438,7 @@ class Model:
             "export_type": export_type,
         }
         nbox_meta = {"metadata": nbox_meta, "spec": spec}
-        export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
+        export_model_path = os.path.abspath(utils.join(cache_dir, model_name))
 
         # load the required framework and the export method
         export_fn = getattr(globals()[f"frm_{self.__framework}"], f"export_to_{export_type}", None)
@@ -485,7 +493,6 @@ class Model:
             assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
             if self.__framework == "sk":
                 assert deployment_type == "nbox", "Only ONNX Runtime is supported for scikit-learn Framework"
-            assert runtime in ["onnx", "torchscript", "pkl"], "Runtime must be onnx, torchscript or pkl"
 
         # perform sanity checks on the input values
         __check_conditionals()
@@ -497,14 +504,5 @@ class Model:
         )
 
         # OCD baby!
-        out = one_click_deploy(
-            export_model_path=export_model_path,
-            deployment_type=deployment_type,
-            nbox_meta=nbox_meta,
-            model_name=model_name,
-            wait_for_deployment=wait_for_deployment,
-            convert_args=convert_args,
-        )
-
-        if out != None:
-            return out
+        out = one_click_deploy(export_model_path, deployment_type, nbox_meta, model_name, wait_for_deployment, convert_args)
+        return out

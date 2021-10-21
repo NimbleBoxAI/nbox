@@ -35,13 +35,14 @@ class NboxModelTest(unittest.TestCase):
         image = os.path.join(utils.folder(__file__), "assets/cat.jpg")
         model = get_model_nbox("torchvision/resnet18")
         meta, _ = model.get_nbox_meta(image)
+        print(meta)
         self.assertEqual(
             meta,
             {
                 "inputs": {
-                    "input_0": {
+                    "x": {
                         "dtype": "torch.float32",
-                        "name": "input_0",
+                        "name": "x",
                         "tensorShape": {
                             "dim": [
                                 {"name": "", "size": 1},

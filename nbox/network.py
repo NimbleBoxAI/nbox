@@ -88,6 +88,10 @@ def one_click_deploy(
     total_retries = 0  # number of hits it took
     model_data_access_key = None  # this key is used for calling the model
     console._log(f"Check your deployment at {URL}/oneclick")
+    if not wait_for_deployment:
+        console.rule("NBX Deploy")
+        return endpoint, model_data_access_key
+
     console.start("Start Polling ...")
     while True:
         total_retries += 1
