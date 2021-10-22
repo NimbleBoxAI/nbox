@@ -1,4 +1,4 @@
-<img src="./assets/built_at_nbx.svg" align="right">
+<a href="https://nimblebox.ai/"><img src="./assets/built_at_nbx.svg" align="right"></a>
 
 # Nbox
 
