@@ -1,5 +1,7 @@
 # Nbox
 
+<img src="./assets/built_at_nbx.svg" align="right">
+
 `master` code is working, pypi `nbox` is breaking.
 
 A library that makes using a host of models provided by the opensource community a lot more easier. 

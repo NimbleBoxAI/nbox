@@ -504,5 +504,5 @@ class Model:
         )
 
         # OCD baby!
-        out = one_click_deploy(export_model_path, deployment_type, nbox_meta, model_name, wait_for_deployment, convert_args)
+        out = one_click_deploy(export_model_path, model_name, deployment_type, nbox_meta, wait_for_deployment, convert_args)
         return out
