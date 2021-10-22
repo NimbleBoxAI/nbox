@@ -1,6 +1,6 @@
-# Nbox
-
 <img src="./assets/built_at_nbx.svg" align="right">
+
+# Nbox
 
 `master` code is working, pypi `nbox` is breaking.
 
