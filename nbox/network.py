@@ -72,9 +72,7 @@ def one_click_deploy(
             "file_type": export_model_path.split(".")[-1],
             "model_name": model_name,
             "convert_args": convert_args,
-            "nbox_meta": json.dumps(
-                nbox_meta
-            ),  # annoying, but otherwise only the first key would be sent
+            "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
             "deployment_type": deployment_type,  # "nbox" or "ovms2"
             "deployment_id": deployment_id,
             "deployment_name": deployment_name,
@@ -94,11 +92,7 @@ def one_click_deploy(
 
     # upload the file to a S3 -> don't raise for status here
     console.start("Uploading model to S3 ...")
-    r = requests.post(
-        url=out["url"],
-        data=out["fields"],
-        files={"file": (out["fields"]["key"], open(export_model_path, "rb"))},
-    )
+    r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(export_model_path, "rb"))})
     console.stop(f"Upload to S3 complete")
 
     # checking if file is successfully uploaded on S3 and tell webserver
@@ -106,11 +100,7 @@ def one_click_deploy(
     console.start("Verifying upload ...")
     requests.post(
         url=f"{URL}/api/model/update_model_status",
-        json={
-            "upload": True if r.status_code == 204 else False,
-            "model_id": model_id,
-            "deployment_id": deployment_id,
-        },
+        json={"upload": True if r.status_code == 204 else False, "model_id": model_id, "deployment_id": deployment_id},
         headers={"Authorization": f"Bearer {access_token}"},
     )
     console.stop("Webserver informed")
@@ -148,9 +138,7 @@ def one_click_deploy(
             updates = r.json()
         except:
             peepee(r.content)
-            raise NBXAPIError(
-                "This should not happen, please raise an issue at https://github.com/NimbleBoxAI/nbox/issues with above log!"
-            )
+            raise NBXAPIError("This should not happen, please raise an issue at https://github.com/NimbleBoxAI/nbox/issues with above log!")
 
         # go over all the status updates and check if the deployment is done
         for st in updates["model_history"]:
@@ -159,12 +147,9 @@ def one_click_deploy(
                 continue
 
             # only when this is a new status
-            col = {
-                "failed": console.T.fail,
-                "in-progress": console.T.inp,
-                "success": console.T.st,
-                "ready": console.T.st,
-            }[curr_st.split(".")[-1]]
+            col = {"failed": console.T.fail, "in-progress": console.T.inp, "success": console.T.st, "ready": console.T.st}[
+                curr_st.split(".")[-1]
+            ]
             console._log(f"Status: [{col}]{curr_st}")
             _stat_done.append(curr_st)
 
@@ -177,14 +162,10 @@ def one_click_deploy(
                     if wait_for_deployment:
                         continue
                     console._log("Deployment in progress ...")
-                    console._log(
-                        f"Endpoint to be setup, please check status at: {URL}/oneclick"
-                    )
+                    console._log(f"Endpoint to be setup, please check status at: {URL}/oneclick")
                     break
 
-                console._log(
-                    f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}"
-                )
+                console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
 
                 r = requests.get(
                     url=f"{URL}/api/model/get_model_access_key",
@@ -197,17 +178,11 @@ def one_click_deploy(
                     console._log(f"nbx-key: {model_data_access_key}")
                 except:
                     pp(r.content.decode("utf-8"))
-                    raise ValueError(
-                        f"Failed to get model_data_access_key, please check status at: {URL}/oneclick"
-                    )
+                    raise ValueError(f"Failed to get model_data_access_key, please check status at: {URL}/oneclick")
 
             # keep hitting /metadata and see if model is ready or not
             r = requests.get(
-                url=f"{endpoint}/metadata",
-                headers={
-                    "NBX-KEY": model_data_access_key,
-                    "Authorization": f"Bearer {access_token}",
-                },
+                url=f"{endpoint}/metadata", headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"}
             )
             if r.status_code == 200:
                 console._log(f"Model is ready")
@@ -218,12 +193,7 @@ def one_click_deploy(
         if model_data_access_key != None or "failed" in curr_st:
             break
 
-    secret.add_ocd(
-        model_id=model_id,
-        url=endpoint,
-        nbox_meta=nbox_meta,
-        access_key=model_data_access_key,
-    )
+    secret.add_ocd(model_id=model_id, url=endpoint, nbox_meta=nbox_meta, access_key=model_data_access_key)
 
     console.stop("Process Complete")
     console.rule("NBX Deploy")
