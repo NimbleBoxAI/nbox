@@ -1,4 +1,8 @@
+<a href="https://nimblebox.ai/" target="_blank"><img src="./assets/built_at_nbx.svg" align="right"></a>
+
 # Nbox
+
+`master` code is working, pypi `nbox` is breaking.
 
 A library that makes using a host of models provided by the opensource community a lot more easier. 
 
