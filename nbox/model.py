@@ -12,7 +12,7 @@ import torch
 
 from nbox import utils
 from nbox.framework import get_meta
-from nbox.framework import pytorch as frm_pytorch
+from nbox.framework import pytorch as frm_pt
 from nbox.framework import sklearn as frm_sk
 from nbox.network import one_click_deploy
 from nbox.parsers import ImageParser, TextParser

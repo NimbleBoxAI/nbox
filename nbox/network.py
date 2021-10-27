@@ -106,7 +106,11 @@ def one_click_deploy(
     console.start("Verifying upload ...")
     requests.post(
         url=f"{URL}/api/model/update_model_status",
-        json={"upload": True if r.status_code == 204 else False, "model_id": model_id},
+        json={
+            "upload": True if r.status_code == 204 else False,
+            "model_id": model_id,
+            "deployment_id": deployment_id,
+        },
         headers={"Authorization": f"Bearer {access_token}"},
     )
     console.stop("Webserver informed")
