@@ -16,7 +16,8 @@ from nbox.parsers import ImageParser, TextParser
 from nbox.network import one_click_deploy
 from nbox.user import secret
 from nbox.framework import get_meta, pytorch as frm_pt, sklearn as frm_sk
-
+from nbox.monitoring import ModelMonitor
+from nbox.monitoring import fit_detector
 
 class Model:
     def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, model_meta=None, verbose=False):
@@ -83,6 +84,7 @@ class Model:
         self.model_key = model_key
         self.model_meta = model_meta
         self.verbose = verbose
+        self.drift_detector = None
 
         # define the console, either it get's used or lays unused, doesn't matter
         self.console = Console()
@@ -189,6 +191,9 @@ class Model:
         """if underlying model has train method, call it"""
         if hasattr(self.model_or_model_url, "train"):
             self.model_or_model_url.train()
+
+    def train_monitor(self, dataloader: torch.utils.data.DataLoader):
+        self.drift_detector = fit_detector(dataloader, self.model_or_model_url)
 
     def __repr__(self):
         return f"<nbox.Model: {self.model_or_model_url} >"
@@ -298,6 +303,9 @@ class Model:
                     assert isinstance(model_input, torch.Tensor)
                     model_input = model_input.to(self.__device)
                     out = self.model_or_model_url(model_input)
+
+                if self.drift_detector:
+                    ModelMonitor(self.drift_detector, self.model_or_model_url[:-1])
 
                 # # bring back to cpu
                 # if isinstance(out, (tuple, list)):
