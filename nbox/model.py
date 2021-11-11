@@ -505,6 +505,12 @@ class Model:
             wait_for_deployment (bool, optional): wait for deployment to complete
             runtime (str, optional): runtime to use for deployment should be one of ``["onnx", "torchscript"]``, default is ``onnx``
             deployment_type (str, optional): deployment type should be one of ``['ovms2', 'nbox']``, default is ``nbox``
+            deployment_id (str, optional): ``deployment_id`` to put this model under, if you do not pass this
+                it will automatically create a new deployment check `platform <https://nimblebox.ai/oneclick>`_
+                for more info or check the logs.
+            deployment_name (str, optional): if ``deployment_id`` is not given and you want to create a new
+                deployment group (ie. webserver will create a new ``deployment_id``) you can tell what name you
+                want, be default it will create a random name.
         """
         # First Step: check the args and see if conditionals are correct or not
         def __check_conditionals():
@@ -535,5 +541,4 @@ class Model:
             deployment_name=deployment_name,
         )
 
-        if out != None:
-            return out
+        return out

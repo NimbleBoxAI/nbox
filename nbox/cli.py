@@ -41,6 +41,11 @@ def deploy(
         Convert each ``kwarg`` to ``--kwarg`` for CLI. eg. if you want to pass value for ``model_path`` \
             in cli it becomes like ``... --model_path="my_model_path" ...``
 
+        .. code-block:: bash
+
+            python3 -m nbox deploy --model_path="path/some/sklearn.pkl" \
+                --nbox_meta="path/to/nbox_meta.json"
+
     Raises:
         ValueError: if ``deployment_type`` is not supported
         AssertionError: if model path is not found or ``nbox_meta`` is incorrect
@@ -68,10 +73,10 @@ def deploy(
         # check if nbox_meta is correct
         if nbox_meta == None:
             nbox_meta = ".".join(model_path.split(".")[:-1]) + ".json"
-            print("Trying to find:", nbox_meta)
+            print("Trying to find nbox meta at path:", nbox_meta)
             assert os.path.exists(nbox_meta), "nbox_meta not provided"
         else:
-            raise ValueError
+            raise ValueError("nbox_meta is not supported yet")
 
         if isinstance(nbox_meta, str):
             if not os.path.exists(nbox_meta):

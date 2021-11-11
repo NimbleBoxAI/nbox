@@ -26,7 +26,7 @@ def one_click_deploy(
 ):
     """One-Click-Deploy method v1 that takes in the torch model, converts to ONNX and then deploys on NBX Platform.
 
-    Avoid using this function manually and use `model.deploy()` instead
+    Avoid using this function manually and use ``model.deploy()`` or nboxCLI instead.
 
     Args:
         export_model_path (str): path to the file to upload
@@ -35,12 +35,18 @@ def one_click_deploy(
         nbox_meta (dict, optional): metadata for the nbox.Model() object being deployed
         wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
         convert_args (str, optional): if deployment type == "ovms2" can pass extra arguments to MO
-        deployment_id (str, optional): ``deployment_id`` to put this model under
+        deployment_id (str, optional): ``deployment_id`` to put this model under, if you do not pass this
+            it will automatically create a new deployment check `platform <https://nimblebox.ai/oneclick>`_
+            for more info or check the logs.
         deployment_name (str, optional): if ``deployment_id`` is not given and you want to create a new
-            deployment group (ie. webserver will create a new ``deployment_id``) you must pass this.
+            deployment group (ie. webserver will create a new ``deployment_id``) you can tell what name you
+            want, be default it will create a random name.
 
     Returns:
-        (str, None): if deployment is successful then push then return the URL endpoint else return None
+        endpoint (str, None): if ``wait_for_deployment == True``, returns the URL endpoint of the deployed
+            model
+        model_data_access_key(str, None): if ``wait_for_deployment == True``, returns the data access key of
+            the deployed model
     """
     from nbox.user import secret  # it can refresh so add it in the method
 
@@ -50,16 +56,21 @@ def one_click_deploy(
     URL = secret.get("nbx_url")
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
 
-    if deployment_id != None and deployment_name != None:
-        raise ValueError("Either provide deployment_id or deployment_name")
-    if deployment_id == None:
-        deployment_name = utils.get_random_name().replace("-", "_")
-
     # intialise the console logger
     console = utils.Console()
     console.rule("NBX Deploy")
     console._log("Deploying on URL:", URL)
     console._log("Deployment Type:", deployment_type)
+    console._log("Deployment ID:", deployment_id)
+
+    if deployment_id != None and deployment_name != None:
+        raise ValueError("Either provide deployment_id or deployment_name")
+    if deployment_id == None:
+        console._log("Deployment ID not passed will create a new deployment with name >>")
+        deployment_name = utils.get_random_name().replace("-", "_")
+
+    console._log("Deployment Name:", deployment_name)
+    console._log("Model Name:", model_name)
     console._log("Model Path:", export_model_path)
     console._log("file_size:", file_size, "MBs")
     console.start("Getting bucket URL")
