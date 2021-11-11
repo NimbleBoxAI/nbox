@@ -4,7 +4,11 @@ QuickStart with Deployment
 
 File: `torch_resnet18.py <https://github.com/NimbleBoxAI/nbox/blob/staging/recipes/torch_resnet18.py>`_
 
-Deployment is a major bottleneck for DS/ML engineers to get their systems into production. Unless any model is in production there really is no way to complete a project. ``nbox`` as an SDK makes deployment just one command, **literally**\ !
+Deployment is a major bottleneck for DS/ML engineers to get their systems into production. Unless any
+model is in production there really is no way to complete a project. ``nbox`` as an SDK makes deployment just one
+command, **literally**\ ! 
+
+.. **NOTE:** ``nan`` is not a valid json-able value so we covert that to ``-1.46290``!
 
 When on our platform, first step is to:
 

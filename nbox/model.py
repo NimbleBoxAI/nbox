@@ -1,21 +1,23 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
-import os
+import inspect
 import json
-import requests
-from time import time
+import os
 from pprint import pprint as pp
+from time import time
 
-import torch
 import numpy as np
+import requests
+import torch
 
 from nbox import utils
-from nbox.utils import Console
-from nbox.parsers import ImageParser, TextParser
-from nbox.network import one_click_deploy
-from nbox.user import secret
 from nbox.framework import get_meta
-from nbox.framework import pytorch as frm_pytorch, sklearn as frm_sk
+from nbox.framework import pytorch as frm_pt
+from nbox.framework import sklearn as frm_sk
+from nbox.network import one_click_deploy
+from nbox.parsers import ImageParser, TextParser
+from nbox.user import secret
+from nbox.utils import Console
 
 
 class Model:
@@ -329,6 +331,11 @@ class Model:
         if self.__framework == "nbx":
             return self.nbox_meta
 
+        args = None
+        if self.__framework == "pt":
+            args = inspect.getfullargspec(self.model_or_model_url.forward).args
+            args.remove("self")
+
         self.eval()  # covert to eval mode
         model_output, model_input = self(input_object, return_inputs=True)
 
@@ -346,7 +353,7 @@ class Model:
             input_shapes = tuple([tuple(v.shape) for k, v in model_input.items()])
         elif isinstance(model_input, (torch.Tensor, np.ndarray)):
             model_inputs = tuple([model_input])
-            input_names = tuple(["input_0"])
+            input_names = tuple(["input_0"]) if args is None else tuple(args)
             input_shapes = tuple([tuple(model_input.shape)])
         dynamic_axes = {i: dynamic_axes_dict for i in input_names}
 
@@ -379,7 +386,14 @@ class Model:
         }
         return meta, out
 
-    def export(self, input_object, export_type="onnx", model_name=None, cache_dir=None, return_convert_args=False):
+    def export(
+        self,
+        input_object,
+        export_type="onnx",
+        model_name=None,
+        cache_dir=None,
+        return_convert_args=False,
+    ):
         """Export the model to a particular kind of DAG (ie. like onnx, torchscript, etc.)
 
         Raises appropriate assertion errors for strict checking of inputs
@@ -405,7 +419,9 @@ class Model:
             assert self.__framework != "nbx", "This model is already deployed on the cloud"
             assert export_type in ["onnx", "torchscript", "pkl"], "Export type must be onnx, torchscript or pickle"
             if self.__framework == "sk":
-                assert export_type in ["onnx", "pkl"], "Export type must be onnx or pkl"
+                assert export_type in ["onnx", "pkl"], f"Export type must be onnx or pkl | got {export_type}"
+            if self.__framework == "pt":
+                assert export_type in ["onnx", "torchscript"], f"Export type must be onnx or torchscript | got {export_type}"
 
         # perform sanity checks on the input values
         __check_conditionals()
@@ -417,7 +433,8 @@ class Model:
         # intialise the console logger
         console = utils.Console()
         console.rule(f"Exporting {model_name}")
-        cache_dir = "/tmp" if self.cache_dir is None else self.cache_dir
+        cache_dir = cache_dir if cache_dir else self.cache_dir
+        cache_dir = cache_dir if cache_dir else "/tmp"
 
         # convert the model -> create a the spec, get the actual method for conversion
         console(f"model_name: {model_name}")
@@ -430,7 +447,7 @@ class Model:
             "export_type": export_type,
         }
         nbox_meta = {"metadata": nbox_meta, "spec": spec}
-        export_model_path = os.path.abspath(utils.join(cache_dir, _m_hash))
+        export_model_path = os.path.abspath(utils.join(cache_dir, model_name))
 
         # load the required framework and the export method
         export_fn = getattr(globals()[f"frm_{self.__framework}"], f"export_to_{export_type}", None)
@@ -463,7 +480,17 @@ class Model:
 
         return fn_out
 
-    def deploy(self, input_object, model_name=None, cache_dir=None, wait_for_deployment=False, runtime="onnx", deployment_type="nbox"):
+    def deploy(
+        self,
+        input_object,
+        model_name=None,
+        cache_dir=None,
+        wait_for_deployment=False,
+        runtime="onnx",
+        deployment_type="nbox",
+        deployment_id=None,
+        deployment_name=None,
+    ):
         """NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
 
         This deploys the current model onto our managed K8s clusters. This tight product service integration
@@ -504,6 +531,8 @@ class Model:
             model_name=model_name,
             wait_for_deployment=wait_for_deployment,
             convert_args=convert_args,
+            deployment_id=deployment_id,
+            deployment_name=deployment_name,
         )
 
         if out != None:

@@ -169,7 +169,7 @@ def load(model_key_or_url, nbx_api_key=None, verbose=False, **loader_kwargs):
             #. ``registry``: key for which to load the model, the structure looks as follows:
 
             .. code-block:: python
-                
+
                 "source/(source/key)::<pre::task::post>"
 
 
