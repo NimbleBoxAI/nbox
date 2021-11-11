@@ -2,7 +2,13 @@
 
 import inspect
 import json
+<<<<<<< HEAD
 import os
+=======
+import requests
+import inspect
+from time import time
+>>>>>>> master
 from pprint import pprint as pp
 from time import time
 
@@ -17,7 +23,11 @@ from nbox.framework import sklearn as frm_sk
 from nbox.network import one_click_deploy
 from nbox.parsers import ImageParser, TextParser
 from nbox.user import secret
+<<<<<<< HEAD
 from nbox.utils import Console
+=======
+from nbox.framework import get_meta, pytorch as frm_pt, sklearn as frm_sk
+>>>>>>> master
 
 
 class Model:
@@ -518,7 +528,6 @@ class Model:
             assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
             if self.__framework == "sk":
                 assert deployment_type == "nbox", "Only ONNX Runtime is supported for scikit-learn Framework"
-            assert runtime in ["onnx", "torchscript", "pkl"], "Runtime must be onnx, torchscript or pkl"
 
         # perform sanity checks on the input values
         __check_conditionals()
