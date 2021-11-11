@@ -96,13 +96,9 @@ def deploy(
 
         # one click deploy
         model_name = get_random_name().replace("-", "_") if model_name == None else model_name
-<<<<<<< HEAD
         endpoint, key = one_click_deploy(
             model_path, model_name, deployment_type, nbox_meta, wait_for_deployment, convert_args, deployment_id, deployment_name
         )
-=======
-        endpoint, key = one_click_deploy(model_path, deployment_type, nbox_meta, model_name, wait_for_deployment, convert_args)
->>>>>>> master
 
         # print to logs if needed
         if wait_for_deployment and print_in_logs:

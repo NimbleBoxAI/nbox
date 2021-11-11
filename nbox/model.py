@@ -2,13 +2,7 @@
 
 import inspect
 import json
-<<<<<<< HEAD
 import os
-=======
-import requests
-import inspect
-from time import time
->>>>>>> master
 from pprint import pprint as pp
 from time import time
 
@@ -23,11 +17,7 @@ from nbox.framework import sklearn as frm_sk
 from nbox.network import one_click_deploy
 from nbox.parsers import ImageParser, TextParser
 from nbox.user import secret
-<<<<<<< HEAD
 from nbox.utils import Console
-=======
-from nbox.framework import get_meta, pytorch as frm_pt, sklearn as frm_sk
->>>>>>> master
 
 
 class Model:
