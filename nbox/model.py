@@ -235,7 +235,7 @@ class Model:
         # but when the input becomes a dict, this might fail.
         return input_object
 
-    def __call__(self, input_object, return_inputs=False, method=None):
+    def __call__(self, input_object, return_inputs=False, method=None, sklearn_args=None):
         r"""This is the most important part of this codebase. The ``input_object`` can be anything from
         a tensor, an image file, filepath as string, string and must be processed automatically by a
         well written ``nbox.parser.BaseParser`` object . This ``__call__`` should understand the different
@@ -286,10 +286,19 @@ class Model:
                 self.console.stop(f"Failed: {str(e)} | {r.content}")
 
         elif self.__framework == "sk":
-            # if str(type(self.model_or_model_url)).startswith("sklearn.neighbors"):
-            #     out = self.model_or_model_url.kneighbors
-            method = getattr(self.model_or_model_url, "predict") if method == None else getattr(self.model_or_model_url, method)
-            out = method(model_input)
+            if "sklearn.neighbors.NearestNeighbors" in str(type(self.model_or_model_url)):
+                method = getattr(self.model_or_model_url,"kneighbors") if method == None else getattr(self.model_or_model_url,method)
+                out = method(model_input,**sklearn_args)
+            elif "sklearn.cluster" in str(type(self.model_or_model_url)):
+                if any(x in str(type(self.model_or_model_url)) for x in ['AgglomerativeClustering','DBSCAN','OPTICS','SpectralClustering']):
+                    method = getattr(self.model_or_model_url,"fit_predict")
+                    out = method(model_input)
+            else:
+                try:
+                    method = getattr(self.model_or_model_url, "predict") if method == None else getattr(self.model_or_model_url, method)
+                    out = method(model_input)
+                except Exception as  e:
+                    print("[ERROR] Model Prediction Function is not yet registered "+e)
 
         elif self.__framework == "pt":
             with torch.no_grad():
