@@ -159,8 +159,8 @@ class Model:
             raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
 
         # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
-        content = json.loads(r.content)["meta"]
-        nbox_meta = json.loads(content["nbox_meta"])
+        content = json.loads(r.content.decode())["meta"]
+        nbox_meta = content["nbox_meta"]
         category = nbox_meta["spec"]["category"]
 
         all_inputs = nbox_meta["metadata"]["inputs"]

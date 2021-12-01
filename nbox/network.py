@@ -45,7 +45,7 @@ def one_click_deploy(
     Returns:
         endpoint (str, None): if ``wait_for_deployment == True``, returns the URL endpoint of the deployed
             model
-        model_data_access_key(str, None): if ``wait_for_deployment == True``, returns the data access key of
+        access_key(str, None): if ``wait_for_deployment == True``, returns the data access key of
             the deployed model
     """
     from nbox.user import secret  # it can refresh so add it in the method
@@ -120,11 +120,11 @@ def one_click_deploy(
     endpoint = None
     _stat_done = []  # status calls performed
     total_retries = 0  # number of hits it took
-    model_data_access_key = None  # this key is used for calling the model
+    access_key = None  # this key is used for calling the model
     console._log(f"Check your deployment at {URL}/oneclick")
     if not wait_for_deployment:
         console.rule("NBX Deploy")
-        return endpoint, model_data_access_key
+        return endpoint, access_key
 
     console.start("Start Polling ...")
     while True:
@@ -166,7 +166,7 @@ def one_click_deploy(
 
         if curr_st == "deployment.success":
             # if we do not have api key then query web server for it
-            if model_data_access_key is None:
+            if access_key is None:
                 endpoint = updates["model_data"]["api_url"]
 
                 if endpoint is None:
@@ -179,21 +179,21 @@ def one_click_deploy(
                 console._log(f"[{console.T.st}]Deployment successful at URL:\n\t{endpoint}")
 
                 r = requests.get(
-                    url=f"{URL}/api/model/get_model_access_key",
+                    url=f"{URL}/api/model/get_deployment_access_key",
                     headers={"Authorization": f"Bearer {access_token}"},
-                    params={"model_id": model_id},
+                    params={"deployment_id": deployment_id},
                 )
                 try:
                     r.raise_for_status()
-                    model_data_access_key = r.json()["model_data_access_key"]
-                    console._log(f"nbx-key: {model_data_access_key}")
+                    access_key = r.json()["access_key"]
+                    console._log(f"nbx-key: {access_key}")
                 except:
                     pp(r.content.decode("utf-8"))
-                    raise ValueError(f"Failed to get model_data_access_key, please check status at: {URL}/oneclick")
+                    raise ValueError(f"Failed to get access_key, please check status at: {URL}/oneclick")
 
             # keep hitting /metadata and see if model is ready or not
             r = requests.get(
-                url=f"{endpoint}/metadata", headers={"NBX-KEY": model_data_access_key, "Authorization": f"Bearer {access_token}"}
+                url=f"{endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"}
             )
             if r.status_code == 200:
                 console._log(f"Model is ready")
@@ -201,11 +201,11 @@ def one_click_deploy(
 
         # actual break condition happens here: bug in webserver where it does not return ready
         # curr_st == "ready"
-        if model_data_access_key != None or "failed" in curr_st:
+        if access_key != None or "failed" in curr_st:
             break
 
-    secret.add_ocd(model_id=model_id, url=endpoint, nbox_meta=nbox_meta, access_key=model_data_access_key)
+    secret.add_ocd(model_id=model_id, url=endpoint, nbox_meta=nbox_meta, access_key=access_key)
 
     console.stop("Process Complete")
     console.rule("NBX Deploy")
-    return endpoint, model_data_access_key
+    return endpoint, access_key
