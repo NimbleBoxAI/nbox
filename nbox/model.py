@@ -21,6 +21,7 @@ from nbox.utils import Console
 
 
 class Model:
+
     def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, model_meta=None, verbose=False):
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
         from ``nbox==0.1.10`` ``nbox.Model`` handles both local and remote models
@@ -101,6 +102,9 @@ class Model:
 
             # when on_cloud, there is no need to load tokenizers, categories, and model_meta
             # this all gets fetched from the deployment node
+            # if "0.0.0.0" in self.model_url or "localhost" in self.model_url or "127.0.0.1" in self.model_url:   
+            #     nbox_meta, category = self.fetch_meta_from_local()
+            # else:
             nbox_meta, category = self.fetch_meta_from_nbx_cloud()
             self.category = category
 
@@ -201,6 +205,21 @@ class Model:
         if self.__framework == "sk":
             return input_object
 
+        elif self.__framework == "nbx":
+            # the beauty is that the server is using the same code as this meaning that client
+            # can get away with really simple API calls
+            inputs_deploy = set(self.nbox_meta["metadata"]["inputs"].keys())
+            if isinstance(input_object, dict):
+                inputs_client = set(input_object.keys())
+                assert inputs_deploy == inputs_client, f"Inputs mismatch, deploy: {inputs_deploy}, client: {inputs_client}"
+                input_object = input_object
+            else:
+                if len(inputs_deploy) == 1:
+                    input_object = {list(inputs_deploy)[0]: input_object}
+                else:
+                    assert len(input_object) == len(inputs_deploy), f"Inputs mismatch, deploy: {inputs_deploy}, client: {len(input_object)}"
+                    input_object = {k: v for k, v in zip(inputs_deploy, input_object)}
+
         if isinstance(self.category, dict):
             assert isinstance(input_object, dict), "If category is a dict then input must be a dict"
             # check for same keys
@@ -227,8 +246,9 @@ class Model:
 
         # Code below this part is super buggy and is useful for sklearn model,
         # please improve this as more usecases come up
-        elif self.category == None and isinstance(input_object, np.ndarray):
-            # this has to be handled better -> to be fixed till 0.3.0
+        elif self.category == None:
+            if isinstance(input_object, dict):
+                return {k:v.tolist() for k,v in input_object.items()}
             return input_object.tolist()
 
         # when user gives a list as an input, it's better just to pass it as is
@@ -268,6 +288,7 @@ class Model:
                 json["method"] = method
             r = requests.post(self.model_url + f"{_p}predict", json=json, headers={"NBX-KEY": self.nbx_api_key})
             et = time() - st
+            out = None
 
             try:
                 r.raise_for_status()
@@ -283,7 +304,7 @@ class Model:
                     raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
                 self.console.stop(f"Took {et:.3f} seconds!")
             except Exception as e:
-                self.console.stop(f"Failed: {str(e)} | {r.content}")
+                self.console.stop(f"Failed: {str(e)} | {r.content.decode()}")
 
         elif self.__framework == "sk":
             if "sklearn.neighbors.NearestNeighbors" in str(type(self.model_or_model_url)):
@@ -448,14 +469,16 @@ class Model:
         # convert the model -> create a the spec, get the actual method for conversion
         console(f"model_name: {model_name}")
         console._log(f"Export type: ", export_type)
-        spec = {
-            "category": self.category,
-            "model_key": self.model_key,
-            "name": model_name,
-            "src_framework": self.__framework,
-            "export_type": export_type,
+        nbox_meta = {
+            "metadata": nbox_meta,
+            "spec": {
+                "category": self.category,
+                "model_key": self.model_key,
+                "name": model_name,
+                "src_framework": self.__framework,
+                "export_type": export_type,
+            }
         }
-        nbox_meta = {"metadata": nbox_meta, "spec": spec}
         export_model_path = os.path.abspath(utils.join(cache_dir, model_name))
 
         # load the required framework and the export method
@@ -536,6 +559,7 @@ class Model:
         export_model_path, model_name, nbox_meta, convert_args = self.export(
             input_object, runtime, model_name, cache_dir, return_convert_args=True
         )
+        nbox_meta["spec"]["deployment_type"] = deployment_type
 
         # OCD baby!
         out = one_click_deploy(
