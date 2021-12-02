@@ -1,9 +1,9 @@
-import os
 import json
+import os
 
-from nbox.utils import get_random_name
 from nbox.network import one_click_deploy
-from nbox.user import get_access_token, create_secret_file, reinit_secret
+from nbox.user import create_secret_file, get_access_token, reinit_secret
+from nbox.utils import get_random_name
 
 
 def deploy(
@@ -12,6 +12,8 @@ def deploy(
     model_name: str = None,
     nbox_meta: str = None,
     deployment_type: str = None,
+    deployment_id: str = None,
+    deployment_name: str = None,
     convert_args: str = None,
     wait_for_deployment: bool = False,
     print_in_logs: bool = False,
@@ -38,6 +40,11 @@ def deploy(
     Usage:
         Convert each ``kwarg`` to ``--kwarg`` for CLI. eg. if you want to pass value for ``model_path`` \
             in cli it becomes like ``... --model_path="my_model_path" ...``
+
+        .. code-block:: bash
+
+            python3 -m nbox deploy --model_path="path/some/sklearn.pkl" \
+                --nbox_meta="path/to/nbox_meta.json"
 
     Raises:
         ValueError: if ``deployment_type`` is not supported
@@ -66,10 +73,10 @@ def deploy(
         # check if nbox_meta is correct
         if nbox_meta == None:
             nbox_meta = ".".join(model_path.split(".")[:-1]) + ".json"
-            print("Trying to find:", nbox_meta)
+            print("Trying to find nbox meta at path:", nbox_meta)
             assert os.path.exists(nbox_meta), "nbox_meta not provided"
         else:
-            raise ValueError
+            raise ValueError("nbox_meta is not supported yet")
 
         if isinstance(nbox_meta, str):
             if not os.path.exists(nbox_meta):
@@ -80,7 +87,7 @@ def deploy(
             assert isinstance(nbox_meta, dict), "nbox_meta must be a dict"
 
         # validation of deployment_type
-        assert deployment_type in ["ovms2", "nbox"], "Deployment type must be one of: ovms2, nbox"
+        assert deployment_type in ("ovms2", "nbox"), "Deployment type must be one of: ovms2, nbox"
         if deployment_type == "ovms2":
             assert convert_args is not None, (
                 "Please provide convert args when using OVMS deployment, "
@@ -89,7 +96,9 @@ def deploy(
 
         # one click deploy
         model_name = get_random_name().replace("-", "_") if model_name == None else model_name
-        endpoint, key = one_click_deploy(model_path, deployment_type, nbox_meta, model_name, wait_for_deployment, convert_args)
+        endpoint, key = one_click_deploy(
+            model_path, model_name, deployment_type, nbox_meta, wait_for_deployment, convert_args, deployment_id, deployment_name
+        )
 
         # print to logs if needed
         if wait_for_deployment and print_in_logs:
