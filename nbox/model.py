@@ -21,7 +21,6 @@ from nbox.utils import Console
 
 
 class Model:
-
     def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, model_meta=None, verbose=False):
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
         from ``nbox==0.1.10`` ``nbox.Model`` handles both local and remote models
@@ -102,7 +101,7 @@ class Model:
 
             # when on_cloud, there is no need to load tokenizers, categories, and model_meta
             # this all gets fetched from the deployment node
-            # if "0.0.0.0" in self.model_url or "localhost" in self.model_url or "127.0.0.1" in self.model_url:   
+            # if "0.0.0.0" in self.model_url or "localhost" in self.model_url or "127.0.0.1" in self.model_url:
             #     nbox_meta, category = self.fetch_meta_from_local()
             # else:
             nbox_meta, category = self.fetch_meta_from_nbx_cloud()
@@ -248,7 +247,7 @@ class Model:
         # please improve this as more usecases come up
         elif self.category == None:
             if isinstance(input_object, dict):
-                return {k:v.tolist() for k,v in input_object.items()}
+                return {k: v.tolist() for k, v in input_object.items()}
             return input_object.tolist()
 
         # when user gives a list as an input, it's better just to pass it as is
@@ -308,18 +307,20 @@ class Model:
 
         elif self.__framework == "sk":
             if "sklearn.neighbors.NearestNeighbors" in str(type(self.model_or_model_url)):
-                method = getattr(self.model_or_model_url,"kneighbors") if method == None else getattr(self.model_or_model_url,method)
-                out = method(model_input,**sklearn_args)
+                method = getattr(self.model_or_model_url, "kneighbors") if method == None else getattr(self.model_or_model_url, method)
+                out = method(model_input, **sklearn_args)
             elif "sklearn.cluster" in str(type(self.model_or_model_url)):
-                if any(x in str(type(self.model_or_model_url)) for x in ['AgglomerativeClustering','DBSCAN','OPTICS','SpectralClustering']):
-                    method = getattr(self.model_or_model_url,"fit_predict")
+                if any(
+                    x in str(type(self.model_or_model_url)) for x in ["AgglomerativeClustering", "DBSCAN", "OPTICS", "SpectralClustering"]
+                ):
+                    method = getattr(self.model_or_model_url, "fit_predict")
                     out = method(model_input)
             else:
                 try:
                     method = getattr(self.model_or_model_url, "predict") if method == None else getattr(self.model_or_model_url, method)
                     out = method(model_input)
-                except Exception as  e:
-                    print("[ERROR] Model Prediction Function is not yet registered "+e)
+                except Exception as e:
+                    print("[ERROR] Model Prediction Function is not yet registered " + e)
 
         elif self.__framework == "pt":
             with torch.no_grad():
@@ -477,7 +478,7 @@ class Model:
                 "name": model_name,
                 "src_framework": self.__framework,
                 "export_type": export_type,
-            }
+            },
         }
         export_model_path = os.path.abspath(utils.join(cache_dir, model_name))
 

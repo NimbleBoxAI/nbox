@@ -192,9 +192,7 @@ def one_click_deploy(
                     raise ValueError(f"Failed to get access_key, please check status at: {URL}/oneclick")
 
             # keep hitting /metadata and see if model is ready or not
-            r = requests.get(
-                url=f"{endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"}
-            )
+            r = requests.get(url=f"{endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})
             if r.status_code == 200:
                 console._log(f"Model is ready")
                 break
