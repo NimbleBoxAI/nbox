@@ -352,9 +352,7 @@ class Model(GenericMixin):
             if set(model_input.keys()) != set(self.input_names):
                 diff = set(model_input.keys()) - set(self.input_names)
                 return f"model_input keys do not match input_name: {diff}"
-
             out = self.model_or_model_url.run(self.output_names, model_input)
-            # out = {k:v for k,v in zip(self.output_names, out)}
 
         # convert to dictionary if needed
         if return_dict:
@@ -362,7 +360,7 @@ class Model(GenericMixin):
             if isinstance(out, (tuple, list)):
                 out = {k: v for k, v in zip(output_names, out)}
             elif isinstance(out, (torch.Tensor, np.ndarray)):
-                out = {k: v for k, v in zip(output_names, [out])}
+                out = {k: v.tolist() for k, v in zip(output_names, [out])}
             elif isinstance(out, dict):
                 pass
             else:
