@@ -1,9 +1,12 @@
 import os
 import json
+import logging
 import requests
 from getpass import getpass
 
 from nbox.utils import join, Console
+
+logger = logging.getLogger(__name__)
 
 
 def get_access_token(nbx_home_url, username, password=None):
@@ -70,7 +73,7 @@ class Secrets:
         else:
             with open(self.fp, "r") as f:
                 self.secrets = json.load(f)
-            print("Successfully loaded secrets!")
+            logger.info("Successfully loaded secrets!")
 
     def __repr__(self):
         return json.dumps(self.secrets, indent=2)

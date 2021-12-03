@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nbox"
-version = "0.2.4"
+version = "0.3.0"
 description = "ML Inference 🥶"
 authors = [
             "NBX Research <research@nimblebox.ai>",

@@ -16,9 +16,15 @@ import logging
 import numpy as np
 import torch
 
-# ----- functions
 
-logging.basicConfig(level="INFO")
+VERSION = "0.3.0"
+
+# ----- functions
+logging.basicConfig(
+    level=logging.INFO,
+    format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+    datefmt="%d-%m-%y/%H:%M:%S",
+)
 
 
 def info(x, *args):
@@ -77,6 +83,19 @@ def get_random_name():
 
 def hash_(item, fn="md5"):
     return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
+
+
+def convert_to_list(x):
+    # recursively convert tensors -> list
+    if isinstance(x, list):
+        return x
+    if isinstance(x, dict):
+        return {k: convert_to_list(v) for k, v in x.items()}
+    elif isinstance(x, (torch.Tensor, np.ndarray)):
+        x = np.nan_to_num(x, -1.42069)
+        return x.tolist()
+    else:
+        raise Exception("Unknown type: {}".format(type(x)))
 
 
 # --- classes

@@ -12,6 +12,10 @@ import torch
 from nbox.model import Model
 from nbox.utils import isthere, fetch
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 model_key_regex = re.compile(r"^(\w+)(\/[\w\/-]+)?(:*[\w+:]+)?$")
 
 # util functions
@@ -122,7 +126,7 @@ all_repos = ["efficientnet_pytorch", "torchvision", "transformers"]
 
 for repo in all_repos:
     if isthere(repo):
-        print(f"Loading pretrained models from {repo}")
+        logger.info(f"Loading pretrained models from {repo}")
         PRETRAINED_MODELS.update(locals()[f"load_{repo}_models"]())
 
 # if there are no pretrained models available, then raise an error
