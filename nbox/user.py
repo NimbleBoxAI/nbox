@@ -4,7 +4,7 @@ import logging
 import requests
 from getpass import getpass
 
-from nbox.utils import join, Console
+from nbox.utils import join, Console, nbox_session
 
 logger = logging.getLogger(__name__)
 
@@ -138,12 +138,12 @@ class Secrets:
 
 def reinit_secret():
     global secret
-    print("ASDFASDFASDFASDFASDFASDFASDFASDFASDFASDF", secret)
     secret = Secrets()
-    print("----------------------------------------", secret)
+    nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 
 
 if os.getenv("NBX_AUTH", False):
     secret = None
 else:
     secret = Secrets()
+    nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})

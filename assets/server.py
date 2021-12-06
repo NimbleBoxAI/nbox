@@ -6,8 +6,12 @@ from pydantic import BaseModel
 from starlette.responses import Response
 from starlette.requests import Request
 
+import nbox
 from nbox.model import Model
-from nbox.utils import VERSION, convert_to_list
+from nbox.utils import convert_to_list
+
+from logging import getLogger
+logger = getLogger(__name__)
 
 fpath = os.getenv("NBOX_MODEL_PATH", None)
 if fpath == None:
@@ -52,7 +56,7 @@ def get_meta(r: Request, response: Response):
         modelSpec={
             "model_path": fpath,
             "source_serving": SERVING_MODE,
-            "nbox_version": VERSION,
+            "nbox_version": nbox.__version__,
         },
         metadata = {
             "signature_def": {
@@ -65,9 +69,7 @@ def get_meta(r: Request, response: Response):
 
 @app.post("/predict", status_code=200, response_model=ModelOutput)
 def predict(r: Request, response: Response, item: ModelInput):
-    # look at the inputs
-    print(">=>=>=> nbox serving request")
-    print("Got input ::", str(item.inputs)[:100])
+    logger.info(f"Got input :: {str(item.inputs)[:100]}")
 
     try:
         output = model(item.inputs, method = item.method, return_dict = True)
@@ -77,16 +79,15 @@ def predict(r: Request, response: Response, item: ModelInput):
 
     if isinstance(output, str):
         response.status_code = 400
-        print(">=>=>=> nbox serving closed")
+        logger.error(output)
         return {"message": output, "time": int(time.time())}
 
     try:
         output = convert_to_list(output)
     except Exception as e:
-        print("convert_to_list failed")
+        logger.error("convert_to_list failed")
         response.status_code = 500
         return {"message": str(e), "time": int(time.time())}
 
-    print(">=>=>=> nbox serving closed")
     response.status_code = 200
     return {"outputs": output, "time": int(time.time())}

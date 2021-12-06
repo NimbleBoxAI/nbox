@@ -16,22 +16,28 @@ import logging
 import numpy as np
 import torch
 
+# since nbox hsa become much bigger than waht 
 
-VERSION = "0.3.0"
-
-# ----- functions
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
     datefmt="%d-%m-%y/%H:%M:%S",
 )
 
+nbox_session = requests.Session()
 
-def info(x, *args):
-    # because logging.info requires formatted strings
-    x = repr(x)
-    x = " ".join([x] + [repr(y) for y in args])
-    logging.info(x)
+def isthere(package: str):
+    import importlib
+
+    spam_spec = importlib.util.find_spec(package)
+    return spam_spec is not None
+
+is_there_pt = isthere("torch")
+is_there_skl = isthere("sklearn")
+
+
+
+# ----- functions
 
 
 def fetch(url):
@@ -64,15 +70,7 @@ def join(x, *args):
     return os.path.join(x, *args)
 
 
-def isthere(package: str):
-    import importlib
 
-    spam_spec = importlib.util.find_spec(package)
-    return spam_spec is not None
-
-
-is_there_pt = isthere("torch")
-is_there_skl = isthere("sklearn")
 
 
 def get_random_name():

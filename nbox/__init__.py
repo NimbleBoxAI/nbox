@@ -1,13 +1,14 @@
-import nbox.utils
-import nbox.model
-import nbox.load
-import nbox.parsers
-import nbox.framework
+from . import utils
+from . import user
+from . import model
+from . import load
+from . import parsers
+from . import framework
+from . import jobs
 
-from nbox.model import Model
-from nbox.load import load, plug, PRETRAINED_MODELS
-from nbox.parsers import ImageParser, TextParser
+from .model import Model
+from .load import load, plug, PRETRAINED_MODELS
+from .parsers import ImageParser, TextParser
+from .jobs import Instance
 
-from nbox.utils import VERSION
-
-__version__ = VERSION
+__version__ = "0.3.0"

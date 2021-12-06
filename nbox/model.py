@@ -44,10 +44,11 @@ class GenericMixin:
         if hasattr(self.model_or_model_url, "train"):
             self.model_or_model_url.train()
 
-
-class Model(GenericMixin):
     def __repr__(self):
         return f"<nbox.Model: {self.model_or_model_url} >"
+
+
+class Model(GenericMixin):
 
     def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, model_meta=None, verbose=False):
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
@@ -348,12 +349,11 @@ class Model(GenericMixin):
             #         out = {k: v.numpy() for k, v in zip(outputs, [out])}
 
         elif self.__framework == "onnx":
-            # print("AAAAA", model_input)
             if set(model_input.keys()) != set(self.input_names):
                 diff = set(model_input.keys()) - set(self.input_names)
                 return f"model_input keys do not match input_name: {diff}"
             out = self.model_or_model_url.run(self.output_names, model_input)
-
+ 
         # convert to dictionary if needed
         if return_dict:
             output_names = list(self.nbox_meta["metadata"]["outputs"].keys())
