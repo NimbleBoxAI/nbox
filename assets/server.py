@@ -57,6 +57,7 @@ def get_meta(r: Request, response: Response):
             "model_path": fpath,
             "source_serving": SERVING_MODE,
             "nbox_version": nbox.__version__,
+            "model_name": model.name,  
         },
         metadata = {
             "signature_def": {

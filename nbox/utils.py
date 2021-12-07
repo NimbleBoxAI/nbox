@@ -5,10 +5,11 @@ import io
 import hashlib
 import requests
 import tempfile
+import randomname
 from PIL import Image
-from time import time, sleep as _sleep
 from datetime import timedelta
 from types import SimpleNamespace
+from time import time, sleep as _sleep
 from rich.console import Console as richConsole
 
 import logging
@@ -70,12 +71,7 @@ def join(x, *args):
     return os.path.join(x, *args)
 
 
-
-
-
 def get_random_name():
-    import randomname
-
     return randomname.generate()
 
 
