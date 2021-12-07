@@ -27,12 +27,17 @@ class Subway():
     return f"<Subway ({self.url})>"
 
   def __getattr__(self, attr):
+    # https://stackoverflow.com/questions/3278077/difference-between-getattr-vs-getattribute
     def wrapper(method = "get", data = None, verbose = False):
       fn = getattr(nbox_session, method)
       url = f"{self.url}/{attr}"
       if verbose:
         logger.info(f"Calling {url}")
-      return fn(url, json = data)
+      r = fn(url, json = data)
+      if verbose:
+        logger.info(r.content.decode())
+      r.raise_for_status() # good when server is good
+      return r.json()
     return wrapper
 
 
@@ -133,8 +138,8 @@ class Instance:
 
     if not self.state == "RUNNING":
       logger.info(f"Starting instance {self.instance_id}")
-      r = self.web_server.start_instance(
-        method = "post",
+      message = self.web_server.start_instance(
+        "post",
         data = {
           "instance_id": self.instance_id,
           "hw":"cpu" if cpu_only else "gpu",
@@ -144,8 +149,7 @@ class Instance:
             "gpuCount": gpu_count,
           }
         }
-      )
-      message = r.json()["msg"]
+      )["msg"]
       if not message == "success":
         raise ValueError(message)
 
@@ -164,9 +168,9 @@ class Instance:
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
     logger.info(f"Opening instance {self.instance_id}")
-    r = self.web_server.open_instance(method = "post", data = {"instance_id":self.instance_id})
-    r.raise_for_status()
-    instance_url = r.json()["base_url"].lstrip("/").rstrip("/")
+    instance_url = self.web_server.open_instance(
+      "post", data = {"instance_id":self.instance_id}
+    )["base_url"].lstrip("/").rstrip("/")
     self.cs_url = f"{self.url}/{instance_url}/server"
 
     # create a subway
@@ -175,42 +179,39 @@ class Instance:
 
     # run a simple test and see if everything is working or not
     logger.info(f"Testing instance {self.instance_id}")
-    r = self.compute_server.test()
-    r.raise_for_status()
-
+    self.compute_server.test()
     self.__opened = True
 
-  def __call__(self, path_or_func):
+  def __call__(self, path_or_func_or_uid):
     if not self.__opened:
       raise ValueError("Instance is not opened, please call .start() first")
 
-    if isinstance(path_or_func, str):
-      if path_or_func not in self.running_scripts:
+    if isinstance(path_or_func_or_uid, str):
+      if path_or_func_or_uid not in self.running_scripts:
         # this script is not running, so we will start it
-        logger.info(f"Running script {path_or_func} on instance {self.instance_id}")
-        r = self.compute_server.run_script(method = "post", data = {"script_path": path_or_func})
-        r.raise_for_status()
-        message = r.json()["msg"]
+        logger.info(f"Running script {path_or_func_or_uid} on instance {self.instance_id}")
+        data = self.compute_server.run_script("post", data = {"script": path_or_func_or_uid})
+        message = data["msg"]
+        self.running_scripts.append(data["uid"])
         if not message == "success":
           raise ValueError(message)
-        self.running_scripts.append(path_or_func)
+        logger.info(f"Script {path_or_func_or_uid} started on instance {self.instance_id} with UID: {data['uid']}")
+        return data["uid"]
       else:
         # we already have this script running, so get the status of this script
-        logger.info(f"Getting status of script {path_or_func} on instance {self.instance_id}")
-        r = self.compute_server.get_script_status(method = "post", data = {"script": path_or_func})
-        message = r.json()["msg"]
-        if not message == "script running":
-          raise ValueError(message)
-        elif "script not running" in message:
-          logger.info(f"Script {path_or_func} on instance {self.instance_id} is either completed or errored out.")
+        logger.info(f"Getting status of script {path_or_func_or_uid} on instance {self.instance_id}")
+        data = self.compute_server.get_script_status("post", data = {"uid": path_or_func_or_uid})
+        if not data["msg"] == "success":
+          raise ValueError(data["msg"])
         else:
-          raise ValueError(message)
+          status = "RUNNING" if data["status"] else "STOPPED" # /ERRORED
+          logger.info(f"Script {path_or_func_or_uid} on instance {self.instance_id} is {status}")
 
-    elif callable(path_or_func):
+    elif callable(path_or_func_or_uid):
       # this is the next generation power of nbox, we can pass a function to run on the instance (CasH step1)
       raise ValueError("callable methods are not supported yet, will be included in the next release")
     else:
-      raise ValueError("path_or_func must be a string or a function")
+      raise ValueError("path_or_func_or_uid must be a string or a function")
 
   def stop(self):
     if self.state == "STOPPED":
@@ -218,8 +219,7 @@ class Instance:
       return
 
     logger.info(f"Stopping instance {self.instance_id}")
-    r = self.web_server.stop_instance(method="post", data = {"instance_id":self.instance_id})
-    message = r.json()["msg"]
+    message = self.web_server.stop_instance("post", data = {"instance_id":self.instance_id})["msg"]
     if not message == "success":
       raise ValueError(message)
 
@@ -239,16 +239,13 @@ class Instance:
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
     
-    r = self.web_server.delete_instance(method = "post", data = {"instance_id":self.instance_id})
-    r.raise_for_status()
-    message = r.json()["msg"]
+    message = self.web_server.delete_instance("post", data = {"instance_id":self.instance_id})["msg"]
     if not message == "success":
       raise ValueError(message)
 
   def update(self):
-    r = self.web_server.get_user_instances(method = "post", data = {"instance_id": self.instance_id})
-    r.raise_for_status()
-    for k,v in r.json().items():
+    out = self.web_server.get_user_instances("post", data = {"instance_id": self.instance_id})
+    for k,v in out.items():
       if k in self.useful_keys:
         setattr(self, k, v)
-    self.data = r.json()
+    self.data = out
