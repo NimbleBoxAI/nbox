@@ -3,6 +3,7 @@
 import os
 import io
 import hashlib
+import warnings
 import requests
 import tempfile
 import randomname
@@ -27,16 +28,27 @@ logging.basicConfig(
 
 nbox_session = requests.Session()
 
-def isthere(package: str):
-    import importlib
+def _isthere(package):
+    try:
+        __import__(package)
+        return True
+    except ImportError:
+        return False
 
-    spam_spec = importlib.util.find_spec(package)
-    return spam_spec is not None
-
-is_there_pt = isthere("torch")
-is_there_skl = isthere("sklearn")
-
-
+def isthere(*packages):
+    def wrapper(fn):
+        def _fn(*args, **kwargs):
+            # since we are lazy evaluating this thing, we are checking when the function
+            # is actually called. This allows checks not to happen during __init__.
+            for package in packages:
+                if not _isthere(package):
+                    # raise a warning, let the modulenotfound exception bubble up
+                    warnings.warn(
+                        f"{package} is not installed, but is required by {fn.__name__}, some functionality may not work"
+                    )
+            return fn(*args, **kwargs)
+        return _fn
+    return wrapper
 
 # ----- functions
 

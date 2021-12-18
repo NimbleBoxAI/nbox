@@ -18,8 +18,8 @@ image = image.resize((244, 244))  # you can skip the following shape if the shap
 url, key = model.deploy(
     input_object=image,  # simply provide the input_object and watch the Terminal
     wait_for_deployment=True,  # this will return the url endpoint and key
-    deployment_type="ovms2",  # this will return the url endpoint and key
-    runtime="torchscript",
+    deployment_type="nbox",  # this will return the url endpoint and key
+    runtime="onnx",
 )
 
 print("url:", url)

@@ -6,7 +6,7 @@ from getpass import getpass
 
 from nbox.utils import join, Console, nbox_session
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("user")
 
 
 def get_access_token(nbx_home_url, username, password=None):

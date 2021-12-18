@@ -10,11 +10,11 @@ from typing import Dict
 import torch
 
 from nbox.model import Model
-from nbox.utils import isthere, fetch
+from nbox.utils import _isthere, fetch
 
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("load")
 
 model_key_regex = re.compile(r"^(\w+)(\/[\w\/-]+)?(:*[\w+:]+)?$")
 
@@ -124,14 +124,14 @@ def load_transformers_models() -> Dict:
 PRETRAINED_MODELS = {}
 all_repos = ["efficientnet_pytorch", "torchvision", "transformers"]
 
+logger.info(f"Loading plugins")
 for repo in all_repos:
-    if isthere(repo):
-        logger.info(f"Loading pretrained models from {repo}")
+    if _isthere(repo):
         PRETRAINED_MODELS.update(locals()[f"load_{repo}_models"]())
 
 # if there are no pretrained models available, then raise an error
 if not PRETRAINED_MODELS:
-    raise ValueError("No pretrained models available. Please install PyTorch or torchvision or transformers to use pretrained models.")
+    logging.warning("No pretrained models available")
 
 # ---- plug your own models and in extension the methods here
 
@@ -144,16 +144,16 @@ def plug(src_name, builder_fn, cataegory):
         src_name (str): name of the source
         builder_fn (func): function to be called to build the model
         cataegory (dict): input categories for the input
-
+d
     Raises:
         ValueError: if src_name is already in the index
     """
     # check if the source is already present
     if src_name in PRETRAINED_MODELS:
-        raise ValueError(f"Source: {src_name} already present in the pretrained models index")
+        logging.warning(f"Source: {src_name} already present in the pretrained models index")
+        return
 
-    # add the source
-    PRETRAINED_MODELS[src_name] = (builder_fn, cataegory)
+    PRETRAINED_MODELS[src_name] = (builder_fn, cataegory) # add the source
 
 
 # ---- load function has to manage everything and return Model object properly initialised

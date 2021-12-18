@@ -6,7 +6,7 @@ from nbox import utils
 
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("parser")
 
 
 # ----- parsers

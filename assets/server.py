@@ -11,7 +11,7 @@ from nbox.model import Model
 from nbox.utils import convert_to_list
 
 from logging import getLogger
-logger = getLogger(__name__)
+logger = getLogger("nbox.serving")
 
 fpath = os.getenv("NBOX_MODEL_PATH", None)
 if fpath == None:
@@ -57,15 +57,9 @@ def get_meta(r: Request, response: Response):
             "model_path": fpath,
             "source_serving": SERVING_MODE,
             "nbox_version": nbox.__version__,
-            "model_name": model.name,  
+            **model.nbox_meta["spec"]
         },
-        metadata = {
-            "signature_def": {
-                "signatureDef": {
-                    "serving_default": model.nbox_meta,
-                }
-            }
-        }
+        metadata = model.nbox_meta["metadata"]
     )
 
 @app.post("/predict", status_code=200, response_model=ModelOutput)

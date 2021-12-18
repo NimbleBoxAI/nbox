@@ -1,4 +1,5 @@
-# this is an absolute overkill for just adding two numbers but we will still do it
+# this is an absolute overkill for just adding two numbers but we will still do it in a functional way
+# using our API wrapped as python
 
 from nbox import Instance
 from pprint import pprint as peepee
