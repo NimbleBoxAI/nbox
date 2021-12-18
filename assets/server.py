@@ -53,7 +53,7 @@ def ping(r: Request, response: Response):
 def get_meta(r: Request, response: Response):
     return dict(
         time=int(time.time()),
-        modelSpec={
+        spec={
             "model_path": fpath,
             "source_serving": SERVING_MODE,
             "nbox_version": nbox.__version__,
