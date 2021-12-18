@@ -711,12 +711,12 @@ class Model(GenericMixin):
 
         nbox_meta["spec"]["deployment_type"] = deployment_type
 
-        # # OCD baby!
-        # return one_click_deploy(
-        #     export_model_path=export_model_path,
-        #     nbox_meta=nbox_meta,
-        #     model_name=model_name,
-        #     wait_for_deployment=wait_for_deployment,
-        #     deployment_id=deployment_id,
-        #     deployment_name=deployment_name,
-        # )
+        # OCD baby!
+        return one_click_deploy(
+            export_model_path=export_model_path,
+            nbox_meta=nbox_meta,
+            model_name=model_name,
+            wait_for_deployment=wait_for_deployment,
+            deployment_id=deployment_id,
+            deployment_name=deployment_name,
+        )
