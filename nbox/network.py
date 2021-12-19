@@ -21,11 +21,8 @@ class NBXAPIError(Exception):
 
 def one_click_deploy(
     export_model_path,
-    model_name,
-    nbox_meta={},
+    nbox_meta,
     wait_for_deployment=False,
-    deployment_id=None,
-    deployment_name=None,
 ):
     """One-Click-Deploy method v1 that takes in the torch model, converts to ONNX and then deploys on NBX Platform.
 
@@ -33,7 +30,6 @@ def one_click_deploy(
 
     Args:
         export_model_path (str): path to the file to upload
-        model_name (str): name of the model to be dislpayed on NBX Platform
         deployment_type (str, optional): type of deployment strategy
         nbox_meta (dict, optional): metadata for the nbox.Model() object being deployed
         wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
@@ -53,6 +49,8 @@ def one_click_deploy(
     """
     from nbox.user import secret  # it can refresh so add it in the method
 
+    pp(nbox_meta)
+
     access_token = secret.get("access_token")
     URL = secret.get("nbx_url")
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
@@ -60,21 +58,22 @@ def one_click_deploy(
     # intialise the console logger
     # console = utils.Console()
     logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
-    logger.info("Deploying on URL:", URL)
-    deployment_type = nbox["spec"]["deployment_type"]
-    logger.info("Deployment Type:", deployment_type)
-    logger.info("Deployment ID:", deployment_id)
+    logger.info(f"Deploying on URL: {URL}")
+    deployment_type = nbox_meta["spec"]["deployment_type"]
+    logger.info(f"Deployment Type: {deployment_type}")
+    deployment_id = nbox_meta["spec"]["deployment_id"]
+    deployment_name = nbox_meta["spec"]["deployment_name"]
+    logger.info(f"Deployment ID: {deployment_id}")
 
-    if deployment_id != None and deployment_name != None:
-        raise ValueError("Either provide deployment_id or deployment_name")
-    if deployment_id == None:
+    if not deployment_id and not deployment_name:
         logger.info("Deployment ID not passed will create a new deployment with name >>")
         deployment_name = utils.get_random_name().replace("-", "_")
 
-    logger.info("Deployment Name:", deployment_name)
-    logger.info("Model Name:", model_name)
-    logger.info("Model Path:", export_model_path)
-    logger.info("file_size:", file_size, "MBs")
+    logger.info(f"Deployment Name: {deployment_name}")
+    model_name = nbox_meta["spec"]["model_name"]
+    logger.info(f"Model Name: {model_name}")
+    logger.info(f"Model Path: {export_model_path}")
+    logger.info(f"file_size: {file_size} MBs")
     logger.info("Getting bucket URL")
 
     # get bucket URL
@@ -99,8 +98,8 @@ def one_click_deploy(
     out = r.json()
     model_id = out["fields"]["x-amz-meta-model_id"]
     deployment_id = out["fields"]["x-amz-meta-deployment_id"]
-    logger.info("model_id:", model_id)
-    logger.info("deployment_id:", deployment_id)
+    logger.info(f"model_id: {model_id}")
+    logger.info(f"deployment_id: {deployment_id}")
 
     # upload the file to a S3 -> don't raise for status here
     logger.info("Uploading model to S3 ...")

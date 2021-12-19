@@ -28,12 +28,13 @@ logging.basicConfig(
 
 nbox_session = requests.Session()
 
-def _isthere(package):
-    try:
-        __import__(package)
-        return True
-    except ImportError:
-        return False
+def _isthere(*packages):
+    for package in packages:
+        try:
+            __import__(package)
+        except Exception:
+            return False
+    return True
 
 def isthere(*packages):
     def wrapper(fn):

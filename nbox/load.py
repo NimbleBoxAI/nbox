@@ -159,18 +159,12 @@ d
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model_key_or_url, nbx_api_key=None, verbose=False, **loader_kwargs):
-    """This function loads the nbox.Model object from the pretrained models index or NimbleBox.ai's cloud infer
-    service.
+def load(model_key_or_url, verbose=False, **loader_kwargs):
+    """This function loads the nbox.Model object from the pretrained models index.
 
     Args:
 
-        model_key_or_url (str, optional): This is the primary key for the loader. It can perform the following:
-
-            #. ``path``: if this is a path to a model file, then it will be loaded. This model should also have a json \
-                file with the same path but with a ``.json`` extension.
-            #. ``url``: if this is a url to a NimbleBox.ai's deployment
-            #. ``registry``: key for which to load the model, the structure looks as follows:
+        registry (str):  key for which to load the model, the structure looks as follows:
 
             .. code-block:: python
 
@@ -191,59 +185,30 @@ def load(model_key_or_url, nbx_api_key=None, verbose=False, **loader_kwargs):
         nbox.Model: when using local inference
         nbox.NBXApi: when using cloud inference
     """
-    # check the model key if it is a file path, then check if
-    if os.path.exists(model_key_or_url):
-        model_path = os.path.abspath(model_key_or_url)
-        model_meta_path = loader_kwargs.pop("model_meta_path", None)
-        if not model_meta_path:
-            model_meta_path = ".".join(model_path.split(".")[:-1] + ["json"])
-        assert os.path.exists(model_meta_path), f"Model meta file not found: {model_meta_path}"
+    # the input key can also contain instructions on how to run a particular models and so
+    model_key_parts = re.findall(model_key_regex, model_key_or_url)
+    if not model_key_parts:
+        raise ValueError(f"Key: {model_key_or_url} incorrect, please check!")
 
-        with open(model_meta_path, "r") as f:
-            model_meta = json.load(f)
-            if isinstance(model_meta, str):
-                model_meta = json.loads(model_meta)
-            spec = model_meta["spec"]
+    # this key is valid, now get it's components
+    src, src_key, model_instr = model_key_parts[0]
+    src_key = src_key.strip("/")  # remove leading and trailing slashes
+    model_instr = model_instr.replace(":", "")  # remove the :
+    model_key = model_key_or_url
 
-        category = spec["category"]
-        tokenizer = None
-        if category == "text":
-            from transformers import AutoTokenizer
+    # print("  model_key:", model_key)
+    # print("        src:", src)
+    # print("    src_key:", src_key)
+    # print("model_instr:", model_instr)
 
-            tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-        model = torch.jit.load(model_path, map_location="cpu")
-        out = Model(model, category=category, tokenizer=tokenizer, model_key=spec["model_key"], model_meta=model_meta, verbose=verbose)
-
-    # if this is a nbx-deployed model
-    elif model_key_or_url.startswith("http"):
-        out = Model(model_or_model_url=model_key_or_url, nbx_api_key=nbx_api_key, verbose=verbose)
-
-    else:
-        # the input key can also contain instructions on how to run a particular models and so
-        model_key_parts = re.findall(model_key_regex, model_key_or_url)
-        if not model_key_parts:
-            raise ValueError(f"Key: {model_key_or_url} incorrect, please check!")
-
-        # this key is valid, now get it's components
-        src, src_key, model_instr = model_key_parts[0]
-        src_key = src_key.strip("/")  # remove leading and trailing slashes
-        model_instr = model_instr.replace(":", "")  # remove the :
-        model_key = model_key_or_url
-
-        # print("  model_key:", model_key)
-        # print("        src:", src)
-        # print("    src_key:", src_key)
-        # print("model_instr:", model_instr)
-
+    model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
+    if model_meta is None:
         model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
         if model_meta is None:
-            model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
-            if model_meta is None:
-                raise IndexError(f"Model: {src} not found")
+            raise IndexError(f"Model: {src} not found")
 
-        # now just load the underlying graph and the model and off you go
-        model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
-        out = Model(model_or_model_url=model, category=model_meta, model_key=model_key, model_meta=None, verbose=verbose, **model_kwargs)
+    # now just load the underlying graph and the model and off you go
+    model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
+    out = Model(model_or_model_url=model, category=model_meta, model_key=model_key, verbose=verbose, **model_kwargs)
 
     return out

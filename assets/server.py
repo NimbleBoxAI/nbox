@@ -31,7 +31,7 @@ class ModelOutput(BaseModel):
 
 class MetadataModel(BaseModel):
     time: int
-    modelSpec: Dict[str, Any]
+    spec: Dict[str, Any]
     metadata: Dict[str, Any]
 
 class PingRespose(BaseModel):

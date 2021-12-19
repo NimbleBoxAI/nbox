@@ -1,5 +1,12 @@
+import time
+
+from functools import lru_cache
+
 import nbox
 from nbox.utils import get_image
+
+from nbox.framework import __pytorch
+print(__pytorch)
 
 # load pretrained model
 model = nbox.load(
@@ -20,12 +27,16 @@ url, key = model.deploy(
     wait_for_deployment=True,  # this will return the url endpoint and key
     deployment_type="nbox",  # this will return the url endpoint and key
     runtime="onnx",
+    deployment_id = "6y5ytoiq"
 )
 
-print("url:", url)
-print("key:", key)
+# url = "https://api.nimblebox.ai/yash_bonde_139/wztfbq3p/"
+# key = "nbxdeploy_cx0p0zLDVjTXTS1sZjkIDaGW9vDbwW612ZPOqZ2F"
 
-# load the model and use it without any difference in API
-model = nbox.load(url, key)
-out = model(image_url)
-print(out[0].topk(5))
+# print("url:", url)
+# print("key:", key)
+
+# # load the model and use it without any difference in API
+# model = nbox.Model(url, key)
+# out = model(image_url)
+# print(out[0].topk(5))
