@@ -11,24 +11,21 @@ logger = logging.getLogger("user")
 
 def get_access_token(nbx_home_url, username, password=None):
     password = getpass("Password: ") if password is None else password
-    console = Console()
-    console.start("Getting access tokens ...")
     try:
         r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
     except Exception as e:
         raise Exception(f"Could not connect to NBX | {str(e)}")
 
     if r.status_code == 401:
-        console.stop("Invalid username/password")
-        print("::" * 20 + " Invalid username/password. Please try again!")
+        logger.error(" Invalid username/password. Please try again!")
         return False
     elif r.status_code == 200:
         access_packet = r.json()
         access_token = access_packet.get("access_token", None)
-        console.stop("Access token obtained")
+        logger.info("Access token obtained")
         return access_token
     else:
-        console.stop(f"Unknown error: {r.status_code}")
+        logger.error(f"Unknown error: {r.content.decode()}")
         raise Exception(f"Unknown error: {r.status_code}")
 
 
@@ -136,13 +133,14 @@ class Secrets:
         self.save()
 
 
-def reinit_secret():
+def init_secret():
     global secret
     secret = Secrets()
     nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 
 
-if os.getenv("NBX_AUTH", False):
+if os.getenv("NBX_NO_AUTH", False):
+    # when user does not want to load the secrets file, it we ignore it
     secret = None
 else:
     secret = Secrets()

@@ -6,7 +6,6 @@ import nbox
 from nbox.utils import get_image
 
 from nbox.framework import __pytorch
-print(__pytorch)
 
 # load pretrained model
 model = nbox.load(
@@ -30,13 +29,10 @@ url, key = model.deploy(
     deployment_id = "6y5ytoiq"
 )
 
-# url = "https://api.nimblebox.ai/yash_bonde_139/wztfbq3p/"
-# key = "nbxdeploy_cx0p0zLDVjTXTS1sZjkIDaGW9vDbwW612ZPOqZ2F"
+print("url:", url)
+print("key:", key)
 
-# print("url:", url)
-# print("key:", key)
-
-# # load the model and use it without any difference in API
-# model = nbox.Model(url, key)
-# out = model(image_url)
-# print(out[0].topk(5))
+# load the model and use it without any difference in API
+model = nbox.Model(url, key)
+out = model(image_url)
+print(out[0].topk(5))

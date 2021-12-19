@@ -2,7 +2,7 @@ import json
 import os
 
 from nbox.network import one_click_deploy
-from nbox.user import create_secret_file, get_access_token, reinit_secret
+from nbox.user import create_secret_file, get_access_token, init_secret
 from nbox.utils import get_random_name
 
 
@@ -58,7 +58,7 @@ def deploy(
         assert username != None and password != None, "secrets.json not found need to provide username password for auth"
         access_token = get_access_token(nbx_home_url, username, password)
         create_secret_file(username, access_token, nbx_home_url)
-        reinit_secret()  # reintialize secret variable as it will be used everywhere
+        init_secret()  # reintialize secret variable as it will be used everywhere
 
     if config_path != None:
         with open(config_path, "r") as f:

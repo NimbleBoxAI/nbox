@@ -126,7 +126,6 @@ class Model(GenericMixin):
         YoCo. Since there is a decidate serialise function, we should have one for deserialisation as well. Use
         ``nbox.Model.desirialise`` to load a serialised model.
         """
-        print(type(model_or_model_url), str(type(model_or_model_url).__module__))
         self.model_or_model_url = model_or_model_url
         self.nbx_api_key = nbx_api_key
         self.verbose = verbose

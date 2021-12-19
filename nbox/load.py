@@ -26,7 +26,6 @@ def remove_kwargs(model_fn, kwargs):
     if kwargs and arg_spec.varkw != None:
         diff = set(kwargs.keys()) - set(arg_spec.args)
         for d in list(diff):
-            warnings.warn(f"Ignoring unknown argument: {d}")
             kwargs.pop(d)
     return kwargs
 

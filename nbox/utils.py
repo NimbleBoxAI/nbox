@@ -44,8 +44,8 @@ def isthere(*packages):
             for package in packages:
                 if not _isthere(package):
                     # raise a warning, let the modulenotfound exception bubble up
-                    warnings.warn(
-                        f"{package} is not installed, but is required by {fn.__name__}, some functionality may not work"
+                    logging.warn(
+                        f"{package} is not installed, but is required by {fn.__module__}, some functionality may not work"
                     )
             return fn(*args, **kwargs)
         return _fn
