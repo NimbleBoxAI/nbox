@@ -674,24 +674,18 @@ class Model(GenericMixin):
         src_framework = nbox_meta["spec"]["src_framework"]
         category = nbox_meta["spec"]["category"]
 
-        if export_type == "onnx":
-            try:
-                model = InferenceSession(model_path)
-            except NameError:
-                raise ValueError(f"{export_type} not supported, are you missing packages?")
-        elif src_framework == "pt":
-            if export_type == "torchscript":
-                try:
+        try:
+            if export_type == "onnx":
+                    model = InferenceSession(model_path)
+            elif src_framework == "pt":
+                if export_type == "torchscript":
                     model = torch.jit.load(model_path, map_location="cpu")
-                except NameError:
-                    raise ValueError(f"{export_type} not supported, are you missing packages?")
-        elif src_framework == "sk":
-            if export_type == "pkl":
-                with open(model_path, "rb") as f:
-                    try:
+            elif src_framework == "sk":
+                if export_type == "pkl":
+                    with open(model_path, "rb") as f:
                         model = joblib.load(f)
-                    except NameError:
-                        raise ValueError(f"{export_type} not supported, are you missing packages?")
+        except NameError:
+            raise ValueError(f"{export_type} not supported, are you missing packages?")
 
         model = cls(model_or_model_url=model, category=category, nbox_meta=nbox_meta, verbose=verbose)
         shutil.rmtree(folder)
