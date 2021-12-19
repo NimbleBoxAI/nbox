@@ -11,4 +11,4 @@ from .load import load, plug, PRETRAINED_MODELS
 from .parsers import ImageParser, TextParser
 from .jobs import Instance
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
