@@ -4,7 +4,7 @@ import logging
 import requests
 from getpass import getpass
 
-from nbox.utils import join, Console, nbox_session
+from .utils import join, nbox_session
 
 logger = logging.getLogger("user")
 

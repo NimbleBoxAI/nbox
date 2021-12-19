@@ -1,16 +1,12 @@
 # singluar loader file for all models in nbox
 
-import os
 import re
 import json
 import inspect
-import warnings
 from typing import Dict
 
-import torch
-
-from nbox.model import Model
-from nbox.utils import _isthere, fetch
+from .model import Model
+from .utils import _isthere, fetch
 
 import logging
 

@@ -1,9 +1,9 @@
 import json
 import os
 
-from nbox.network import one_click_deploy
-from nbox.user import create_secret_file, get_access_token, init_secret
-from nbox.utils import get_random_name
+from .network import one_click_deploy
+from .user import create_secret_file, get_access_token, init_secret
+from .utils import get_random_name
 
 
 def deploy(
@@ -63,6 +63,7 @@ def deploy(
     if config_path != None:
         with open(config_path, "r") as f:
             config = json.load(f)
+        config.pop("config_path", None) # remove recursion
         deploy(**config)
 
     else:

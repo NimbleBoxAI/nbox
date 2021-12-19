@@ -3,7 +3,6 @@
 import os
 import io
 import hashlib
-import warnings
 import requests
 import tempfile
 import randomname
@@ -11,7 +10,6 @@ from PIL import Image
 from datetime import timedelta
 from types import SimpleNamespace
 from time import time, sleep as _sleep
-from rich.console import Console as richConsole
 
 import logging
 

@@ -2,18 +2,14 @@
 
 import json
 import os
-from time import sleep
-from pprint import pp
-
 import requests
+from pprint import pp
+from time import sleep
 
-from nbox import utils
+from . import utils
 
 import logging
-
-import nbox
 logger = logging.getLogger("deploy")
-
 
 class NBXAPIError(Exception):
     pass

@@ -2,10 +2,9 @@ import os
 import numpy as np
 from PIL import Image
 
-from nbox import utils
+from . import utils
 
 import logging
-
 logger = logging.getLogger("parser")
 
 
