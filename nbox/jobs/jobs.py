@@ -16,21 +16,19 @@ import time
 from tabulate import tabulate
 from requests.sessions import Session
 
-import nbox
-
 # don't use inside instance as cookies can cause a bunch of problems and we'll require
 # a session manager
+from .utils import SpecSubway, Subway, TIMEOUT_CALLS
+
 from ..utils import nbox_session
 from ..user import secret
 
 from logging import getLogger
 logger = getLogger("jobs")
 
-TIMEOUT_CALLS = 60
 
-
-def get_status(url = "https://nimblebox.ai"):
-  r = nbox_session.get(f"{url}/api/instance/get_user_instances")
+def get_status(url = "https://nimblebox.ai", session = nbox_session):
+  r = session.get(f"{url}/api/instance/get_user_instances")
   r.raise_for_status()
   message = r.json()["msg"]
   if message != "success":
@@ -51,10 +49,6 @@ def get_instance(url, id_or_name, session = nbox_session):
   if not isinstance(id_or_name, (int, str)):
     raise ValueError("Instance id must be an integer or a string")
 
-  # now here we can just run .update() method and get away with a lot of code but
-  # the idea is that a) during initialisation the user should get full info in case
-  # something goes wrong and b) we can use the same code as fallback logic when we
-  # want to orchestrate the jobs
   r = session.get(f"{url}/api/instance/get_user_instances")
   r.raise_for_status()
   resp = r.json()
@@ -74,75 +68,28 @@ def is_random_name(name):
   return re.match(r"[a-z]+-[a-z]+", name) is not None
 
 
-class Subway():
-  def __init__(self, url, session):
-    self.url = url
-    self.session = session
-
-  def __repr__(self):
-    return f"<Subway ({self.url})>"
-
-  def __getattr__(self, attr):
-    # https://stackoverflow.com/questions/3278077/difference-between-getattr-vs-getattribute
-    def wrapper(method = "get", data = None, params = None, verbose = True):
-      fn = getattr(self.session, method)
-      url = f"{self.url}/{attr}"
-      if verbose:
-        logger.info(f"Calling {url}")
-      r = fn(url, json = data, params = params)
-      if verbose:
-        logger.info(r.content.decode()[:100])
-      r.raise_for_status() # good when server is good
-      return r.json()
-    return wrapper
-
-  def __call__(self, end = "", method = "get", data = None, params = None, verbose = True):
-    fn = getattr(self.session, method)
-    url = f"{self.url}/{end}"
-    if verbose:
-      logger.info(f"Calling {url}")
-    r = fn(url, json = data, params = params)
-    if verbose:
-      logger.info(r.content.decode()[:100])
-    r.raise_for_status() # good when server is good
-    return r.json()
-
-
-# class JobsServerMixin:
-#   def files(self, dir_path):
-
-class Instance:
+class Instance():
   # each instance has a lot of data against it, we need to store only a few as attributes
   useful_keys = ["state", "used_size", "total_size", "public", "instance_id", "name"]
-  
+
   def __init__(self, id_or_name, loc = None, cs_endpoint = "server"):
+    super().__init__()
+
     self.url = f"https://{'' if not loc else loc+'.'}nimblebox.ai"
     self.cs_url = None
     self.cs_endpoint = cs_endpoint
     self.session = Session()
     self.session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
+    self.web_server = Subway(f"{self.url}/api/instance", self.session)
+    logger.info(f"WS: {self.web_server}")
 
-    instance = get_instance(self.url, id_or_name, session = self.session)
-    # keep only the important ones
-    for k,v in instance.items():
-      if k in self.useful_keys:
-        setattr(self, k, v)
-    
-    self.data = instance # keep a copy of the whole instance data
-
-    logger.info(f"Instance added: {self.instance_id}, {self.name}")    
-    
+    self.instance_id = None
     self.__opened = False
     self.running_scripts = []
-
-    """There are many APIs in the backend but because we want the user to have a supreme experience
-    so we are only keeping the most powerful ones here. However as a developer you'd hate if you
-    could not access things that you can otherwise, like uselessly making your life harder. So to
-    avoid that bad experience I am adding two classes here (one for webserver and another for Compute
-    server), that can be accesed like an attribute but will run an API call.
-    """
-    self.web_server = Subway(f"{self.url}/api/instance", session = self.session)
-    logger.info(f"WS: {self.web_server}")
+    
+    self.update(id_or_name)
+    logger.info(f"Instance added: {self.instance_id}, {self.name}")    
+    
     if self.state == "RUNNING":
       self.start()
 
@@ -152,6 +99,9 @@ class Instance:
   def __repr__(self):
     return f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
+  # normally all the methods that depend on a certain source (eg. webserver) are defined in ext.py
+  # file that has all the extensions. However because create is a special method we are defining it
+  # as a class method.
   @classmethod
   def create(cls, name, url = "https://nimblebox.ai"):
     r = nbox_session.post(
@@ -205,14 +155,44 @@ class Instance:
     if self.cs_endpoint:
       self.cs_url += f"/{self.cs_endpoint}"
 
-    # create a subway
-    self.compute_server = Subway(self.cs_url, session = self.session)
+    # create a speced-subway, this requires capturing the openAPI spec first
+    r = self.session.get(f"{self.cs_url}/openapi.json"); r.raise_for_status()
+    self.compute_server = SpecSubway.from_openapi(r.json(), self.cs_url, self.session)
     logger.info(f"CS: {self.compute_server}")
-
-    # run a simple test and see if everything is working or not
     logger.info(f"Testing instance {self.instance_id}")
     self.compute_server.test()
     self.__opened = True
+
+  def stop(self):
+    if self.state == "STOPPED":
+      logger.info(f"Instance {self.instance_id} is already stopped")
+      return
+
+    logger.info(f"Stopping instance {self.instance_id}")
+    message = self.web_server.stop_instance("post", data = {"instance_id":self.instance_id})["msg"]
+    if not message == "success":
+      raise ValueError(message)
+
+    logger.info(f"Waiting for instance {self.instance_id} to stop")
+    _i = 0 # timeout call counter
+    while self.state != "STOPPED":
+      time.sleep(5)
+      self.update()
+      _i += 1
+      if _i > TIMEOUT_CALLS:
+        raise TimeoutError("Instance did not stop within timeout, please check dashboard")
+    logger.info(f"Instance {self.instance_id} stopped")
+
+    self.__opened = False
+
+  def delete(self, force = False):
+    if self.__opened and not force:
+      raise ValueError("Instance is still opened, please call .stop() first")
+    logger.info(f"Deleting instance {self.instance_id}")
+    message = self.web_server.delete_instance("post", data = {"instance_id":self.instance_id})["msg"]
+    if not message == "success":
+      raise ValueError(message)
+
 
   def __call__(self, x):
     """Caller is the most important UI/UX. The letter ``x`` in programming is reserved the most
@@ -289,39 +269,92 @@ class Instance:
     else:
       raise ValueError("x must be a string or a function")
 
-  def stop(self):
-    if self.state == "STOPPED":
-      logger.info(f"Instance {self.instance_id} is already stopped")
-      return
-
-    logger.info(f"Stopping instance {self.instance_id}")
-    message = self.web_server.stop_instance("post", data = {"instance_id":self.instance_id})["msg"]
-    if not message == "success":
-      raise ValueError(message)
-
-    logger.info(f"Waiting for instance {self.instance_id} to stop")
-    _i = 0 # timeout call counter
-    while self.state != "STOPPED":
-      time.sleep(5)
-      self.update()
-      _i += 1
-      if _i > TIMEOUT_CALLS:
-        raise TimeoutError("Instance did not stop within timeout, please check dashboard")
-    logger.info(f"Instance {self.instance_id} stopped")
-
-    self.__opened = False
-
-  def delete(self, force = False):
-    if self.__opened and not force:
-      raise ValueError("Instance is still opened, please call .stop() first")
-    logger.info(f"Deleting instance {self.instance_id}")
-    message = self.web_server.delete_instance("post", data = {"instance_id":self.instance_id})["msg"]
-    if not message == "success":
-      raise ValueError(message)
-
-  def update(self):
-    out = self.web_server.get_user_instances("post", data = {"instance_id": self.instance_id})
+  def update(self, id_or_name = None):
+    id_or_name = id_or_name or self.instance_id
+    out = get_instance(self.url, id_or_name, session = self.session)
     for k,v in out.items():
       if k in self.useful_keys:
         setattr(self, k, v)
     self.data = out
+
+    if self.state == "RUNNING":
+      self.start()
+
+  def mv(self, from_obj: str, to_obj: str, cs_sub: SpecSubway, *a, **b):
+    """Move any object between places.
+
+    from_obj and to_obj can be:
+    1. local filepath
+    2. cloud filepath that has syntax "nbx://<filepath>" by default get's mapped to
+       "/mnt/disks/user/project/<filepath>"
+
+    File has to be under 1MB for now, and thus is meant to be used as script mover instead of file
+    mover.
+    """
+
+    import os
+    import tarfile
+    import tempfile
+
+    def _get_meta(obj):
+      on_cloud = obj.startswith("nbx://")
+      if not on_cloud:
+        assert os.path.exists(obj), f"Local file not found: {obj}"
+        obj = os.path.abspath(obj)
+        is_dir = os.path.isdir(obj)
+        if not is_dir:
+          size = os.stat(obj).st_size
+        else:
+          size = 0
+          for dirpath, _, filenames in os.walk(obj):
+            for f in filenames:
+              fp = os.path.join(dirpath, f)
+              if not os.path.islink(fp):
+                size += os.path.getsize(fp)
+      else:
+        meta = cs_sub.files.check_files(obj)
+        is_dir = meta["is_dir"]
+        size = meta["size"]
+
+      if size > 1024 ** 2:
+        raise ValueError(f"Object larger than 1MB: {size}")
+
+      return on_cloud, is_dir
+
+    f_on_cloud, f_is_dir = _get_meta(from_obj)
+    t_on_cloud, t_is_dir = _get_meta(to_obj)
+
+    if f_is_dir: assert t_is_dir, f"Cannot move directory to file: {to_obj}"
+    elif t_is_dir: assert f_is_dir, f"Cannot move file to directory: {from_obj}"
+
+    from_obj = from_obj.strip("nbx://") if f_on_cloud else from_obj
+    to_obj = to_obj.strip("nbx://") if t_on_cloud else to_obj
+
+    if f_on_cloud and t_on_cloud: # Farcaster: cloud to cloud
+      out = cs_sub.file.move(from_obj, to_obj)
+    elif f_on_cloud and not t_on_cloud: # download
+      out = cs_sub.file.download(from_obj)
+      with open(to_obj, "w") as f:
+        if f_is_dir:
+          with tarfile.open(fileobj = f, mode = "w:gz") as tar:
+            for fp in out["data"]:
+              tar.add(fp)
+        else:
+          f.write(out["data"])
+    elif not f_on_cloud and t_on_cloud: # upload
+      if f_is_dir:
+        with tempfile.TemporaryDirectory() as tmpdir:
+          with tarfile.open(fileobj = open(from_obj, "rb"), mode = "r:gz") as tar:
+            tar.extractall(tmpdir)
+          out = cs_sub.file.upload(tmpdir, to_obj)
+        with tempfile.NamedTemporaryFile(suffix = ".tar.gz") as f:
+          with tarfile.open(fileobj = f, mode = "w:gz") as tar:
+            for fp in os.listdir(from_obj):
+              tar.add(os.path.join(from_obj, fp))
+          f.seek(0)
+          out = cs_sub.file.upload(f.name, to_obj)
+          if not out["msg"] == "success":
+            raise RuntimeError(out["msg"])
+      out = cs_sub.files.upload(from_obj, to_obj)
+    elif not f_on_cloud and not t_on_cloud: # local filesystem move
+      os.rename(from_obj, to_obj)

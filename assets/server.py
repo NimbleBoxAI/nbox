@@ -57,6 +57,7 @@ def get_meta(r: Request, response: Response):
             "model_path": fpath,
             "source_serving": SERVING_MODE,
             "nbox_version": nbox.__version__,
+            "name": model.nbox_meta["spec"]["model_name"],
             **model.nbox_meta["spec"]
         },
         metadata = model.nbox_meta["metadata"]

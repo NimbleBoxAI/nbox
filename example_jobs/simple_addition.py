@@ -2,16 +2,15 @@
 
 from nbox import Instance
 
-from nbox.jobs import print_status
+# from nbox.jobs import print_status
+# print_status(url = "https://test-2.nimblebox.ai")
 
-print_status(url = "https://test-2.nimblebox.ai")
+# instance = Instance("GPT4NBX", url = "https://test-2.nimblebox.ai")
+instance = Instance.create("GPT4NBX2", url = "https://test-2.nimblebox.ai")
 
-# # instance = Instance("GPT4NBX", url = "https://test-2.nimblebox.ai")
-# instance = Instance.create("GPT4NBX2", url = "https://test-2.nimblebox.ai")
+instance.start(True)
+my_uid = instance("add.py")
+print("My UID:", my_uid)
+instance(my_uid)
 
-# instance.start(True)
-# my_uid = instance("add.py")
-# print("My UID:", my_uid)
-# instance(my_uid)
-
-# instance.stop()
+instance.stop()
