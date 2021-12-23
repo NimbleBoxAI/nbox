@@ -280,81 +280,74 @@ class Instance():
     if self.state == "RUNNING":
       self.start()
 
-  def mv(self, from_obj: str, to_obj: str, cs_sub: SpecSubway, *a, **b):
+  def mv(self, src: str, dst: str, cs_sub: SpecSubway, *a, **b):
     """Move any object between places.
 
-    from_obj and to_obj can be:
+    ``src`` and ``dst`` can be:
     1. local filepath
     2. cloud filepath that has syntax "nbx://<filepath>" by default get's mapped to
        "/mnt/disks/user/project/<filepath>"
 
     File has to be under 1MB for now, and thus is meant to be used as script mover instead of file
-    mover.
+    mover. if ``src`` and ``dst`` are directories, tar and untar for upload and download respectively.
     """
 
     import os
+    import base64
     import tarfile
     import tempfile
 
-    def _get_meta(obj):
-      on_cloud = obj.startswith("nbx://")
-      if not on_cloud:
-        assert os.path.exists(obj), f"Local file not found: {obj}"
-        obj = os.path.abspath(obj)
-        is_dir = os.path.isdir(obj)
-        if not is_dir:
-          size = os.stat(obj).st_size
-        else:
-          size = 0
-          for dirpath, _, filenames in os.walk(obj):
-            for f in filenames:
-              fp = os.path.join(dirpath, f)
-              if not os.path.islink(fp):
-                size += os.path.getsize(fp)
-      else:
-        meta = cs_sub.files.check_files(obj)
-        is_dir = meta["is_dir"]
-        size = meta["size"]
+    if not isinstance(src, str):
+      raise ValueError("src must be a string")
+    if not isinstance(dst, str):
+      raise ValueError("dst must be a string")
+    
+    src_cloud = src.startswith("nbx://")
+    dst_cloud = dst.startswith("nbx://")
 
-      if size > 1024 ** 2:
-        raise ValueError(f"Object larger than 1MB: {size}")
+    src = "/mnt/disks/user/project/"+src.split("nbx://")[1] if src_cloud else src
+    dst = "/mnt/disks/user/project/"+dst.split("nbx://")[1] if dst_cloud else dst
 
-      return on_cloud, is_dir
-
-    f_on_cloud, f_is_dir = _get_meta(from_obj)
-    t_on_cloud, t_is_dir = _get_meta(to_obj)
-
-    if f_is_dir: assert t_is_dir, f"Cannot move directory to file: {to_obj}"
-    elif t_is_dir: assert f_is_dir, f"Cannot move file to directory: {from_obj}"
-
-    from_obj = from_obj.strip("nbx://") if f_on_cloud else from_obj
-    to_obj = to_obj.strip("nbx://") if t_on_cloud else to_obj
-
-    if f_on_cloud and t_on_cloud: # Farcaster: cloud to cloud
-      out = cs_sub.file.move(from_obj, to_obj)
-    elif f_on_cloud and not t_on_cloud: # download
-      out = cs_sub.file.download(from_obj)
-      with open(to_obj, "w") as f:
-        if f_is_dir:
-          with tarfile.open(fileobj = f, mode = "w:gz") as tar:
-            for fp in out["data"]:
-              tar.add(fp)
-        else:
-          f.write(out["data"])
-    elif not f_on_cloud and t_on_cloud: # upload
-      if f_is_dir:
+    if src_cloud and dst_cloud: # Farcaster: cloud -> cloud
+      cs_sub.myfiles.move(src, dst)
+    elif not src_cloud and not dst_cloud: # local -> local
+      os.rename(src, dst)
+    elif src_cloud and not dst_cloud: # cloud -> local
+      src_meta = cs_sub.myfiles.info(src)
+      src_meta = list(filter(lambda x: x["path"] == src, src_meta["data"],))[0]
+      data = cs_sub.myfiles.download(src)
+      if src_meta["is_dir"]:
+        os.makedirs(dst, exist_ok = False)
+        tar_data = base64.b64decode(data["data"])
         with tempfile.TemporaryDirectory() as tmpdir:
-          with tarfile.open(fileobj = open(from_obj, "rb"), mode = "r:gz") as tar:
-            tar.extractall(tmpdir)
-          out = cs_sub.file.upload(tmpdir, to_obj)
-        with tempfile.NamedTemporaryFile(suffix = ".tar.gz") as f:
-          with tarfile.open(fileobj = f, mode = "w:gz") as tar:
-            for fp in os.listdir(from_obj):
-              tar.add(os.path.join(from_obj, fp))
-          f.seek(0)
-          out = cs_sub.file.upload(f.name, to_obj)
-          if not out["msg"] == "success":
-            raise RuntimeError(out["msg"])
-      out = cs_sub.files.upload(from_obj, to_obj)
-    elif not f_on_cloud and not t_on_cloud: # local filesystem move
-      os.rename(from_obj, to_obj)
+          with open(os.path.join(tmpdir, "data.tar"), "wb") as f:
+            f.write(tar_data)
+          with tarfile.open(os.path.join(tmpdir, "data.tar"), "r") as tar:
+            tar.extractall(path = dst)
+      else:
+        file_data = base64.b64decode(data["data"])
+        with open(dst, "wb") as f:
+          f.write(file_data)
+    elif not src_cloud and dst_cloud: # local -> cloud
+      if os.path.isdir(src):
+        total_size = 0
+        for dirpath, _, filenames in os.walk(src):
+          for f in filenames:
+            fp = os.path.join(dirpath, f)
+            if not os.path.islink(fp): # skip if it is symbolic link
+              total_size += os.path.getsize(fp)
+        if total_size > 1024 * 1024:
+          raise ValueError("Files larger than 1MB cannot be uploaded")
+
+        # this is a directory, upload it as a tar file
+        with tempfile.TemporaryDirectory() as tmpdir:
+          with tarfile.open(os.path.join(tmpdir, "data.tar"), "w") as tar:
+            tar.add(src, arcname = os.path.split(src)[1])
+          with open(os.path.join(tmpdir, "data.tar"), "rb") as f:
+            base64_data = base64.b64encode(f.read()).decode("utf-8")
+          cs_sub.myfiles.upload(dst, base64_data, True)
+      else:
+        # this is a file, upload it
+        with open(src, "r") as f:
+          base64_data = base64.b64encode(f.read()).decode("utf-8")
+        cs_sub.myfiles.upload(dst, base64_data, False)

@@ -74,11 +74,10 @@ class SpecSubway():
                     if "requestBody" in body:
                         schema_ref = body["requestBody"]["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
                         _req_body = spec[schema_ref]
-                        required = _req_body["required"]
                         kwargs_dict = list(_req_body["properties"])
                         dict_["meta"] = {
                             "kwargs_dict": kwargs_dict,
-                            "required": required
+                            "required": _req_body.get("required", None)
                         }
                     if "responseBody" in body:
                         schema_ref = body["responseBody"]["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
@@ -119,14 +118,18 @@ class SpecSubway():
             required = spec["meta"]["required"]
             data = {}
             for i in range(len(args)):
-                data[required[i]] = args[i]
+                if required != None:
+                   data[required[i]] = args[i]
+                else:
+                    data[kwargs_dict[i]] = args[i]
             for key in kwargs:
                 if key not in kwargs_dict:
                     raise AttributeError(f"{key} is not a valid argument")
                 data[key] = kwargs[key]
-            for key in required:
-                if key not in data:
-                    raise AttributeError(f"{key} is a required argument")
+            if required != None:
+                for key in required:
+                    if key not in data:
+                        raise AttributeError(f"{key} is a required argument")
 
         fn = getattr(self._session, spec["method"])
         url = f"{self._url}"
@@ -134,12 +137,16 @@ class SpecSubway():
             url += "/"
         if _verbose:
             print(f"Calling {url}")
+        
+        # print("-->>", data)
         r = fn(url, json = data)
         if _verbose:
             print(r.content.decode())
-        r.raise_for_status() # good when server is good
+        
+        if not r.status_code == 200:
+            raise ValueError(r.content.decode())
+        
         out = r.json()
-
         if "response_kwargs_dict" in self._spec:
             return [out[k] for k in self._spec["response_kwargs_dict"]]
         return out
