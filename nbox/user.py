@@ -4,7 +4,7 @@ import logging
 import requests
 from getpass import getpass
 
-from .utils import join, nbox_session
+from .utils import join, nbox_session, NBOX_HOME_DIR
 
 logger = logging.getLogger("user")
 
@@ -30,9 +30,8 @@ def get_access_token(nbx_home_url, username, password=None):
 
 
 def create_secret_file(username, access_token, nbx_url):
-    folder = join(os.path.expanduser("~"), ".nbx")
-    os.makedirs(folder, exist_ok=True)
-    fp = join(folder, "secrets.json")
+    os.makedirs(NBOX_HOME_DIR, exist_ok=True)
+    fp = join(NBOX_HOME_DIR, "secrets.json")
     with open(fp, "w") as f:
         f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}, indent=2))
 
@@ -41,9 +40,9 @@ class Secrets:
     # this is the user local store
     def __init__(self):
         # get the secrets file
-        folder = join(os.path.expanduser("~"), ".nbx")
-        os.makedirs(folder, exist_ok=True)
-        self.fp = join(folder, "secrets.json")
+        
+        os.makedirs(NBOX_HOME_DIR, exist_ok=True)
+        self.fp = join(NBOX_HOME_DIR, "secrets.json")
 
         # if this is the first time starting this then get things from the nbx-hq
         if not os.path.exists(self.fp):

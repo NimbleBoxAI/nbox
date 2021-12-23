@@ -12,7 +12,9 @@ the second step towards YoCo and CasH, read more
 
 import os
 import re
+import sys
 import time
+from functools import partial
 from tabulate import tabulate
 from requests.sessions import Session
 
@@ -20,7 +22,7 @@ from requests.sessions import Session
 # a session manager
 from .utils import SpecSubway, Subway, TIMEOUT_CALLS
 
-from ..utils import nbox_session
+from ..utils import nbox_session, NBOX_HOME_DIR, join
 from ..user import secret
 
 from logging import getLogger
@@ -87,7 +89,7 @@ class Instance():
     self.__opened = False
     self.running_scripts = []
     
-    self.update(id_or_name)
+    self.refresh(id_or_name)
     logger.info(f"Instance added: {self.instance_id}, {self.name}")    
     
     if self.state == "RUNNING":
@@ -137,7 +139,7 @@ class Instance():
       _i = 0 
       while self.state != "RUNNING":
         time.sleep(5)
-        self.update()
+        self.refresh()
         _i += 1
         if _i > TIMEOUT_CALLS:
           raise TimeoutError("Instance did not start within timeout, please check dashboard")
@@ -159,8 +161,21 @@ class Instance():
     r = self.session.get(f"{self.cs_url}/openapi.json"); r.raise_for_status()
     self.compute_server = SpecSubway.from_openapi(r.json(), self.cs_url, self.session)
     logger.info(f"CS: {self.compute_server}")
+
+    # now load all the functions from methods.py
     logger.info(f"Testing instance {self.instance_id}")
-    self.compute_server.test()
+    out = self.compute_server.test()
+    with open(join(NBOX_HOME_DIR, "methods.py"), "w") as f:
+      f.write(out["data"])
+
+    sys.path.append(NBOX_HOME_DIR)
+    from methods import __all__ as m_all
+    for m in m_all:
+      trg_name = f"bios_{m}"
+      exec(f"from methods import {m} as {trg_name}")
+      fn = partial(locals()[trg_name], cs_sub = self.compute_server, ws_sub = self.web_server)
+      setattr(self, m, fn)
+
     self.__opened = True
 
   def stop(self):
@@ -177,7 +192,7 @@ class Instance():
     _i = 0 # timeout call counter
     while self.state != "STOPPED":
       time.sleep(5)
-      self.update()
+      self.refresh()
       _i += 1
       if _i > TIMEOUT_CALLS:
         raise TimeoutError("Instance did not stop within timeout, please check dashboard")
@@ -193,14 +208,14 @@ class Instance():
     if not message == "success":
       raise ValueError(message)
 
-
   def __call__(self, x):
     """Caller is the most important UI/UX. The letter ``x`` in programming is reserved the most
     arbitrary thing, and this ``nbox.Instance`` is the gateway to a cloud instance. You can:
     1. run a script on the cloud
     2. run a local script on the cloud
     3. get the status of a script
-    4. run a special kind of functions known as `pure functions <https://en.wikipedia.org/wiki/Pure_function>`_
+    4. [TBD] run a special kind of functions known as
+    `pure functions <https://en.wikipedia.org/wiki/Pure_function>`_
 
     Pure functions in programming are functions that are self sufficient in terms of execution,
     eg. all the packages are imported inside the function and there are no side effects in an
@@ -213,63 +228,53 @@ class Instance():
     """
     if not self.__opened:
       raise ValueError("Instance is not opened, please call .start() first")
+    if not isinstance(x, str):
+      raise ValueError("x must be a string")
 
-    if isinstance(x, str):
-      # x as string can mean many different things:
-      # 1. uid of an existing script
-      # 2. name of file in the local filesystem
-      # 3. name of file in the cloud
-
-      if is_random_name(x):
-        logger.info(f"Getting status of Job '{x}' on instance {self.instance_id}")
-        data = self.compute_server(x, "post")
-        if not data["msg"] == "success":
-          raise ValueError(data["msg"])
-        else:
-          status = "RUNNING" if data["status"] else "STOPPED" # /ERRORED
-          logger.info(f"Script {x} on instance {self.instance_id} is {status}")
-        return status == "RUNNING"
-      elif os.path.isfile(x):
-        with open(x, "r") as f:
-          script = f.read()
-        script_name = os.path.split(x)[1]
-        logger.info(f"Uploading script {x} ({script_name}) to instance {self.instance_id}")
-        data = self.compute_server.start("post", {"script": script, "script_name": script_name})
-        if data["msg"] != "success":
-          raise ValueError(data["msg"])
-        logger.info(f"Script {x} started on instance {self.instance_id} with UID: {data['uid']}")
-        self.running_scripts.append(data["uid"])
-        return data["uid"]
+    if is_random_name(x):
+      logger.info(f"Getting status of Job '{x}' on instance {self.instance_id}")
+      data = self.compute_server(x, "post")
+      if not data["msg"] == "success":
+        raise ValueError(data["msg"])
       else:
-        logger.info(f"Trying to find {x} on cloud")
-        dir_path, fname = os.path.split(x)
-        dir_path = "/mnt/disks/user/project" if not dir_path else dir_path
-        fname = os.path.join(dir_path, fname)
-        data = self.compute_server.files("post", data = {"dir_path": dir_path})
-        if data["msg"] != "success":
-          raise ValueError(data["msg"])
-
-        # if the file is not found, or item is directory, then we can't run it
-        if fname not in [x[0] for x in data["files"]]:
-          raise ValueError(f"File {fname} not found in {dir_path} on cloud")
-        if list(filter(lambda x: x[0] == fname, data["files"]))[0][1]:
-          raise ValueError(f"File {fname} is a directory on cloud")
-        
-        logger.info(f"Found {fname} on cloud, executing it")
-        data = self.compute_server.start("post", {"script": fname})
-        if data["msg"] != "success":
-          raise ValueError(data["msg"])
-        logger.info(f"Script {x} started on instance {self.instance_id} with UID: {data['uid']}")
-        self.running_scripts.append(data["uid"])
-        return data["uid"]
-    
-    elif callable(x):
-      # this is the next generation power of nbox, we can pass a function to run on the instance (CasH step1)
-      raise ValueError("callable methods are not supported yet, will be included in the next release")
+        status = "RUNNING" if data["status"] else "STOPPED" # /ERRORED
+        logger.info(f"Script {x} on instance {self.instance_id} is {status}")
+      return status == "RUNNING"
+    elif os.path.isfile(x):
+      with open(x, "r") as f:
+        script = f.read()
+      script_name = os.path.split(x)[1]
+      logger.info(f"Uploading script {x} ({script_name}) to instance {self.instance_id}")
+      data = self.compute_server.start("post", {"script": script, "script_name": script_name})
+      if data["msg"] != "success":
+        raise ValueError(data["msg"])
+      logger.info(f"Script {x} started on instance {self.instance_id} with UID: {data['uid']}")
+      self.running_scripts.append(data["uid"])
+      return data["uid"]
     else:
-      raise ValueError("x must be a string or a function")
+      logger.info(f"Trying to find {x} on cloud")
+      dir_path, fname = os.path.split(x)
+      dir_path = "/mnt/disks/user/project" if not dir_path else dir_path
+      fname = os.path.join(dir_path, fname)
+      data = self.compute_server.files("post", data = {"dir_path": dir_path})
+      if data["msg"] != "success":
+        raise ValueError(data["msg"])
 
-  def update(self, id_or_name = None):
+      # if the file is not found, or item is directory, then we can't run it
+      if fname not in [x[0] for x in data["files"]]:
+        raise ValueError(f"File {fname} not found in {dir_path} on cloud")
+      if list(filter(lambda x: x[0] == fname, data["files"]))[0][1]:
+        raise ValueError(f"File {fname} is a directory on cloud")
+      
+      logger.info(f"Found {fname} on cloud, executing it")
+      data = self.compute_server.start("post", {"script": fname})
+      if data["msg"] != "success":
+        raise ValueError(data["msg"])
+      logger.info(f"Script {x} started on instance {self.instance_id} with UID: {data['uid']}")
+      self.running_scripts.append(data["uid"])
+      return data["uid"]
+
+  def refresh(self, id_or_name = None):
     id_or_name = id_or_name or self.instance_id
     out = get_instance(self.url, id_or_name, session = self.session)
     for k,v in out.items():
@@ -279,75 +284,3 @@ class Instance():
 
     if self.state == "RUNNING":
       self.start()
-
-  def mv(self, src: str, dst: str, cs_sub: SpecSubway, *a, **b):
-    """Move any object between places.
-
-    ``src`` and ``dst`` can be:
-    1. local filepath
-    2. cloud filepath that has syntax "nbx://<filepath>" by default get's mapped to
-       "/mnt/disks/user/project/<filepath>"
-
-    File has to be under 1MB for now, and thus is meant to be used as script mover instead of file
-    mover. if ``src`` and ``dst`` are directories, tar and untar for upload and download respectively.
-    """
-
-    import os
-    import base64
-    import tarfile
-    import tempfile
-
-    if not isinstance(src, str):
-      raise ValueError("src must be a string")
-    if not isinstance(dst, str):
-      raise ValueError("dst must be a string")
-    
-    src_cloud = src.startswith("nbx://")
-    dst_cloud = dst.startswith("nbx://")
-
-    src = "/mnt/disks/user/project/"+src.split("nbx://")[1] if src_cloud else src
-    dst = "/mnt/disks/user/project/"+dst.split("nbx://")[1] if dst_cloud else dst
-
-    if src_cloud and dst_cloud: # Farcaster: cloud -> cloud
-      cs_sub.myfiles.move(src, dst)
-    elif not src_cloud and not dst_cloud: # local -> local
-      os.rename(src, dst)
-    elif src_cloud and not dst_cloud: # cloud -> local
-      src_meta = cs_sub.myfiles.info(src)
-      src_meta = list(filter(lambda x: x["path"] == src, src_meta["data"],))[0]
-      data = cs_sub.myfiles.download(src)
-      if src_meta["is_dir"]:
-        os.makedirs(dst, exist_ok = False)
-        tar_data = base64.b64decode(data["data"])
-        with tempfile.TemporaryDirectory() as tmpdir:
-          with open(os.path.join(tmpdir, "data.tar"), "wb") as f:
-            f.write(tar_data)
-          with tarfile.open(os.path.join(tmpdir, "data.tar"), "r") as tar:
-            tar.extractall(path = dst)
-      else:
-        file_data = base64.b64decode(data["data"])
-        with open(dst, "wb") as f:
-          f.write(file_data)
-    elif not src_cloud and dst_cloud: # local -> cloud
-      if os.path.isdir(src):
-        total_size = 0
-        for dirpath, _, filenames in os.walk(src):
-          for f in filenames:
-            fp = os.path.join(dirpath, f)
-            if not os.path.islink(fp): # skip if it is symbolic link
-              total_size += os.path.getsize(fp)
-        if total_size > 1024 * 1024:
-          raise ValueError("Files larger than 1MB cannot be uploaded")
-
-        # this is a directory, upload it as a tar file
-        with tempfile.TemporaryDirectory() as tmpdir:
-          with tarfile.open(os.path.join(tmpdir, "data.tar"), "w") as tar:
-            tar.add(src, arcname = os.path.split(src)[1])
-          with open(os.path.join(tmpdir, "data.tar"), "rb") as f:
-            base64_data = base64.b64encode(f.read()).decode("utf-8")
-          cs_sub.myfiles.upload(dst, base64_data, True)
-      else:
-        # this is a file, upload it
-        with open(src, "r") as f:
-          base64_data = base64.b64encode(f.read()).decode("utf-8")
-        cs_sub.myfiles.upload(dst, base64_data, False)

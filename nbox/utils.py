@@ -82,6 +82,9 @@ def join(x, *args):
     return os.path.join(x, *args)
 
 
+NBOX_HOME_DIR = join(os.path.expanduser("~"), ".nbx")
+
+
 def get_random_name():
     return randomname.generate()
 
