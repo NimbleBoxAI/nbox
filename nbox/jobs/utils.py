@@ -79,11 +79,16 @@ class SpecSubway():
                             "kwargs_dict": kwargs_dict,
                             "required": _req_body.get("required", None)
                         }
-                    if "responseBody" in body:
-                        schema_ref = body["responseBody"]["content"]["application/json"]["schema"]["$ref"].split("/")[-1]
-                        _req_body = spec[schema_ref]
-                        kwargs_dict = list(_req_body["properties"])
-                        dict_["meta"] = {"response_kwargs_dict": kwargs_dict}
+                    if "responses" in body:
+                        schema = body["responses"]["200"]["content"]["application/json"]["schema"]
+                        if "$ref" in schema:
+                            schema_ref = schema["$ref"].split("/")[-1]
+                            _req_body = spec[schema_ref]
+                            kwargs_dict = list(_req_body["properties"])
+                            if dict_["meta"] != None:
+                                dict_["meta"].update({"response_kwargs_dict": kwargs_dict})
+                            else:
+                                dict_["meta"] = {"response_kwargs_dict": kwargs_dict}
                     tree[t] = dict_
                 else:
                     _dfs(tree[t], trail + [t])
@@ -103,7 +108,7 @@ class SpecSubway():
             raise AttributeError(f"'.{attr}' is not a valid function")
         return SpecSubway(f"{self._url}/{attr}", self._session, self._spec[attr], attr)
     
-    def __call__(self, *args, _verbose = False, **kwargs):
+    def __call__(self, *args, _verbose = False, _parse = False, **kwargs):
         if not self._caller:
             raise AttributeError(f"'.{self._name}' is not an endpoint")
         spec = self._spec
@@ -114,40 +119,42 @@ class SpecSubway():
         if spec["meta"] == None:
             assert len(args) == len(kwargs) == 0, "This method does not accept any arguments"
         else:
-            kwargs_dict = spec["meta"]["kwargs_dict"]
-            required = spec["meta"]["required"]
-            data = {}
-            for i in range(len(args)):
+            spec_meta = spec["meta"]
+            if "kwargs_dict" not in spec_meta:
+                assert len(args) == len(kwargs) == 0, "This method does not accept any arguments"
+            else:
+                kwargs_dict = spec["meta"]["kwargs_dict"]
+                required = spec["meta"]["required"]
+                data = {}
+                for i in range(len(args)):
+                    if required != None:
+                        data[required[i]] = args[i]
+                    else:
+                        data[kwargs_dict[i]] = args[i]
+                for key in kwargs:
+                    if key not in kwargs_dict:
+                        raise AttributeError(f"{key} is not a valid argument")
+                    data[key] = kwargs[key]
                 if required != None:
-                   data[required[i]] = args[i]
-                else:
-                    data[kwargs_dict[i]] = args[i]
-            for key in kwargs:
-                if key not in kwargs_dict:
-                    raise AttributeError(f"{key} is not a valid argument")
-                data[key] = kwargs[key]
-            if required != None:
-                for key in required:
-                    if key not in data:
-                        raise AttributeError(f"{key} is a required argument")
+                    for key in required:
+                        if key not in data:
+                            raise AttributeError(f"{key} is a required argument")
 
         fn = getattr(self._session, spec["method"])
         url = f"{self._url}"
         if self._caller and "/" in self._spec:
             url += "/"
         if _verbose:
-            print(f"Calling {url}")
-        
-        # print("-->>", data)
+            print(f"{spec['method'].upper()} {url}")
+            print("-->>", data)
         r = fn(url, json = data)
-        if _verbose:
-            print(r.content.decode())
-        
         if not r.status_code == 200:
             raise ValueError(r.content.decode())
         
         out = r.json()
-        if "response_kwargs_dict" in self._spec:
-            return [out[k] for k in self._spec["response_kwargs_dict"]]
+        if _parse and self._spec["meta"] != None and "response_kwargs_dict" in self._spec["meta"]:
+            out = [out[k] for k in self._spec["meta"]["response_kwargs_dict"]]
+            if len(out) == 1:
+                return out[0]
         return out
 

@@ -2,7 +2,7 @@ import json
 import os
 
 from .network import one_click_deploy
-from .user import create_secret_file, get_access_token, init_secret
+from .auth import create_secret_file, get_access_token, init_secret
 from .utils import get_random_name
 
 
@@ -51,7 +51,7 @@ def deploy(
         AssertionError: if model path is not found or ``nbox_meta`` is incorrect
         Exception: if ``deployment_type == "ovms2"`` but ``convert_args`` is not provided
     """
-    from nbox.user import secret  # it can refresh so add it in the method
+    from nbox.auth import secret  # it can refresh so add it in the method
 
     if secret is None or secret.get("access_token", None) == None:
         # if secrets file is not found

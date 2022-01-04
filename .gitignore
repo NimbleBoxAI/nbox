@@ -152,3 +152,6 @@ serve_fp.py
 # you have recipes, and then you have dark magic!
 __dark_magic/
 __secret/
+
+# not need to add / in symlink 
+.nbx

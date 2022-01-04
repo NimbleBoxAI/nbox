@@ -28,7 +28,7 @@ for x in framework_exports[1:]:
 
 from .network import one_click_deploy
 from .parsers import ImageParser, TextParser
-from .user import secret
+from .auth import secret
 
 import logging
 

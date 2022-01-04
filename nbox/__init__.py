@@ -1,5 +1,5 @@
 from . import utils
-from . import user
+from . import auth
 from . import model
 from . import load
 from . import parsers

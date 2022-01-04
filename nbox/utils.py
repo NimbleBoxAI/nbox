@@ -7,6 +7,7 @@ import requests
 import tempfile
 import randomname
 from PIL import Image
+from uuid import uuid4
 from datetime import timedelta
 from types import SimpleNamespace
 from time import time, sleep as _sleep
@@ -85,7 +86,9 @@ def join(x, *args):
 NBOX_HOME_DIR = join(os.path.expanduser("~"), ".nbx")
 
 
-def get_random_name():
+def get_random_name(uuid = False):
+    if uuid:
+        return str(uuid4())
     return randomname.generate()
 
 

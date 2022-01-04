@@ -18,12 +18,9 @@ from functools import partial
 from tabulate import tabulate
 from requests.sessions import Session
 
-# don't use inside instance as cookies can cause a bunch of problems and we'll require
-# a session manager
 from .utils import SpecSubway, Subway, TIMEOUT_CALLS
-
 from ..utils import nbox_session, NBOX_HOME_DIR, join
-from ..user import secret
+from ..auth import secret
 
 from logging import getLogger
 logger = getLogger("jobs")
@@ -113,7 +110,7 @@ class Instance():
     r.raise_for_status() # if its not 200, it's an error
     return cls(name, url)
 
-  def start(self, cpu_only = False, gpu_count = 1):
+  def start(self, cpu_only = True, gpu_count = 1):
     if self.__opened:
       logger.info(f"Instance {self.instance_id} is already opened")
       return
@@ -126,7 +123,7 @@ class Instance():
           "instance_id": self.instance_id,
           "hw":"cpu" if cpu_only else "gpu",
           "hw_config":{
-            "cpu":"n1-standard-8",
+            "cpu":"n1-standard-2",
             "gpu":"nvidia-tesla-p100",
             "gpuCount": gpu_count,
           }
@@ -159,7 +156,8 @@ class Instance():
 
     # create a speced-subway, this requires capturing the openAPI spec first
     r = self.session.get(f"{self.cs_url}/openapi.json"); r.raise_for_status()
-    self.compute_server = SpecSubway.from_openapi(r.json(), self.cs_url, self.session)
+    self.cs_spec = r.json()
+    self.compute_server = SpecSubway.from_openapi(self.cs_spec, self.cs_url, self.session)
     logger.info(f"CS: {self.compute_server}")
 
     # now load all the functions from methods.py
@@ -173,7 +171,12 @@ class Instance():
     for m in m_all:
       trg_name = f"bios_{m}"
       exec(f"from methods import {m} as {trg_name}")
-      fn = partial(locals()[trg_name], cs_sub = self.compute_server, ws_sub = self.web_server)
+      fn = partial(
+        locals()[trg_name],
+        cs_sub = self.compute_server,
+        ws_sub = self.web_server,
+        logger = logger
+      )
       setattr(self, m, fn)
 
     self.__opened = True
@@ -231,48 +234,39 @@ class Instance():
     if not isinstance(x, str):
       raise ValueError("x must be a string")
 
+    def _run_cloud(fpath):
+      fpath = "/mnt/disks/user/project/" + fpath.split("nbx://")[1]
+      meta = list(filter(
+        lambda y: y["path"] == fpath, self.compute_server.myfiles.info(fpath)["data"]
+      ))
+      if not meta:
+        raise ValueError(f"File {x} not found on instance {self.instance_id}")
+      return self.compute_server.rpc.start(fpath)["uid"]
+
     if is_random_name(x):
       logger.info(f"Getting status of Job '{x}' on instance {self.instance_id}")
-      data = self.compute_server(x, "post")
+      data = self.compute_server.rpc.status(x)
       if not data["msg"] == "success":
         raise ValueError(data["msg"])
       else:
-        status = "RUNNING" if data["status"] else "STOPPED" # /ERRORED
+        status = data["status"]
         logger.info(f"Script {x} on instance {self.instance_id} is {status}")
-      return status == "RUNNING"
-    elif os.path.isfile(x):
-      with open(x, "r") as f:
-        script = f.read()
-      script_name = os.path.split(x)[1]
-      logger.info(f"Uploading script {x} ({script_name}) to instance {self.instance_id}")
-      data = self.compute_server.start("post", {"script": script, "script_name": script_name})
-      if data["msg"] != "success":
-        raise ValueError(data["msg"])
-      logger.info(f"Script {x} started on instance {self.instance_id} with UID: {data['uid']}")
-      self.running_scripts.append(data["uid"])
-      return data["uid"]
-    else:
-      logger.info(f"Trying to find {x} on cloud")
-      dir_path, fname = os.path.split(x)
-      dir_path = "/mnt/disks/user/project" if not dir_path else dir_path
-      fname = os.path.join(dir_path, fname)
-      data = self.compute_server.files("post", data = {"dir_path": dir_path})
-      if data["msg"] != "success":
-        raise ValueError(data["msg"])
 
-      # if the file is not found, or item is directory, then we can't run it
-      if fname not in [x[0] for x in data["files"]]:
-        raise ValueError(f"File {fname} not found in {dir_path} on cloud")
-      if list(filter(lambda x: x[0] == fname, data["files"]))[0][1]:
-        raise ValueError(f"File {fname} is a directory on cloud")
+      # if the job is stopped, then check the logs and exit code for 
       
-      logger.info(f"Found {fname} on cloud, executing it")
-      data = self.compute_server.start("post", {"script": fname})
-      if data["msg"] != "success":
-        raise ValueError(data["msg"])
-      logger.info(f"Script {x} started on instance {self.instance_id} with UID: {data['uid']}")
-      self.running_scripts.append(data["uid"])
-      return data["uid"]
+      return status
+    elif os.path.isfile(x):
+      self.mv(x, f"nbx://{x}")
+      uid = _run_cloud(f"nbx://{x}")
+      self.running_scripts.append(uid)
+      return uid
+    elif x.startswith("nbx://"):
+      logger.info("Running file on cloud")
+      uid = _run_cloud(x)
+      self.running_scripts.append(uid)
+      return uid
+    else:
+      raise ValueError(f"Unknown format {x}")
 
   def refresh(self, id_or_name = None):
     id_or_name = id_or_name or self.instance_id
@@ -284,3 +278,7 @@ class Instance():
 
     if self.state == "RUNNING":
       self.start()
+
+  def get_logs(self, job_id):
+    return self.compute_server.rpc.logs(job_id)["data"]
+    pass

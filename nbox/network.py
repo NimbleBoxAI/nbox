@@ -43,7 +43,7 @@ def one_click_deploy(
         access_key(str, None): if ``wait_for_deployment == True``, returns the data access key of
             the deployed model
     """
-    from nbox.user import secret  # it can refresh so add it in the method
+    from nbox.auth import secret  # it can refresh so add it in the method
 
     pp(nbox_meta)
 
