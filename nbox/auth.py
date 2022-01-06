@@ -109,5 +109,5 @@ class Secrets:
 
 
 secret = None
-if not os.getenv("NBX_NO_AUTH", False):
+if not os.getenv("NBOX_NO_AUTH", False):
   init_secret()
