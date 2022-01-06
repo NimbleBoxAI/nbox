@@ -155,3 +155,4 @@ __secret/
 
 # not need to add / in symlink 
 .nbx
+example_jobs/gperc_model/

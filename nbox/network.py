@@ -196,8 +196,6 @@ def one_click_deploy(
         if access_key != None or "failed" in curr_st:
             break
 
-    secret.add_ocd(model_id=model_id, url=endpoint, nbox_meta=nbox_meta, access_key=access_key)
-
     logger.info("Process Complete")
     logger.info("NBX Deploy")
     return endpoint, access_key

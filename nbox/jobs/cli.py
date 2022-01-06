@@ -43,6 +43,8 @@ def stop(
     web_server_subway.stop(item["instance_id"])
 
 jobs_cli = {
-  "start": start,
-  "stop": stop,
+  "instance": {
+    "start": start,         # nbox jobs instance start (...)
+    "stop": stop,           # nbox jobs instance stop (...)
+  }
 }

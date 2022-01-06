@@ -20,8 +20,9 @@ class StateDictModel:
 class Operator:
   _version: int = 1
 
-  def __init__(self) -> None:
+  def __init__(self, name) -> None:
     self._operators = OrderedDict() # {name: operator}
+    self.name = name
 
   # classmethods/
 
@@ -173,6 +174,15 @@ class Operator:
       graph.add(name)
     return True
 
+  @property
+  def state_dict(self) -> StateDictModel:
+    return StateDictModel(
+      state = self.__class__.__name__,
+      data = {},
+      inputs = self.inputs,
+      outputs = self.outputs
+    )
+
   # /properties
 
   def forward(self):
@@ -187,60 +197,26 @@ class Operator:
     # 3. tracing
 
     # Type Checking and create input dicts
-    _type_check_ = kwargs.pop("_type_check_", True) # needs be overwritten when parallelizing
     inputs = self.inputs
     len_inputs = len(args) + len(kwargs)
-    if _type_check_ and len_inputs != len(inputs):
+    if len_inputs > len(inputs):
       raise ValueError(f"Number of arguments ({len(inputs)}) does not match number of inputs ({len_inputs})")
+    elif len_inputs < len(args):
+      raise ValueError(f"Need at least arguments ({len(args)}) but got ({len_inputs})")
 
     input_dict = {}
     for i, arg in enumerate(args):
       input_dict[self.inputs[i]] = arg
     for key, value in kwargs.items():
-      input_dict[self.inputs[key]] = value
-
-    print(input_dict)
+      if key in inputs:
+        input_dict[key] = value
 
     # pass this through the user defined forward()
     return self.forward(**input_dict)
 
-  _state_dict_model: StateDictModel = StateDictModel("stopped", {}, {}, {})
-
-  def load_state_dict(self, state_dict):
-    pass
-
-  def state_dict(self, destination = None) -> OrderedDict:
-    if destination is None:
-      return OrderedDict
-    pass
+  # nbx/
 
   def deploy(group_name_or_id):
     pass
 
-from .jobs import Instance
-
-class Multi(Operator):
-  def __init__(self, op: Operator, n: int = 2, mode: str = "thread", instance: Instance = None):
-    super().__init__("Multi_"+mode)
-
-    self.op = op
-    self.n = n
-
-    if mode not in ["thread", "process", "nbx"]:
-      raise ValueError("mode must be either 'thread' or 'process'")
-    if mode == "nbx":
-      assert isinstance(instance, Instance), "instance must be an Instance"
-
-    self.mode = mode
-    self.instance = instance
-
-  def nbx_forward(self, inputs):
-    pass
-
-  def forward(self, inputs):
-    if self.mode == "nbx":
-      return self.nbx_forward(inputs)
-
-
-
-from pandas import read_csv
+  # /nbx

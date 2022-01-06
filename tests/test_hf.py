@@ -139,3 +139,6 @@ class ParserTest(unittest.TestCase):
                 "target_sentences": {"input_ids": [2, 11], "attention_mask": [2, 11]},
             },
         )
+
+
+unittest.main()

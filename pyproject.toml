@@ -3,10 +3,10 @@ name = "nbox"
 version = "0.4.1"
 description = "ML Inference 🥶"
 authors = [
-            "NBX Research <research@nimblebox.ai>",
-            "Yash Bonde <bonde.yash97@gmail.com>",
-            "Aakash Kaushik <kaushikaakash7539@gmail.com>"
-          ]
+  "NBX Research <research@nimblebox.ai>",
+  "Yash Bonde <bonde.yash97@gmail.com>",
+  "Aakash Kaushik <kaushikaakash7539@gmail.com>"
+]
 
 [tool.poetry.dependencies]
 python = "^3.6"
@@ -17,8 +17,8 @@ Pillow = "^8.3.2"
 skl2onnx = "^1.9.3"
 onnxruntime = "1.9.0"
 tabulate = "0.8.9"
-torch = "1.10.0"
-torchvision = "1.10.0"
+torch = "^1.9.0"
+torchvision = "0.10.0"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

@@ -25,6 +25,8 @@ logging.basicConfig(
     datefmt="%d-%m-%y/%H:%M:%S",
 )
 
+logger = logging.getLogger("utils")
+
 nbox_session = requests.Session()
 
 def _isthere(*packages):
@@ -107,6 +109,64 @@ def convert_to_list(x):
         return x.tolist()
     else:
         raise Exception("Unknown type: {}".format(type(x)))
+
+# pool/
+from concurrent.futures import ThreadPoolExecutor, as_completed
+POOL_SUPPORTED_MODES = ["thread"]
+
+class Pool:
+    def __init__(self, mode = "thread", max_workers = 2, _name: str = get_random_name(True)):
+        """Threading is hard, your brain is not wired to handle parallelism. You are a blocking
+        python program. So a blocking function for you.
+
+        Args:
+            mode (str, optional): There can be multiple pooling strategies across cores, threads,
+                k8s, nbx-instances etc.
+            max_workers (int, optional): Numbers of workers to use
+            _name (str, optional): Name of the pool, used for logging
+        """
+        if mode not in POOL_SUPPORTED_MODES:
+            raise Exception(f"Only {', '.join(POOL_SUPPORTED_MODES)} mode(s) are supported")
+
+        self.mode = mode
+        self.pool = None
+        logger.info(f"Starting ThreadPool ({_name}) with {max_workers} workers")
+        self.executor = ThreadPoolExecutor(
+            max_workers=max_workers,
+            thread_name_prefix=_name
+        )
+        self.item_id = -1 # because +1 later
+        self.futures = {}
+
+    def __call__(self, fn, *args):
+        """Run any function ``fn`` in parallel, where each argument is a list of arguments to
+        pass to ``fn``. 
+            
+            thread(fn, a) for a in args -> list of results
+        """
+        assert callable(fn)
+        assert isinstance(args[0], (tuple, list))
+        if self.mode in ["thread", "pool"]:
+            futures = {}
+            for x in args:
+                print(x)
+                self.item_id += 1
+                futures[self.executor.submit(fn, *x)] = self.item_id
+            
+            results = []
+            for future in as_completed(futures):
+                try:
+                    result = future.result()
+                    results.append(result)
+                except Exception as e:
+                    logger.error(f"{self.mode} error: {e}")
+                    raise e
+        else:
+            raise Exception(f"Only {', '.join(POOL_SUPPORTED_MODES)} mode(s) are supported")
+
+        return results
+
+# /pool
 
 
 # --- classes

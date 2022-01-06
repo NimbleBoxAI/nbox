@@ -1,6 +1,7 @@
 import fire
 from .cli import deploy
-from .jobs import jobs_cli, print_status
+from .jobs import print_status
+from .jobs.cli import jobs_cli
 
 if __name__ == "__main__":
     fire.Fire({

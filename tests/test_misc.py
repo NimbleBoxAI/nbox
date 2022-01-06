@@ -1,5 +1,4 @@
 import os
-from pprint import pprint
 import unittest
 
 import nbox
@@ -8,7 +7,6 @@ from nbox import utils
 from functools import lru_cache
 
 # Train a model.
-import sklearn
 from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier

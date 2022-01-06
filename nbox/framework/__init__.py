@@ -88,3 +88,5 @@ if _isthere(*_sk_modules):
 _onnx_modules = ["onnx", "onnxruntime"]
 if isthere(*_onnx_modules):
     maps = {"IMPORTS": _onnx_modules}
+    onnx = SimpleNamespace(**maps)
+    __all__ += ["onnx"]

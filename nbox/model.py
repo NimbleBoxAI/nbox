@@ -53,7 +53,7 @@ class GenericMixin:
 class Model(GenericMixin):
     # @cshubhamrao suggested lazy evaulation of packages that would avoid initialization Errors
     @utils.isthere("torch", "sklearn", "onnxruntime", "skl2onnx")
-    def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, nbox_meta=None, verbose=False):
+    def __init__(self, model_or_model_url, nbx_api_key=None, category=None, tokenizer=None, model_key=None, nbox_meta=None, cache_dir = None, verbose=False):
         """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
         from ``nbox==0.1.10`` ``nbox.Model`` handles both local and remote models. from ``nbox==0.4.0`` can load
         and serve ONNX models.
@@ -247,7 +247,7 @@ class Model(GenericMixin):
         self.model_key = model_key
         self.verbose = verbose
         self.__device = "cpu"
-        self.cache_dir = gettempdir()
+        self.cache_dir = gettempdir() if cache_dir == None else cache_dir
 
         logger.info(f"Model loaded successfully")
         logger.info(f"Model framework: {self.__framework}")
@@ -280,9 +280,6 @@ class Model(GenericMixin):
             print("--------------")
 
         logger.info("Cloud infer metadata obtained")
-
-        # add to secret, if present, this ignores it
-        secret.add_ocd(None, self.model_url, nbox_meta, self.nbx_api_key)
 
         return nbox_meta, templates
 
@@ -673,18 +670,18 @@ class Model(GenericMixin):
         src_framework = nbox_meta["spec"]["src_framework"]
         category = nbox_meta["spec"]["category"]
 
-        try:
-            if export_type == "onnx":
-                    model = InferenceSession(model_path)
-            elif src_framework == "pt":
-                if export_type == "torchscript":
-                    model = torch.jit.load(model_path, map_location="cpu")
-            elif src_framework == "sk":
-                if export_type == "pkl":
-                    with open(model_path, "rb") as f:
-                        model = joblib.load(f)
-        except NameError:
-            raise ValueError(f"{export_type} not supported, are you missing packages?")
+        # try:
+        if export_type == "onnx":
+            model = onnxruntime.InferenceSession(model_path)
+        elif src_framework == "pt":
+            if export_type == "torchscript":
+                model = torch.jit.load(model_path, map_location="cpu")
+        elif src_framework == "sk":
+            if export_type == "pkl":
+                with open(model_path, "rb") as f:
+                    model = joblib.load(f)
+        # except NameError:
+        #     raise ValueError(f"{export_type} not supported, are you missing packages?")
 
         model = cls(model_or_model_url=model, category=category, nbox_meta=nbox_meta, verbose=verbose)
         shutil.rmtree(folder)
