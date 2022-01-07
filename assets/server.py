@@ -1,3 +1,36 @@
+# logger/
+
+import json
+import logging
+
+from pythonjsonlogger.jsonlogger import JsonFormatter, RESERVED_ATTRS
+
+class CustomJsonFormatter(JsonFormatter):
+      def format(self, record):
+        data = record.__dict__.copy()
+        mydict = {
+          "levelname": data.pop("levelname"),
+          "created": data.pop("created"),
+          "loc": f'{data.pop("filename")}:{data.pop("lineno")}',
+          "message": data.pop("msg"),
+        }
+        for reserved in RESERVED_ATTRS:
+            if reserved in data:
+                del data[reserved]
+        mydict.update(data)
+        return json.dumps(mydict)
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger()
+logHandler = logging.StreamHandler()
+logHandler.setFormatter(CustomJsonFormatter())
+logger.addHandler(logHandler)
+del logger.handlers[0]
+
+print("333333", logger.handlers)
+
+# /logger
+
 import os
 import time
 import fastapi as fa
@@ -10,13 +43,9 @@ import nbox
 from nbox.model import Model
 from nbox.utils import convert_to_list
 
-from logging import getLogger
-logger = getLogger("nbox.serving")
-
 fpath = os.getenv("NBOX_MODEL_PATH", None)
 if fpath == None:
     raise ValueError("have you set env var: NBOX_MODEL_PATH")
-
 
 class ModelInput(BaseModel):
     inputs: Any
@@ -65,24 +94,25 @@ def get_meta(r: Request, response: Response):
 
 @app.post("/predict", status_code=200, response_model=ModelOutput)
 def predict(r: Request, response: Response, item: ModelInput):
-    logger.info(f"Got input :: {str(item.inputs)[:100]}")
+    logger.info(str(item.inputs)[:100], extra = {"_time": int(time.time())})
 
     try:
         output = model(item.inputs, method = item.method, return_dict = True)
     except Exception as e:
         response.status_code = 500
+        logger.error('{"error_0": {}, "name": {}}'.format(str(e), "model_predict"))
         return {"message": str(e), "time": int(time.time())}
 
     if isinstance(output, str):
         response.status_code = 400
-        logger.error(output)
+        logger.error('{"error_1": {}, "name": {}}'.format(output, "incorrect_predict"))
         return {"message": output, "time": int(time.time())}
 
     try:
         output = convert_to_list(output)
     except Exception as e:
-        logger.error("convert_to_list failed")
         response.status_code = 500
+        logger.error('{"error_2": {}, "name": {}}'.format(str(e), "serialise"))
         return {"message": str(e), "time": int(time.time())}
 
     response.status_code = 200

@@ -33,8 +33,12 @@ class AddSixNos(Operator):
 class OperatorTest(unittest.TestCase):
   def test_one_operator(self):
     op = AddTwoNos()
+    print(op)
     self.assertEqual(op(1, 2), 3)
 
   def test_chained(self):
     op = AddSixNos()
+    print(op)
     self.assertEqual(op(1, 2, 3, 4, 5, 6), 21)
+
+unittest.main()

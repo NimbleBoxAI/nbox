@@ -19,6 +19,7 @@ onnxruntime = "1.9.0"
 tabulate = "0.8.9"
 torch = "^1.9.0"
 torchvision = "0.10.0"
+python-json-logger = "2.0.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

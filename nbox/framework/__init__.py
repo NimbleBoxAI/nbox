@@ -86,7 +86,7 @@ if _isthere(*_sk_modules):
     __all__ += ["sklearn"]
 
 _onnx_modules = ["onnx", "onnxruntime"]
-if isthere(*_onnx_modules):
+if _isthere(*_onnx_modules):
     maps = {"IMPORTS": _onnx_modules}
     onnx = SimpleNamespace(**maps)
     __all__ += ["onnx"]

@@ -30,46 +30,55 @@ class AWSClient:
       )
     )
 
+# ------ GCP Auth ------ #
+
+class GCPClient:
+  def __init__(self):
+    raise NotImplementedError()
+
+# ------ Azure Auth ------ #
+
+class AzureClient:
+  def __init__(self):
+    raise NotImplementedError()
+
+# ------ OCI Auth ------ #
+
+class OCIClient:
+  def __init__(self):
+    raise NotImplementedError()
+
 # ------ NBX Auth ------ #
 
-def get_access_token(nbx_home_url, username, password=None):
-  password = getpass("Password: ") if password is None else password
-  try:
-    r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
-  except Exception as e:
-    raise Exception(f"Could not connect to NBX | {str(e)}")
+class NBXClient:
+  @staticmethod
+  def get_access_token(nbx_home_url, username, password=None):
+    password = getpass("Password: ") if password is None else password
+    try:
+      r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
+    except Exception as e:
+      raise Exception(f"Could not connect to NBX | {str(e)}")
 
-  if r.status_code == 401:
-    logger.error(" Invalid username/password. Please try again!")
-    return False
-  elif r.status_code == 200:
-    access_packet = r.json()
-    access_token = access_packet.get("access_token", None)
-    logger.info("Access token obtained")
-    return access_token
-  else:
-    logger.error(f"Unknown error: {r.content.decode()}")
-    raise Exception(f"Unknown error: {r.status_code}")
+    if r.status_code == 401:
+      logger.error(" Invalid username/password. Please try again!")
+      return False
+    elif r.status_code == 200:
+      access_packet = r.json()
+      access_token = access_packet.get("access_token", None)
+      logger.info("Access token obtained")
+      return access_token
+    else:
+      logger.error(f"Unknown error: {r.content.decode()}")
+      raise Exception(f"Unknown error: {r.status_code}")
 
+  @staticmethod
+  def create_secret_file(username, access_token, nbx_url):
+    os.makedirs(NBOX_HOME_DIR, exist_ok=True)
+    fp = join(NBOX_HOME_DIR, "secrets.json")
+    with open(fp, "w") as f:
+      f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}, indent=2))
 
-def create_secret_file(username, access_token, nbx_url):
-  os.makedirs(NBOX_HOME_DIR, exist_ok=True)
-  fp = join(NBOX_HOME_DIR, "secrets.json")
-  with open(fp, "w") as f:
-    f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}, indent=2))
-
-
-def init_secret():
-  global secret
-  secret = Secrets()
-  nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
-
-
-class Secrets:
-  # this is the user local store
   def __init__(self):
-    # get the secrets file
-    
     os.makedirs(NBOX_HOME_DIR, exist_ok=True)
     fp = join(NBOX_HOME_DIR, "secrets.json")
 
@@ -89,7 +98,7 @@ class Secrets:
       username = input("Username: ")
       access_token = None
       while not access_token:
-        access_token = get_access_token(nbx_home_url, username)
+        access_token = self.get_access_token(nbx_home_url, username)
         self.secrets["access_token"] = access_token
       self.secrets["username"] = username
       self.secrets["nbx_url"] = nbx_home_url
@@ -107,6 +116,12 @@ class Secrets:
   def get(self, item):
     return self.secrets[item]
 
+# function for manual trigger
+
+def init_secret():
+  global secret
+  secret = NBXClient()
+  nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 
 secret = None
 if not os.getenv("NBOX_NO_AUTH", False):

@@ -320,7 +320,6 @@ class Model(GenericMixin):
 
             try:
                 r.raise_for_status()
-                secret.update_ocd(self.model_url, len(r.content), len(r.request.body if r.request.body else []))
                 out = r.json()
 
                 # first try outputs is a key and we can just get the structure from the list
@@ -670,18 +669,18 @@ class Model(GenericMixin):
         src_framework = nbox_meta["spec"]["src_framework"]
         category = nbox_meta["spec"]["category"]
 
-        # try:
-        if export_type == "onnx":
-            model = onnxruntime.InferenceSession(model_path)
-        elif src_framework == "pt":
-            if export_type == "torchscript":
-                model = torch.jit.load(model_path, map_location="cpu")
-        elif src_framework == "sk":
-            if export_type == "pkl":
-                with open(model_path, "rb") as f:
-                    model = joblib.load(f)
-        # except NameError:
-        #     raise ValueError(f"{export_type} not supported, are you missing packages?")
+        try:
+            if export_type == "onnx":
+                model = onnxruntime.InferenceSession(model_path)
+            elif src_framework == "pt":
+                if export_type == "torchscript":
+                    model = torch.jit.load(model_path, map_location="cpu")
+            elif src_framework == "sk":
+                if export_type == "pkl":
+                    with open(model_path, "rb") as f:
+                        model = joblib.load(f)
+        except NameError:
+            raise ValueError(f"{export_type} not supported, are you missing packages?")
 
         model = cls(model_or_model_url=model, category=category, nbox_meta=nbox_meta, verbose=verbose)
         shutil.rmtree(folder)

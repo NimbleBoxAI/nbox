@@ -20,9 +20,8 @@ class StateDictModel:
 class Operator:
   _version: int = 1
 
-  def __init__(self, name) -> None:
+  def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
-    self.name = name
 
   # classmethods/
 
@@ -36,6 +35,13 @@ class Operator:
   @classmethod
   def from_airflow(cls, dag):
     pass
+
+  def to_airflow(self, fpath = None):
+    dag = None
+    if fpath:
+      # creates a file with the DAG at the given path with code for running the DAG
+      pass
+    return dag
 
   # /classmethods
 
@@ -77,6 +83,9 @@ class Operator:
     return main_str
 
   def __setattr__(self, key, value: 'Operator'):
+    obj = getattr(self, key, None)
+    if obj is not None and callable(obj):
+      raise AttributeError(f"cannot assign {key} as it is already a method")
     if isinstance(value, Operator):
       if not "_operators" in self.__dict__:
         raise AttributeError("cannot assign operator before Operator.__init__() call")
@@ -96,20 +105,6 @@ class Operator:
     Note:
       Duplicate modules are returned only once. In the following
       example, ``l`` will be returned only once.
-
-    Example::
-
-        >>> l = Operator(2, 2)
-        >>> net = oplib.Sequential(l, l)
-        >>> for idx, m in enumerate(net.operators()):
-              print(idx, '->', m)
-
-        0 -> Sequential(
-          (0): Operator(in_features=2, out_features=2, bias=True)
-          (1): Operator(in_features=2, out_features=2, bias=True)
-        )
-        1 -> Operator(in_features=2, out_features=2, bias=True)
-
     """
     for _, module in self.named_operators():
       yield module
@@ -130,19 +125,6 @@ class Operator:
     Note:
         Duplicate modules are returned only once. In the following
         example, ``l`` will be returned only once.
-
-    Example::
-
-        >>> l = Operator(2, 2)
-        >>> net = oplib.Sequential(l, l)
-        >>> for idx, m in enumerate(net.operators()):
-              print(idx, '->', m)
-
-        0 -> ('0', Sequential(
-          (0): Operator(in_features=2, out_features=2, bias=True)
-          (1): Operator(in_features=2, out_features=2, bias=True)
-        ))
-        1 -> ('1', Operator(in_features=2, out_features=2, bias=True))
     """
     if memo is None:
       memo = set()

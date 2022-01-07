@@ -8,16 +8,13 @@ import tempfile
 import randomname
 from PIL import Image
 from uuid import uuid4
-from datetime import timedelta
-from types import SimpleNamespace
-from time import time, sleep as _sleep
 
 import logging
 
 import numpy as np
 import torch
 
-# since nbox hsa become much bigger than waht 
+# logging/
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,6 +23,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("utils")
+
+# /logging
 
 nbox_session = requests.Session()
 
@@ -45,7 +44,7 @@ def isthere(*packages):
             for package in packages:
                 if not _isthere(package):
                     # raise a warning, let the modulenotfound exception bubble up
-                    logging.warn(
+                    logger.warn(
                         f"{package} is not installed, but is required by {fn.__module__}, some functionality may not work"
                     )
             return fn(*args, **kwargs)

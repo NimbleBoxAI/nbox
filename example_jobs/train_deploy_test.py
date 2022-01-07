@@ -8,7 +8,7 @@ import os
 import json
 import torch
 import random
-from uuid import uuid1
+from uuid import uuid1, uuid4
 from tqdm.auto import trange
 from tempfile import gettempdir
 from torchvision import datasets
@@ -24,7 +24,7 @@ from nbox.operators import NboxInstanceStartOperator
 
 class Downloader(Operator):
   def __init__(self):
-    super().__init__("downloader")
+    super().__init__()
 
   def forward(self, target_dir = gettempdir() + "/nbx_sample"):
     # create dir if needed
@@ -73,7 +73,7 @@ class Downloader(Operator):
 
 class TrainOperator(Operator):
   def __init__(self):
-    super().__init__("train")
+    super().__init__()
     self.best_model_fpath = None
     self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -144,7 +144,7 @@ class TrainOperator(Operator):
     batch_size_train,
     batch_size_test,
     deployment_id = None,
-    deployment_name = None,
+    model_name = None,
   ):
     # get all the required things
     trainer = self.get_trainer(
@@ -165,19 +165,18 @@ class TrainOperator(Operator):
       cache_dir="./gperc_model",
     ).deploy(
       input_object = {k:v.numpy() for k,v in sample_data.items()},
-      model_name = "dasdasdasasffasfafasfas",
+      model_name = model_name,
       wait_for_deployment = True,
       runtime = "onnx",
       deployment_type = "nbox",
-      deployment_id = "0kxxvuzb",
-      deployment_name = None
+      deployment_id = deployment_id,
     )
 
     return url, key
 
 class TestDeploy(Operator):
   def __init__(self, workers):
-    super().__init__("test_deploy")
+    super().__init__()
     self.workers = workers
     self.pool = Pool("thread", workers)
 
@@ -199,7 +198,7 @@ class TestDeploy(Operator):
 
 class TrainTestDeploy(Operator):
   def __init__(self):
-    super().__init__("train_test_deploy")
+    super().__init__()
     # self.instance_start = NboxInstanceStartOperator(
     #   instances = []
     # )
@@ -208,10 +207,12 @@ class TrainTestDeploy(Operator):
     self.deploy_tester = TestDeploy(workers = 2)
 
   def forward(self, n_steps = 100, test_every = 10, batch_size = 32):
+    from uuid import uuid4
     # self.instance_start()
     train_json, test_json, class_to_id = self.downloader() # target_dir is already correct
     url, api_key = self.trainer(
-      n_steps, test_every, train_json, test_json, class_to_id, batch_size, batch_size * 4
+      n_steps, test_every, train_json, test_json, class_to_id, batch_size, batch_size * 4,
+      model_name = str(uuid4()).replace("-", "_")[:43]
     )
     self.deploy_tester(url, api_key, n_hits = 20)
 
