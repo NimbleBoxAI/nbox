@@ -27,8 +27,6 @@ logHandler.setFormatter(CustomJsonFormatter())
 logger.addHandler(logHandler)
 del logger.handlers[0]
 
-print("333333", logger.handlers)
-
 # /logger
 
 import os
