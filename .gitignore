@@ -155,4 +155,5 @@ __secret/
 
 # not need to add / in symlink 
 .nbx
+nbox-kernel
 example_jobs/gperc_model/

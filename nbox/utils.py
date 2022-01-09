@@ -36,13 +36,15 @@ def _isthere(*packages):
             return False
     return True
 
-def isthere(*packages):
+def isthere(hard = False, *packages):
     def wrapper(fn):
         def _fn(*args, **kwargs):
             # since we are lazy evaluating this thing, we are checking when the function
             # is actually called. This allows checks not to happen during __init__.
             for package in packages:
                 if not _isthere(package):
+                    if hard:
+                        raise Exception(f"{package} is not installed")
                     # raise a warning, let the modulenotfound exception bubble up
                     logger.warn(
                         f"{package} is not installed, but is required by {fn.__module__}, some functionality may not work"

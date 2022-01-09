@@ -4,6 +4,9 @@
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from typing import Callable
+
+from ..framework.__airflow import AirflowMixin
 
 
 @dataclass
@@ -17,7 +20,7 @@ class StateDictModel:
     self.data = OrderedDict(self.data)
 
 
-class Operator:
+class Operator(AirflowMixin):
   _version: int = 1
 
   def __init__(self) -> None:
@@ -31,17 +34,6 @@ class Operator:
   @classmethod
   def deserialise(cls, state_dict):
     pass
-
-  @classmethod
-  def from_airflow(cls, dag):
-    pass
-
-  def to_airflow(self, fpath = None):
-    dag = None
-    if fpath:
-      # creates a file with the DAG at the given path with code for running the DAG
-      pass
-    return dag
 
   # /classmethods
 
@@ -140,6 +132,10 @@ class Operator:
           yield m
 
   @property
+  def children(self):
+    return self._operators.values()
+
+  @property
   def inputs(self):
     import inspect
     args = inspect.getfullargspec(self.forward).args
@@ -165,10 +161,34 @@ class Operator:
       outputs = self.outputs
     )
 
+  # properties as planned
+
+  @property
+  def comms(self):
+    # this returns all the things communications such as email, Slack, Discord
+    # phone alerts, system notifications, gmeets, basically everything supported
+    # in https://github.com/huggingface/knockknock/tree/master/knockknock
+    raise NotImplementedError()
+
   # /properties
+
+  # information passing/
+
+  def propagate(self, **kwargs):
+    for c in self.children:
+      c.propagate(**kwargs)
+    
+    for k, v in kwargs.items():
+      if k in self.inputs:
+        setattr(self, k, v)
+
+  # /information passing
 
   def forward(self):
     raise NotImplementedError("User must implement forward()")
+
+  def _register_forward(self, python_callable: Callable):
+    self._new_forward = python_callable
 
   def __call__(self, *args, **kwargs):
     assert self.is_dag
@@ -193,8 +213,11 @@ class Operator:
       if key in inputs:
         input_dict[key] = value
 
-    # pass this through the user defined forward()
-    return self.forward(**input_dict)
+    try:
+      return self._new_forward(**input_dict)
+    except:
+      # pass this through the user defined forward()
+      return self.forward(**input_dict)
 
   # nbx/
 

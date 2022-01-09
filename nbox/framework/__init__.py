@@ -46,7 +46,7 @@ def get_meta(input_names, input_shapes, args, output_names, output_shapes, outpu
 __all__ = ["get_meta"]
 
 from types import SimpleNamespace
-from ..utils import _isthere, folder, isthere, join
+from ..utils import _isthere, folder, join
 
 def update_all_lazy_loading(*modules, fname):
     """Lazy load modules and update the ``__all__`` list"""
