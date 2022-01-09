@@ -25,6 +25,7 @@ class Operator(AirflowMixin):
 
   def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
+    self._op_trace = []
 
   # classmethods/
 
@@ -34,6 +35,13 @@ class Operator(AirflowMixin):
   @classmethod
   def deserialise(cls, state_dict):
     pass
+
+  # AirflowMixin methods
+  # --------------------
+  # AirflowMixin.to_airflow_operator(self, timeout, **operator_kwargs):
+  # AirflowMixin.from_airflow_operator(cls, air_operator) <- classmethod
+  # AirflowMixin.to_airflow_dag(self, dag_kwargs, operator_kwargs)
+  # AirflowMixin.from_airflow_dag(cls, dag) <- classmethod
 
   # /classmethods
 
@@ -89,35 +97,13 @@ class Operator(AirflowMixin):
   # properties/
 
   def operators(self):
-    r"""Returns an iterator over all operators in the job.
-
-    Yields:
-      Operator: a operator in the network
-
-    Note:
-      Duplicate modules are returned only once. In the following
-      example, ``l`` will be returned only once.
-    """
+    r"""Returns an iterator over all operators in the job."""
     for _, module in self.named_operators():
       yield module
 
   def named_operators(self, memo = None, prefix: str = '', remove_duplicate: bool = True):
     r"""Returns an iterator over all modules in the network, yielding
-    both the name of the module as well as the module itself.
-
-    Args:
-        memo: a memo to store the set of modules already added to the result
-        prefix: a prefix that will be added to the name of the module
-        remove_duplicate: whether to remove the duplicated module instances in the result
-        or not
-
-    Yields:
-        (string, Module): Tuple of name and module
-
-    Note:
-        Duplicate modules are returned only once. In the following
-        example, ``l`` will be returned only once.
-    """
+    both the name of the module as well as the module itself."""
     if memo is None:
       memo = set()
     if self not in memo:
@@ -139,7 +125,10 @@ class Operator(AirflowMixin):
   def inputs(self):
     import inspect
     args = inspect.getfullargspec(self.forward).args
-    args.remove('self')
+    try:
+      args.remove('self')
+    except:
+      pass
     return args
 
   @property
@@ -188,6 +177,7 @@ class Operator(AirflowMixin):
     raise NotImplementedError("User must implement forward()")
 
   def _register_forward(self, python_callable: Callable):
+    # convienience method to register a forward method
     self._new_forward = python_callable
 
   def __call__(self, *args, **kwargs):

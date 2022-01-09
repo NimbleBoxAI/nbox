@@ -42,7 +42,7 @@ def stop(
     logger.info(f"Stopping {item['instance_id']}")
     web_server_subway.stop(item["instance_id"])
 
-jobs_cli = {
+jobs_cli = {                # nbox jobs (...)
   "instance": {
     "start": start,         # nbox jobs instance start (...)
     "stop": stop,           # nbox jobs instance stop (...)

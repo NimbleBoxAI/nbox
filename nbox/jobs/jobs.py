@@ -85,16 +85,16 @@ class Instance():
     self.instance_id = None
     self.__opened = False
     self.running_scripts = []
-    
+
     self.refresh(id_or_name)
-    logger.info(f"Instance added: {self.instance_id}, {self.name}")    
-    
+    logger.info(f"Instance added: {self.name} ({self.instance_id})")
+
     if self.state == "RUNNING":
       self.start()
 
   def __eq__(self, __o: object):
     return self.instance_id == __o.instance_id
-  
+
   def __repr__(self):
     return f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
@@ -112,11 +112,11 @@ class Instance():
 
   def start(self, cpu_only = True, gpu_count = 1):
     if self.__opened:
-      logger.info(f"Instance {self.instance_id} is already opened")
+      logger.info(f"Instance {self.name} ({self.instance_id}) is already opened")
       return
 
     if not self.state == "RUNNING":
-      logger.info(f"Starting instance {self.instance_id}")
+      logger.info(f"Starting instance {self.name} ({self.instance_id})")
       message = self.web_server.start_instance(
         "post",
         data = {
@@ -132,21 +132,21 @@ class Instance():
       if not message == "success":
         raise ValueError(message)
 
-      logger.info(f"Waiting for instance {self.instance_id} to start")
-      _i = 0 
+      logger.info(f"Waiting for instance {self.name} ({self.instance_id}) to start")
+      _i = 0
       while self.state != "RUNNING":
         time.sleep(5)
         self.refresh()
         _i += 1
         if _i > TIMEOUT_CALLS:
           raise TimeoutError("Instance did not start within timeout, please check dashboard")
-      logger.info(f"Instance {self.instance_id} started")
+      logger.info(f"Instance {self.name} ({self.instance_id}) started")
     else:
-      logger.info(f"Instance {self.instance_id} is already running")
+      logger.info(f"Instance {self.name} ({self.instance_id}) is already running")
 
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
-    logger.info(f"Opening instance {self.instance_id}")
+    logger.info(f"Opening instance {self.name} ({self.instance_id})")
     instance_url = self.web_server.open_instance(
       "post", data = {"instance_id":self.instance_id}
     )["base_url"].lstrip("/").rstrip("/")
@@ -161,7 +161,7 @@ class Instance():
     logger.info(f"CS: {self.compute_server}")
 
     # now load all the functions from methods.py
-    logger.info(f"Testing instance {self.instance_id}")
+    logger.info(f"Testing instance {self.name} ({self.instance_id})")
     out = self.compute_server.test()
     with open(join(NBOX_HOME_DIR, "methods.py"), "w") as f:
       f.write(out["data"])
@@ -179,19 +179,35 @@ class Instance():
       )
       setattr(self, m, fn)
 
+    # see if any developmental methods are saved locally
+    try:
+      from proto_methods import __all__ as p_all
+      for m in p_all:
+        trg_name = f"bios_{m}"
+        exec(f"from proto_methods import {m} as {trg_name}")
+        fn = partial(
+          locals()[trg_name],
+          cs_sub = self.compute_server,
+          ws_sub = self.web_server,
+          logger = logger
+        )
+        setattr(self, m, fn)
+    except:
+      pass
+
     self.__opened = True
 
   def stop(self):
     if self.state == "STOPPED":
-      logger.info(f"Instance {self.instance_id} is already stopped")
+      logger.info(f"Instance {self.name} ({self.instance_id}) is already stopped")
       return
 
-    logger.info(f"Stopping instance {self.instance_id}")
+    logger.info(f"Stopping instance {self.name} ({self.instance_id})")
     message = self.web_server.stop_instance("post", data = {"instance_id":self.instance_id})["msg"]
     if not message == "success":
       raise ValueError(message)
 
-    logger.info(f"Waiting for instance {self.instance_id} to stop")
+    logger.info(f"Waiting for instance {self.name} ({self.instance_id}) to stop")
     _i = 0 # timeout call counter
     while self.state != "STOPPED":
       time.sleep(5)
@@ -199,14 +215,14 @@ class Instance():
       _i += 1
       if _i > TIMEOUT_CALLS:
         raise TimeoutError("Instance did not stop within timeout, please check dashboard")
-    logger.info(f"Instance {self.instance_id} stopped")
+    logger.info(f"Instance {self.name} ({self.instance_id}) stopped")
 
     self.__opened = False
 
   def delete(self, force = False):
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
-    logger.info(f"Deleting instance {self.instance_id}")
+    logger.info(f"Deleting instance {self.name} ({self.instance_id})")
     message = self.web_server.delete_instance("post", data = {"instance_id":self.instance_id})["msg"]
     if not message == "success":
       raise ValueError(message)
@@ -240,19 +256,26 @@ class Instance():
         lambda y: y["path"] == fpath, self.compute_server.myfiles.info(fpath)["data"]
       ))
       if not meta:
-        raise ValueError(f"File {x} not found on instance {self.instance_id}")
+        raise ValueError(f"File {x} not found on instance {self.name} ({self.instance_id})")
       return self.compute_server.rpc.start(fpath)["uid"]
 
     if is_random_name(x):
-      logger.info(f"Getting status of Job '{x}' on instance {self.instance_id}")
+      logger.info(f"Getting status of Job '{x}' on instance {self.name} ({self.instance_id})")
       data = self.compute_server.rpc.status(x)
       if not data["msg"] == "success":
         raise ValueError(data["msg"])
       else:
         status = data["status"]
-        logger.info(f"Script {x} on instance {self.instance_id} is {status}")
+        logger.info(f"Script {x} on instance {self.name} ({self.instance_id}) is {status}")
 
-      # if the job is stopped, then check the logs and exit code for 
+      # if stopped then get the logs and run
+      if status == "stopped":
+        out = self.compute_server.rpc.logs(x)
+        if out["err"]:
+          logger.error("Execution errored out")
+          return "error-done"
+        else:
+          return "done"
       
       return status
     elif os.path.isfile(x):
@@ -266,7 +289,7 @@ class Instance():
       self.running_scripts.append(uid)
       return uid
     else:
-      raise ValueError(f"Unknown format {x}")
+      raise ValueError(f"Unknown: {x}")
 
   def refresh(self, id_or_name = None):
     id_or_name = id_or_name or self.instance_id
@@ -278,7 +301,3 @@ class Instance():
 
     if self.state == "RUNNING":
       self.start()
-
-  def get_logs(self, job_id):
-    return self.compute_server.rpc.logs(job_id)["data"]
-    pass
