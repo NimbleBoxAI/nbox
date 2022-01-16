@@ -1,8 +1,8 @@
 import json
 import os
 
-from .network import one_click_deploy
-from .auth import create_secret_file, get_access_token, init_secret
+from .network import deploy_model
+from .auth import init_secret
 from .utils import get_random_name
 
 
@@ -97,7 +97,7 @@ def deploy(
 
         # one click deploy
         model_name = get_random_name().replace("-", "_") if model_name == None else model_name
-        endpoint, key = one_click_deploy(
+        endpoint, key = deploy_model(
             model_path, model_name, deployment_type, nbox_meta, wait_for_deployment, convert_args, deployment_id, deployment_name
         )
 

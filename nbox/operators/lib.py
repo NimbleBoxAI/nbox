@@ -24,6 +24,24 @@ class NboxInstanceStartOperator(Operator):
     return None
 
 
+class NboxModelDeployOperator(Operator):
+  def __init__(self, model_name, model_path, model_weights, model_labels):
+    super().__init__()
+    self.model_name = model_name
+    self.model_path = model_path
+    self.model_weights = model_weights
+    self.model_labels = model_labels
+
+  def forward(self, name):
+    from ..model import Model
+    Model(
+      self.model_name,
+      self.model_path,
+      self.model_weights,
+      self.model_labels,
+    ).deploy(name)
+
+
 class WaitTillJIDComplete(Operator):
   def __init__(self, instance, jid):
     super().__init__()
@@ -47,3 +65,89 @@ class WaitTillJIDComplete(Operator):
         raise Exception("Job {} failed".format(self.jid))
 
 # /nbox
+
+class GitClone(Operator):
+  def __init__(self, url, path = None, branch = None):
+    super().__init__()
+    self.url = url
+    self.path = path
+    self.branch = branch
+
+  def forward(self):
+    # git clone -b <branch> <repo> <path>
+    import subprocess
+    command = ["git", "clone"]
+    if self.branch:
+      command.append("-b")
+      command.append(self.branch)
+    if self.path:
+      command.append(self.path)
+    command.append(self.url)
+    subprocess.run(command, check = True)
+
+class ShellCommand(Operator):
+  def __init__(self, *commands):
+    super().__init__()
+    import shlex
+    self.commands = [shlex.split(c) for c in commands]
+
+  def forward(self):
+    import subprocess
+    for command in self.commands:
+      subprocess.run(command, check = True)
+
+class Notify(Operator):
+  _mode_to_packages = {
+    "slack": "slackclient",
+    "ms_teams": "microsoft-teams",
+    "discord": "discord",
+  }
+
+  def __init__(
+    self,
+    slack_connect: str = None,
+    ms_teams: str = None,
+    discord: str = None,
+  ):
+    super().__init__()
+    self.notify_mode = None
+    self.notify_id = None
+
+    for mode, id in [
+      ("slack", slack_connect),
+      ("ms_teams", ms_teams),
+      ("discord", discord),
+    ]:
+      if id:
+        self.notify_mode = mode
+        self.notify_id = id
+
+        # check for package dependencies
+        import importlib
+        try:
+          importlib.import_module(self._mode_to_packages[mode])
+        except ImportError:
+          raise Exception(f"{self._mode_to_packages[mode]} package required for {mode}")
+        break
+    
+    if not self.notify_mode:
+      raise Exception("No notification mode specified")
+
+  def forward(self, message: str, **kwargs):
+    package = self._mode_to_packages[self.notify_mode]
+    import importlib
+    importlib.import_module(package)
+    if self.notify_mode == "slack":
+      from slackclient import SlackClient
+      sc = SlackClient(self.notify_id)
+      sc.api_call("chat.postMessage", text = message, **kwargs)
+    elif self.notify_mode == "ms_teams":
+      from microsoft_teams.api_client import TeamsApiClient
+      from microsoft_teams.models import MessageCard
+      client = TeamsApiClient(self.notify_id)
+      client.connect()
+      client.send_message(MessageCard(text = message, **kwargs))
+    elif self.notify_mode == "discord":
+      from discord import Webhook, RequestsWebhookAdapter
+      webhook = Webhook.from_url(self.notify_id, adapter = RequestsWebhookAdapter())
+      webhook.send(message, **kwargs)

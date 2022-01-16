@@ -5,7 +5,7 @@ from PIL import Image
 from . import utils
 
 import logging
-logger = logging.getLogger("parser")
+logger = logging.getLogger()
 
 
 # ----- parsers

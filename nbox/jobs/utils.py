@@ -1,5 +1,5 @@
 from logging import getLogger
-logger = getLogger("jobs.utils")
+logger = getLogger()
 
 TIMEOUT_CALLS = 60
 

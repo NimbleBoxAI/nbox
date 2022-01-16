@@ -10,7 +10,7 @@ from .utils import _isthere, fetch
 
 import logging
 
-logger = logging.getLogger("load")
+logger = logging.getLogger()
 
 model_key_regex = re.compile(r"^(\w+)(\/[\w\/-]+)?(:*[\w+:]+)?$")
 

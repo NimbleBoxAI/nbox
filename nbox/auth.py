@@ -6,7 +6,7 @@ from getpass import getpass
 
 from .utils import join, nbox_session, NBOX_HOME_DIR
 
-logger = logging.getLogger("user")
+logger = logging.getLogger()
 
 # ------ AWS Auth ------ #
 
@@ -45,6 +45,13 @@ class AzureClient:
 # ------ OCI Auth ------ #
 
 class OCIClient:
+  def __init__(self):
+    raise NotImplementedError()
+
+
+# ------ Digital Ocean Auth ------ #
+
+class DOClient:
   def __init__(self):
     raise NotImplementedError()
 

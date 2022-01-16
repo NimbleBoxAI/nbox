@@ -23,7 +23,7 @@ from ..utils import nbox_session, NBOX_HOME_DIR, join
 from ..auth import secret
 
 from logging import getLogger
-logger = getLogger("jobs")
+logger = getLogger()
 
 
 def get_status(url = "https://nimblebox.ai", session = nbox_session):

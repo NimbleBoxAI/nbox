@@ -5,6 +5,7 @@
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Callable
+from datetime import datetime, timedelta
 
 from ..framework.__airflow import AirflowMixin
 
@@ -19,6 +20,98 @@ class StateDictModel:
   def __post_init__(self):
     self.data = OrderedDict(self.data)
 
+
+class TraceObject:
+  def __init__(self, root):
+    self.root = root
+    self.flow = OrderedDict()
+
+  def pre(self, inputs, cls):
+    _id = id(cls)
+    self.flow[_id] = {
+      "id": _id,
+      "class_name": cls.__class__.__name__,
+      "inputs": {k: type(v) for k, v in inputs.items()},
+      "outputs": {},
+      "start": datetime.now(),
+      "end": None,
+    }
+
+  def post(self, out, cls):
+    _id = id(cls)
+    if _id not in self.flow:
+      raise ValueError(f"{_id} not found in flow")
+
+    outputs = {}
+    if out == None:
+      outputs = {"out_0": type(None)}
+    elif isinstance(out, dict):
+      outputs = {k: type(v) for k, v in out.items()}
+    elif isinstance(out, (list, tuple)):
+      outputs = {f"out_{i}": type(v) for i, v in enumerate(out)}
+    else:
+      outputs = {"out_0": type(out)}
+
+    self.flow[_id].update({
+      "outputs": outputs,
+      "end": datetime.now(),
+    })
+    self.flow[_id]["duration"] = self.flow[_id]["end"] - self.flow[_id]["start"]
+
+    # convert datetime to string objects for serialization
+    self.flow[_id]["start"] = self.flow[_id]["start"].isoformat()
+    self.flow[_id]["end"] = self.flow[_id]["end"].isoformat()
+    self.flow[_id]["duration"] = str(self.flow[_id]["duration"].total_seconds())
+
+  def to_dict(self):
+    return {
+      "root": self.root.__class__.__name__,
+      "root_id": id(self.root),
+      "flow": self.flow,
+    }
+
+  def dag(self, depth = 1, root_ = None):
+    if depth != 1:
+      raise ValueError("depth of 1 supported only")
+
+    if depth < 0:
+      return []
+
+    dag = []
+    # create nodes
+    root_ = root_ if root_ != None else self.root
+    for _name, c in root_._operators.items():
+      _id = id(c)
+      name = c.__class__.__name__
+      _trace = self.flow[_id]
+      _trace["code_name"] = _name
+
+      # if there is some depth left, recurse
+      if depth > 1:
+        children_dag = self.dag(depth - 1, c)
+        _trace["children"] = children_dag
+
+      dag.append({
+        "id": _id,
+        "type": "input" if len(dag) == 0 else None,
+        "data": {
+          "label": f"{_name} | {name}"
+        },
+        # "meta": _trace
+      })
+    dag[-1]["type"] = "output"
+
+    # create edges
+    for src, trg in zip(dag[:-1], dag[1:]):
+      dag.append({
+        "id": f"edge-{src['id']}-{trg['id']}",
+        "source": src["id"],
+        "target": trg["id"]
+      })
+    
+    return dag
+
+    
 
 class Operator(AirflowMixin):
   _version: int = 1
@@ -121,6 +214,20 @@ class Operator(AirflowMixin):
   def children(self):
     return self._operators.values()
 
+  _topo_tree = {}
+
+  # @property
+  # def topo_tree(self):
+  #   # the structure of topo_tree looks like this:
+  #   #  / -> B \
+  #   # A        -> D
+  #   #  \ -> C /
+  #   #
+  #   # {"D": ["B", "C"], "B": ["A"], "C": ["A"], "A": []}
+  #   class IdeaError(Exception):
+  #     pass
+  #   raise IdeaError("Cannot represent a data-flow (declarative) as control-flow (imperative)")
+
   @property
   def inputs(self):
     import inspect
@@ -130,16 +237,6 @@ class Operator(AirflowMixin):
     except:
       pass
     return args
-
-  @property
-  def is_dag(self):
-    graph = set()
-    for idx, (name, op) in enumerate(self.named_operators()):
-      name = "root" if name == "" else name
-      if name in graph:
-        return False
-      graph.add(name)
-    return True
 
   @property
   def state_dict(self) -> StateDictModel:
@@ -168,8 +265,7 @@ class Operator(AirflowMixin):
       c.propagate(**kwargs)
     
     for k, v in kwargs.items():
-      if k in self.inputs:
-        setattr(self, k, v)
+      setattr(self, k, v)
 
   # /information passing
 
@@ -180,13 +276,34 @@ class Operator(AirflowMixin):
     # convienience method to register a forward method
     self._new_forward = python_callable
 
-  def __call__(self, *args, **kwargs):
-    assert self.is_dag
+  _trace_object: TraceObject = None
 
-    # here we will add code for:
-    # 1. (opt) type checking
-    # 2. networking
-    # 3. tracing
+  def trace(self, *args, return_dag = True, **kwargs):
+    self._trace_object = TraceObject(self)
+    self.propagate(_trace_object = self._trace_object)
+    self(*args, **kwargs)
+    trace = self._trace_object.to_dict()
+    dag = self._trace_object.dag()
+    self.propagate(_trace_object = None)
+    self._trace_object = None
+
+    output = (trace,)
+    if return_dag:
+      output += (dag,)
+    return output
+
+  def __call__(self, *args, **kwargs):
+    # blank comment so docstring below is not loaded
+
+    """There is no need to perform ``self.is_dag`` check here, since it is
+    a declarative model not an imperative one, so existance of DAG's is
+    irrelevant.
+
+    This function will has the code for the following:
+    1. Input checks, we want to enforce that
+    2. Tracing, we want to trace the execution of the model
+    3. Networking, when required to execute like RPC
+    """
 
     # Type Checking and create input dicts
     inputs = self.inputs
@@ -203,15 +320,45 @@ class Operator(AirflowMixin):
       if key in inputs:
         input_dict[key] = value
 
+    if self._trace_object != None:
+      self._trace_object.pre(inputs = input_dict, cls = self)
+
     try:
-      return self._new_forward(**input_dict)
+      out = self._new_forward(**input_dict)
     except:
       # pass this through the user defined forward()
-      return self.forward(**input_dict)
+      out = self.forward(**input_dict)
+    
+    if self._trace_object != None:
+      self._trace_object.post(out = out, cls = self)
+
+    return out
 
   # nbx/
 
-  def deploy(group_name_or_id):
-    pass
+  def deploy(
+    self,
+    job_id = None,
+    job_name = None,
+    start_datetime: datetime = None,
+    end_datetime: datetime = None,
+    time_interval: timedelta = None,
+    **trace_kwargs
+  ):
+    from nbox.network import deploy_job
+
+    _ = self(**trace_kwargs)
+
+    self._deploy_attributes = {
+      "job_id": job_id,
+      "job_name": job_name,
+      "start_datetime": start_datetime,
+      "end_datetime": end_datetime,
+      "time_interval": time_interval,
+    }
+
+    deploy_job(
+      self
+    )
 
   # /nbx

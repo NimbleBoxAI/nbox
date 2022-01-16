@@ -140,5 +140,3 @@ class ParserTest(unittest.TestCase):
             },
         )
 
-
-unittest.main()

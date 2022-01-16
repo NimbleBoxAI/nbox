@@ -1,31 +1,31 @@
 # logger/
 
-import json
-import logging
+# import json
+# import logging
 
-from pythonjsonlogger.jsonlogger import JsonFormatter, RESERVED_ATTRS
+# from pythonjsonlogger.jsonlogger import JsonFormatter, RESERVED_ATTRS
 
-class CustomJsonFormatter(JsonFormatter):
-      def format(self, record):
-        data = record.__dict__.copy()
-        mydict = {
-          "levelname": data.pop("levelname"),
-          "created": data.pop("created"),
-          "loc": f'{data.pop("filename")}:{data.pop("lineno")}',
-          "message": data.pop("msg"),
-        }
-        for reserved in RESERVED_ATTRS:
-            if reserved in data:
-                del data[reserved]
-        mydict.update(data)
-        return json.dumps(mydict)
+# class CustomJsonFormatter(JsonFormatter):
+#       def format(self, record):
+#         data = record.__dict__.copy()
+#         mydict = {
+#           "levelname": data.pop("levelname"),
+#           "created": data.pop("created"),
+#           "loc": f'{data.pop("filename")}:{data.pop("lineno")}',
+#           "message": data.pop("msg"),
+#         }
+#         for reserved in RESERVED_ATTRS:
+#             if reserved in data:
+#                 del data[reserved]
+#         mydict.update(data)
+#         return json.dumps(mydict)
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger()
-logHandler = logging.StreamHandler()
-logHandler.setFormatter(CustomJsonFormatter())
-logger.addHandler(logHandler)
-del logger.handlers[0]
+# logging.basicConfig(level=logging.INFO)
+# logger = logging.getLogger()
+# logHandler = logging.StreamHandler()
+# logHandler.setFormatter(CustomJsonFormatter())
+# logger.addHandler(logHandler)
+# del logger.handlers[0]
 
 # /logger
 
@@ -37,9 +37,15 @@ from pydantic import BaseModel
 from starlette.responses import Response
 from starlette.requests import Request
 
+# set envar so we can automatically get jsonlogs
+os.environ("NBOX_JSON_LOG", 1)
 import nbox
 from nbox.model import Model
 from nbox.utils import convert_to_list
+
+import logging
+logger = logging.getLogger()
+
 
 fpath = os.getenv("NBOX_MODEL_PATH", None)
 if fpath == None:

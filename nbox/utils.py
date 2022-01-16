@@ -16,13 +16,7 @@ import torch
 
 # logging/
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
-    datefmt="%d-%m-%y/%H:%M:%S",
-)
-
-logger = logging.getLogger("utils")
+logger = logging.getLogger()
 
 # /logging
 
@@ -36,7 +30,7 @@ def _isthere(*packages):
             return False
     return True
 
-def isthere(hard = False, *packages):
+def isthere(*packages, hard = False, ):
     def wrapper(fn):
         def _fn(*args, **kwargs):
             # since we are lazy evaluating this thing, we are checking when the function

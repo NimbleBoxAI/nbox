@@ -5,17 +5,18 @@ import os
 import requests
 from pprint import pp
 from time import sleep
+from datetime import datetime
 
 from . import utils
 
 import logging
-logger = logging.getLogger("deploy")
+logger = logging.getLogger()
 
 class NBXAPIError(Exception):
     pass
 
 
-def one_click_deploy(
+def deploy_model(
     export_model_path,
     nbox_meta,
     wait_for_deployment=False,
@@ -199,3 +200,11 @@ def one_click_deploy(
     logger.info("Process Complete")
     logger.info("NBX Deploy")
     return endpoint, access_key
+
+
+def deploy_job(operator):
+    data_dict = {
+        "created": datetime.now()
+    }
+    pass
+

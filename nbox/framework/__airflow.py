@@ -4,13 +4,6 @@
 import inspect # used for __doc__
 from functools import partial
 from datetime import timedelta
-
-try:
-  from airflow.models.baseoperator import BaseOperator
-  from airflow.models.dag import DAG
-except ImportError:
-  pass
-
 from nbox.utils import isthere
 
 
@@ -60,6 +53,11 @@ def to_airflow_operator(operator, timeout: timedelta = None, operator_kwargs = {
   operator_kwargs_dict.update(comms)
   operator_kwargs_dict.update(operator_kwargs)
 
+  # importing inside the function  
+  from airflow.models.baseoperator import BaseOperator
+  from ..init import reset_log
+  reset_log()
+
   operator = BaseOperator(
     # items planned to be supported
     email = None,
@@ -81,7 +79,6 @@ def to_airflow_operator(operator, timeout: timedelta = None, operator_kwargs = {
     on_retry_callback = None,
 
     # others are ignored as of now
-
     **operator_kwargs_dict
   )
 
@@ -95,11 +92,12 @@ def from_airflow_operator(operator_cls, air_operator):
   return op
 
 def to_airflow_dag(operator, dag, operator_kwrags, dag_kwargs):
+  from airflow.models.dag import DAG
+  from ..init import reset_log
+  reset_log()
+
   operator = to_airflow_operator(operator, **operator_kwrags)
-  dag = DAG(
-    dag_id = "DAG_" + operator.task_id,
-    **dag_kwargs
-  )
+  dag = DAG(dag_id = "DAG_" + operator.task_id, **dag_kwargs)
   return dag
 
 def from_airflow_dag(operator_cls, dag):

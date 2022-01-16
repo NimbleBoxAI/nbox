@@ -26,13 +26,13 @@ for x in framework_exports[1:]:
     for y in IMPORTS:
         exec(f"import {y}")
 
-from .network import one_click_deploy
+from .network import deploy_model
 from .parsers import ImageParser, TextParser
 from .auth import secret
 
 import logging
 
-logger = logging.getLogger("model")
+logger = logging.getLogger()
 
 
 class GenericMixin:
@@ -679,8 +679,8 @@ class Model(GenericMixin):
                 if export_type == "pkl":
                     with open(model_path, "rb") as f:
                         model = joblib.load(f)
-        except NameError:
-            raise ValueError(f"{export_type} not supported, are you missing packages?")
+        except Exception as e:
+            raise ValueError(f"{export_type} not supported, are you missing packages? {e}")
 
         model = cls(model_or_model_url=model, category=category, nbox_meta=nbox_meta, verbose=verbose)
         shutil.rmtree(folder)
@@ -744,7 +744,7 @@ class Model(GenericMixin):
         nbox_meta["spec"]["deployment_name"] = deployment_name
 
         # OCD baby!
-        return one_click_deploy(
+        return deploy_model(
             export_model_path=export_model_path,
             nbox_meta=nbox_meta,
             wait_for_deployment=wait_for_deployment,
