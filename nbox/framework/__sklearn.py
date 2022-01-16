@@ -41,3 +41,6 @@ def export_to_pkl(model, export_model_path, **kwargs):
     # we use the joblib instead of pickle
     with open(export_model_path, "wb") as f:
         joblib.dump(model, f)
+
+
+__all__ = ["export_to_onnx", "export_to_pkl"]

@@ -23,7 +23,7 @@ copyright = "2021, nimblebox.ai"
 author = "nimblebox.ai"
 
 # The full version, including alpha/beta/rc tags
-release = "0.2.4"
+release = "0.7.0"
 
 
 # -- General configuration ---------------------------------------------------
@@ -60,7 +60,8 @@ autodoc_mock_imports = [
     "randomname"
     "rich"
     "scikit_learn"
-    "skl2onnx"
+    "skl2onnx",
+    "sklearn"
 ]
 
 # Add any paths that contain templates here, relative to this directory.

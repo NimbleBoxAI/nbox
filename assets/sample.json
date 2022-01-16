@@ -50,6 +50,11 @@
   "spec": {
     "name": "some_model_name",
     "category": "image",
-    "model_key": "torchvision/mobilenetv2"
+    "model_key": "torchvision/mobilenetv2 or null",
+    "model_name": "good boy",
+    "src_framework": "skl",
+    "export_type": "onnx",
+    "convert_args": "convert_args",
+    "deployment_type": "ovms2"
   }
 }

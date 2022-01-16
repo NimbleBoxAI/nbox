@@ -1,9 +1,9 @@
 import json
 import os
 
-from nbox.network import one_click_deploy
-from nbox.user import create_secret_file, get_access_token, reinit_secret
-from nbox.utils import get_random_name
+from .network import deploy_model
+from .auth import init_secret
+from .utils import get_random_name
 
 
 def deploy(
@@ -51,18 +51,19 @@ def deploy(
         AssertionError: if model path is not found or ``nbox_meta`` is incorrect
         Exception: if ``deployment_type == "ovms2"`` but ``convert_args`` is not provided
     """
-    from nbox.user import secret  # it can refresh so add it in the method
+    from nbox.auth import secret  # it can refresh so add it in the method
 
     if secret is None or secret.get("access_token", None) == None:
         # if secrets file is not found
         assert username != None and password != None, "secrets.json not found need to provide username password for auth"
         access_token = get_access_token(nbx_home_url, username, password)
         create_secret_file(username, access_token, nbx_home_url)
-        reinit_secret()  # reintialize secret variable as it will be used everywhere
+        init_secret()  # reintialize secret variable as it will be used everywhere
 
     if config_path != None:
         with open(config_path, "r") as f:
             config = json.load(f)
+        config.pop("config_path", None) # remove recursion
         deploy(**config)
 
     else:
@@ -96,7 +97,7 @@ def deploy(
 
         # one click deploy
         model_name = get_random_name().replace("-", "_") if model_name == None else model_name
-        endpoint, key = one_click_deploy(
+        endpoint, key = deploy_model(
             model_path, model_name, deployment_type, nbox_meta, wait_for_deployment, convert_args, deployment_id, deployment_name
         )
 

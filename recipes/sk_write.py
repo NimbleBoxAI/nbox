@@ -33,15 +33,8 @@ print("     Output (type):", y_nbox.dtype)
 print("   Accuracy (nbox):", (y_nbox == y_test).mean())
 hr()
 
-meta, args = model.get_nbox_meta(X)
-pp(meta)
-
 out = model(X, method="predict_proba")
 print(out.shape)
-
-path, _, _ = model.export(X, export_type="pkl")
-print("output path:", path)
-hr()
 
 # We are using `nbox` as the server type and `onnx` as the runtime
 # read more: https://nimbleboxai.github.io/nbox/nbox.model.html

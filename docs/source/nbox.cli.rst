@@ -4,7 +4,7 @@ How to nboxCLI
 ``nbox`` provides a simple and effective CLI commands that you can add to your current CI/CD pipeline.
 
 As of this writing there is only one task that ``nbox`` CLI does, deployment of models. It directly calls the
-``nbox.network.one_click_deploy`` method along, if needed with authentication for single line in your CI/CD.
+``nbox.network.deploy_model`` method along, if needed with authentication for single line in your CI/CD.
 When in an automated pipeline, file ``secrets.json`` might not be available so set ``NBX_AUTH=1`` when using CLI.
 
 .. code-block:: bash

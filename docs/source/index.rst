@@ -55,16 +55,16 @@ be very small. If it is very small, a smart engineer can open it up and debug it
 aim for is total lines of code which should stand below 1000 for ``top_dir``, other submodules can
 contain ``dicts`` that occupy a large % of code.
 
-As of ``nbox == 0.2.4`` this is where the stats stand!
+As of ``nbox == 0.7.0`` this is where the stats stand!
 
 .. code-block::
 
    SLOC	Directory	SLOC-by-Language (Sorted)
-   1069    top_dir         python=1069
+   1181    top_dir         python=1181
    88      framework       python=88
 
    Totals grouped by language (dominant language first):
-   python:        1157 (100.00%)
+   python:        1269 (100.00%)
 
 
 If you want to see something be added or found bug, `raise an issue <https://github.com/NimbleBoxAI/nbox/issues/new>`_.
@@ -89,6 +89,7 @@ Index
    quick_plug
    quick_skl
    nbox.cli
+   nbox-serving
 
 .. toctree::
    :maxdepth: 2
@@ -100,7 +101,22 @@ Index
    nbox.framework
    nbox.network
    nbox.utils
-   nbox.user
+   nbox.auth
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Operators
+
+   nbox.operators
+   nbox.operators.operator
+   nbox.operators.lib
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Jobs
+
+   nbox.jobs
+   nbox.jobs.utils
 
 
 .. toctree::

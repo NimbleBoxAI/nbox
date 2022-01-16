@@ -36,3 +36,6 @@ def export_to_onnx(
 def export_to_torchscript(model, args, export_model_path, **kwargs):
     traced_model = torch.jit.trace(model, args, check_tolerance=0.0001)
     torch.jit.save(traced_model, export_model_path)
+
+
+__all__ = ["export_to_onnx", "export_to_torchscript"]
