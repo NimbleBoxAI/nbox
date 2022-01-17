@@ -4,6 +4,7 @@
 
 import ast
 import inspect
+from json import dumps
 from uuid import uuid4
 from logging import getLogger
 logger = getLogger()
@@ -117,7 +118,7 @@ def write_program(nodes):
 
 # ==================
 
-def get_code_portion(cl, lineno, col_offset, end_lineno, end_col_offset, **_):
+def get_code_portion(cl, lineno, col_offset, end_lineno, end_col_offset, b64 = True, **_):
   sl, so, el, eo = lineno, col_offset, end_lineno, end_col_offset
   if sl == el:
     return cl[sl-1][so:eo]
@@ -131,9 +132,10 @@ def get_code_portion(cl, lineno, col_offset, end_lineno, end_col_offset, **_):
       code += "\n" + cl[i]
   
   # convert to base64
-  import base64
-  return base64.b64encode(code.encode()).decode()
-  # return code
+  if b64:
+    import base64
+    return base64.b64encode(code.encode()).decode()
+  return code
 
 def parse_args(node):
   inputs = []
@@ -181,13 +183,17 @@ def parse_kwargs(node, lines):
       # arg = my_model
       return (arg, value.id)
     elif 'value' in value.__dict__:
-      # arg = 5
-      return (arg, value.value)
+      if isinstance(value.value, ast.Call):
+        # arg = my_model(...)
+        return (arg, get_code_portion(lines, b64 = False, **value.value.__dict__))
+      else:
+        # arg = 20
+        return (arg, value.value)
     elif 'func' in value.__dict__:
       #   arg = some_function(with, some=args)
       #   ^^^   ^^^^^
       # kwarg   value
-      return {"kwarg": arg, "value": get_code_portion(lines, **value.__dict__)}
+      return {"kwarg": arg, "value": get_code_portion(lines, b64 = False, **value.__dict__)}
   if isinstance(node, ast.Call):
     return get_code_portion(lines, **node.func.__dict__)
 
@@ -266,7 +272,7 @@ def node_if_expr(node, lines):
     return conds
   
   # get all the conditions and structure as ExpressionNodeInfo
-  conditions = []
+  
   all_conditions = if_cond(node, lines, conds = [])
   ends = []
   for b0, b1  in zip(all_conditions[:-1], all_conditions[1:]):
@@ -280,6 +286,7 @@ def node_if_expr(node, lines):
     }
   ends += [all_conditions[-1]["code"]]
 
+  conditions = []
   for i, c in enumerate(all_conditions):
     box = ends[i]
     _node = ExpressionNodeInfo(
@@ -331,9 +338,10 @@ type_wise_logic = {
 
 # ==================
 
-def get_nbx_flow(forward):
+def get_nbx_flow(forward, json = False):
   # get code string from operator
   code = inspect.getsource(forward).strip()
+  code_lines = code.splitlines()
   node = ast.parse(code)
 
   edges = [] # this is the flow
@@ -341,10 +349,34 @@ def get_nbx_flow(forward):
   symbols_to_nodes = {} # this is things that are defined at runtime
 
   for i, expr in enumerate(node.body[0].body):
+    # if isinstance(expr, ast.Module):
+    #   continue
+
     if not type(expr) in type_wise_logic:
+      # code pieces that are not yet supported should still see the code
+      node = Node(
+        id = str(uuid4()),
+        execution_index = i,
+        name = f"codeblock-{i}",
+        type = "op-node",
+        operator = "CodeBlock",
+        node_info = ExpressionNodeInfo(
+          name = f"codeblock-{i}", # :str
+          code = get_code_portion(code_lines, bs64 = True, **expr.__dict__), # :str (base64)
+          nbox_string = None, # :str
+          lineno = expr.lineno, # :int
+          col_offset = expr.col_offset, # :int
+          end_lineno = expr.end_lineno, # :int
+          end_col_offset = expr.end_col_offset, # :int
+          inputs = [], # :list[Dict[Any, Any]]
+          outputs = [], # :list[str]
+        ),
+      nbox_string = f"CODE: {str(type(expr))}", # :str
+      )
+      nodes.append(node)
       continue
 
-    output = type_wise_logic[type(expr)](expr, code.splitlines())
+    output = type_wise_logic[type(expr)](expr, code_lines)
     if output is None:
       continue
 
@@ -389,4 +421,7 @@ def get_nbx_flow(forward):
     )
   )
 
-  return nodes, edges, symbols_to_nodes
+  return {
+    "flowchart": [x.get_dict() for x in nodes + edges],
+    "symbols": symbols_to_nodes
+  }

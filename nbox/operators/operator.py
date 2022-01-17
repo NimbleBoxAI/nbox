@@ -2,12 +2,22 @@
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # due to requirements of stability, some type enforcing is performed
 
+import os
 from collections import OrderedDict
 from dataclasses import dataclass
+from tempfile import gettempdir
 from typing import Callable
 from datetime import datetime, timedelta
 
+from logging import getLogger
+from venv import create
+
+from nbox.network import deploy_job
+logger = getLogger()
+
+from ..utils import join
 from ..framework.__airflow import AirflowMixin
+from ..framework.on_functions import get_nbx_flow
 
 
 @dataclass
@@ -21,95 +31,95 @@ class StateDictModel:
     self.data = OrderedDict(self.data)
 
 
-class TraceObject:
-  def __init__(self, root):
-    self.root = root
-    self.flow = OrderedDict()
-
-  def pre(self, inputs, cls):
-    _id = id(cls)
-    self.flow[_id] = {
-      "id": _id,
-      "class_name": cls.__class__.__name__,
-      "inputs": {k: type(v) for k, v in inputs.items()},
-      "outputs": {},
-      "start": datetime.now(),
-      "end": None,
-    }
-
-  def post(self, out, cls):
-    _id = id(cls)
-    if _id not in self.flow:
-      raise ValueError(f"{_id} not found in flow")
-
-    outputs = {}
-    if out == None:
-      outputs = {"out_0": type(None)}
-    elif isinstance(out, dict):
-      outputs = {k: type(v) for k, v in out.items()}
-    elif isinstance(out, (list, tuple)):
-      outputs = {f"out_{i}": type(v) for i, v in enumerate(out)}
-    else:
-      outputs = {"out_0": type(out)}
-
-    self.flow[_id].update({
-      "outputs": outputs,
-      "end": datetime.now(),
-    })
-    self.flow[_id]["duration"] = self.flow[_id]["end"] - self.flow[_id]["start"]
-
-    # convert datetime to string objects for serialization
-    self.flow[_id]["start"] = self.flow[_id]["start"].isoformat()
-    self.flow[_id]["end"] = self.flow[_id]["end"].isoformat()
-    self.flow[_id]["duration"] = str(self.flow[_id]["duration"].total_seconds())
-
-  def to_dict(self):
-    return {
-      "root": self.root.__class__.__name__,
-      "root_id": id(self.root),
-      "flow": self.flow,
-    }
-
-  def dag(self, depth = 1, root_ = None):
-    if depth != 1:
-      raise ValueError("depth of 1 supported only")
-
-    if depth < 0:
-      return []
-
-    dag = []
-    # create nodes
-    root_ = root_ if root_ != None else self.root
-    for _name, c in root_._operators.items():
-      _id = id(c)
-      name = c.__class__.__name__
-      _trace = self.flow[_id]
-      _trace["code_name"] = _name
-
-      # if there is some depth left, recurse
-      if depth > 1:
-        children_dag = self.dag(depth - 1, c)
-        _trace["children"] = children_dag
-
-      dag.append({
-        "id": _id,
-        "type": "input" if len(dag) == 0 else None,
-        "data": {
-          "label": f"{_name} | {name}"
-        },
-        # "meta": _trace
-      })
-    dag[-1]["type"] = "output"
-
-    # create edges
-    for src, trg in zip(dag[:-1], dag[1:]):
-      dag.append({
-        "id": f"edge-{src['id']}-{trg['id']}",
-        "source": src["id"],
-        "target": trg["id"]
-      })
-    
-    return dag
+# class TraceObject:
+#   def __init__(self, root):
+#     self.root = root
+#     self.flow = OrderedDict()
+#
+#   def pre(self, inputs, cls):
+#     _id = id(cls)
+#     self.flow[_id] = {
+#       "id": _id,
+#       "class_name": cls.__class__.__name__,
+#       "inputs": {k: type(v) for k, v in inputs.items()},
+#       "outputs": {},
+#       "start": datetime.now(),
+#       "end": None,
+#     }
+#
+#   def post(self, out, cls):
+#     _id = id(cls)
+#     if _id not in self.flow:
+#       raise ValueError(f"{_id} not found in flow")
+#
+#     outputs = {}
+#     if out == None:
+#       outputs = {"out_0": type(None)}
+#     elif isinstance(out, dict):
+#       outputs = {k: type(v) for k, v in out.items()}
+#     elif isinstance(out, (list, tuple)):
+#       outputs = {f"out_{i}": type(v) for i, v in enumerate(out)}
+#     else:
+#       outputs = {"out_0": type(out)}
+#
+#     self.flow[_id].update({
+#       "outputs": outputs,
+#       "end": datetime.now(),
+#     })
+#     self.flow[_id]["duration"] = self.flow[_id]["end"] - self.flow[_id]["start"]
+#
+#     # convert datetime to string objects for serialization
+#     self.flow[_id]["start"] = self.flow[_id]["start"].isoformat()
+#     self.flow[_id]["end"] = self.flow[_id]["end"].isoformat()
+#     self.flow[_id]["duration"] = str(self.flow[_id]["duration"].total_seconds())
+#
+#   def to_dict(self):
+#     return {
+#       "root": self.root.__class__.__name__,
+#       "root_id": id(self.root),
+#       "flow": self.flow,
+#     }
+#
+#   def dag(self, depth = 1, root_ = None):
+#     if depth != 1:
+#       raise ValueError("depth of 1 supported only")
+#
+#     if depth < 0:
+#       return []
+#
+#     dag = []
+#     # create nodes
+#     root_ = root_ if root_ != None else self.root
+#     for _name, c in root_._operators.items():
+#       _id = id(c)
+#       name = c.__class__.__name__
+#       _trace = self.flow[_id]
+#       _trace["code_name"] = _name
+#
+#       # if there is some depth left, recurse
+#       if depth > 1:
+#         children_dag = self.dag(depth - 1, c)
+#         _trace["children"] = children_dag
+#
+#       dag.append({
+#         "id": _id,
+#         "type": "input" if len(dag) == 0 else None,
+#         "data": {
+#           "label": f"{_name} | {name}"
+#         },
+#         # "meta": _trace
+#       })
+#     dag[-1]["type"] = "output"
+#
+#     # create edges
+#     for src, trg in zip(dag[:-1], dag[1:]):
+#       dag.append({
+#         "id": f"edge-{src['id']}-{trg['id']}",
+#         "source": src["id"],
+#         "target": trg["id"]
+#       })
+#   
+#     return dag
 
     
 
@@ -177,7 +187,7 @@ class Operator(AirflowMixin):
 
   def __setattr__(self, key, value: 'Operator'):
     obj = getattr(self, key, None)
-    if obj is not None and callable(obj):
+    if key != "forward" and obj is not None and callable(obj):
       raise AttributeError(f"cannot assign {key} as it is already a method")
     if isinstance(value, Operator):
       if not "_operators" in self.__dict__:
@@ -274,23 +284,23 @@ class Operator(AirflowMixin):
 
   def _register_forward(self, python_callable: Callable):
     # convienience method to register a forward method
-    self._new_forward = python_callable
+    self.forward = python_callable
 
-  _trace_object: TraceObject = None
-
-  def trace(self, *args, return_dag = True, **kwargs):
-    self._trace_object = TraceObject(self)
-    self.propagate(_trace_object = self._trace_object)
-    self(*args, **kwargs)
-    trace = self._trace_object.to_dict()
-    dag = self._trace_object.dag()
-    self.propagate(_trace_object = None)
-    self._trace_object = None
-
-    output = (trace,)
-    if return_dag:
-      output += (dag,)
-    return output
+  # _trace_object: TraceObject = None
+  #
+  # def trace(self, *args, return_dag = True, **kwargs):
+  #   self._trace_object = TraceObject(self)
+  #   self.propagate(_trace_object = self._trace_object)
+  #   self(*args, **kwargs)
+  #   trace = self._trace_object.to_dict()
+  #   dag = self._trace_object.dag()
+  #   self.propagate(_trace_object = None)
+  #   self._trace_object = None
+  #
+  #   output = (trace,)
+  #   if return_dag:
+  #     output += (dag,)
+  #   return output
 
   def __call__(self, *args, **kwargs):
     # blank comment so docstring below is not loaded
@@ -323,11 +333,8 @@ class Operator(AirflowMixin):
     if self._trace_object != None:
       self._trace_object.pre(inputs = input_dict, cls = self)
 
-    try:
-      out = self._new_forward(**input_dict)
-    except:
-      # pass this through the user defined forward()
-      out = self.forward(**input_dict)
+    # pass this through the user defined forward()
+    out = self.forward(**input_dict)
     
     if self._trace_object != None:
       self._trace_object.post(out = out, cls = self)
@@ -338,27 +345,65 @@ class Operator(AirflowMixin):
 
   def deploy(
     self,
+    init_folder: str = None,
+    cache_dir: str = None,
     job_id = None,
     job_name = None,
     start_datetime: datetime = None,
     end_datetime: datetime = None,
     time_interval: timedelta = None,
-    **trace_kwargs
   ):
-    from nbox.network import deploy_job
+    logger.info(f"Deploying {self.__class__.__name__} -> '{job_id}/{job_name}'")
 
-    _ = self(**trace_kwargs)
+    if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
+      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
+    if os.path.isdir(init_folder):
+      os.chdir(init_folder)
+      if not os.path.exists("./exe.py"):
+        raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
+    else:
+      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
 
-    self._deploy_attributes = {
-      "job_id": job_id,
-      "job_name": job_name,
+    # flowchart-alpha
+    nodes, _, _ = get_nbx_flow(self.forward)
+    try:
+      dag = get_nbx_flow(self.forward, True)
+    except:
+      logger.error("Cannot perform pre-building, only live updates will be available!")
+      logger.info("Please raise an issue on chat to get this fixed")
+      dag = {"flowchart": None, "symbols": None}
+
+    schedule_meta = {
       "start_datetime": start_datetime,
       "end_datetime": end_datetime,
       "time_interval": time_interval,
+      "job_id": job_id,
+      "job_name": job_name,
+      "dag": dag,
+      "created": datetime.now().isoformat(),
     }
 
-    deploy_job(
-      self
-    )
+    for n in nodes:
+      name = n.name
+      if name.startswith("self."):
+        name = name[5:]
+      operator_name = "CodeBlock" # default
+      cls_item = getattr(self, name, None)
+      if cls_item and cls_item.__class__.__base__ == Operator:
+        operator_name = cls_item.__class__.__name__
+      n.operator_name = operator_name
+
+    # zip the folder
+    import zipfile
+    zip_path = join(cache_dir if cache_dir else gettempdir(), "project.zip")
+    logger.info(f"Zipping project to '{zip_path}'")
+    zip_file = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
+    for root, dirs, files in os.walk(init_folder):
+      for file in files:
+        zip_file.write(os.path.join(root, file))
+    zip_file.close()
+
+    deploy_job(zip_path = zip_path, schedule_meta = schedule_meta)
+
 
   # /nbx

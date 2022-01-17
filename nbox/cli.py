@@ -5,6 +5,17 @@ from .network import deploy_model
 from .auth import init_secret
 from .utils import get_random_name
 
+def status(loc = None):
+    from .jobs import print_status
+    print_status(f"https://{'' if not loc else loc+'.'}nimblebox.ai")
+
+def tunnel(
+  instance_name: str,
+  local_port = 6996,
+  instance_port = 6969,
+):
+  raise NotImplementedError("TODO: implement this function")
+
 
 def deploy(
     config_path: str = None,
