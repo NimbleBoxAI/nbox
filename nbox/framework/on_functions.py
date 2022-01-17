@@ -4,74 +4,73 @@
 
 import ast
 import inspect
-from typing import List, Union
 from uuid import uuid4
 from logging import getLogger
 logger = getLogger()
 
 # ==================
 
-from dataclasses import dataclass
+# dataclasses are not that good: these classes are for the Op
 
-# these classes are for the Op
-
-@dataclass
-class ExpressionNodeInfo:
-  # visible
-  name: str
-  code: str
-  nbox_string: str
-
-  # hidden
-  lineno: int
-  col_offset: int
-  end_lineno: int
-  end_col_offset: int
+class DBase:
+  def __init__(self, **kwargs):
+    for k, v in kwargs.items():
+      setattr(self, k, v)
   
-  # visible
-  inputs: List = ()
-  outputs: List = ()
-
-@dataclass
-class IfNodeInfo:
-  nbox_string: str
-  conditions: List[ExpressionNodeInfo]
-
-
-@dataclass
-class Node:
-  # hidden
-  id: str
-  execution_index: int
-  
-  # visible
-  name: str
-  type: str
-  
-  # different 
-  node_info: Union[ExpressionNodeInfo, IfNodeInfo]
-  operator: str = "CodeBlock"
-
-  nbox_string: str = None
-
   def get_dict(self):
-    data = self.__dict__.copy()
-    node_info = data["node_info"]
-    if isinstance(node_info, ExpressionNodeInfo):
-      data["node_info"] = node_info.__dict__
-    elif isinstance(node_info, list):
-      data["node_info"] = [x.__dict__ for x in node_info]
+    data = {}
+    for k in self.__slots__:
+      _obj = getattr(self, k)
+      if isinstance(_obj, DBase):
+        data[k] = _obj.get_dict()
+      elif _obj and isinstance(_obj, list) and isinstance(_obj[0], DBase):
+        data[k] = [_obj.get_dict() for _obj in _obj]
+      else:
+        data[k] = _obj
     return data
 
-@dataclass
-class Edge:
-  id: str
-  source: str
-  target: str
-  type: str = None
+class ExpressionNodeInfo(DBase):
+  __slots__ = [
+    'name', # :str
+    'code', # :str (base64)
+    'nbox_string', # :str
+    'lineno', # :int
+    'col_offset', # :int
+    'end_lineno', # :int
+    'end_col_offset', # :int
+    'inputs', # :list[Dict[Any, Any]]
+    'outputs', # :list[str]
+  ]
 
-  def get_dict(self):
-    return self.__dict__.copy()
+class IfNodeInfo(DBase):
+  __slots__ = [
+    'nbox_string', # :str
+    'conditions', # :list[ExpressionNodeInfo]
+    'inputs', # :list[Dict[Any, Any]]
+    'outputs', # :list[str]
+  ]
+
+
+# these classes are for the FE
+class Node(DBase):
+  __slots__ = [
+    'id', # :str
+    'execution_index', # :int
+    'name', # :str
+    'type', # :str
+    'node_info', # :Union[ExpressionNodeInfo, IfNodeInfo]
+    'operator', # :str
+    'nbox_string', # :str
+  ]
+
+class Edge(DBase):
+  __slots__ = [
+    'id', # :str
+    'source', # :str
+    'target', # :str
+    'type', # :str
+    'nbox_string', # :str
+  ]
 
 
 # ==================
@@ -132,9 +131,9 @@ def get_code_portion(cl, lineno, col_offset, end_lineno, end_col_offset, **_):
       code += "\n" + cl[i]
   
   # convert to base64
-  # import base64
-  # return base64.b64encode(code.encode()).decode()
-  return code
+  import base64
+  return base64.b64encode(code.encode()).decode()
+  # return code
 
 def parse_args(node):
   inputs = []
@@ -291,6 +290,8 @@ def node_if_expr(node, lines):
       col_offset = box['col_offset'],
       end_lineno = box['end_lineno'],
       end_col_offset = box['end_col_offset'],
+      inputs = [],
+      outputs = [],
     )
     conditions.append(_node)
 
@@ -298,6 +299,8 @@ def node_if_expr(node, lines):
   return IfNodeInfo(
     conditions = conditions,
     nbox_string = nbox_string,
+    inputs = [],
+    outputs = []
   )
 
 def def_func_or_class(node, lines):
@@ -353,6 +356,7 @@ def get_nbx_flow(forward):
         type = "op-node",
         operator = "CodeBlock",
         node_info = output,
+        nbox_string = None
       )
       nodes.append(output)
     elif isinstance(output, IfNodeInfo):
@@ -362,7 +366,7 @@ def get_nbx_flow(forward):
         name = f"if-{i}",
         type = "op-node",
         operator = "Conditional",
-        node_info = output.conditions,
+        node_info = output,
         nbox_string = output.nbox_string,
       )
       nodes.append(output)
@@ -381,6 +385,7 @@ def get_nbx_flow(forward):
         source = op0.id,
         target = op1.id,
         type = "execution-order",
+        nbox_string = None
     )
   )
 
