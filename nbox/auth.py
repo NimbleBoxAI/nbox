@@ -4,23 +4,25 @@ import logging
 import requests
 from getpass import getpass
 
-from .utils import join, nbox_session, NBOX_HOME_DIR
+from .utils import join, nbox_session, NBOX_HOME_DIR, isthere
 
 logger = logging.getLogger()
 
 # ------ AWS Auth ------ #
 
 class AWSClient:
-  def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, **boto_config_kwargs):
-    import boto3
-    from botocore.client import Config as BotoConfig
-
+  @isthere("boto3", "botocore", hard = True)
+  def __init__(self, aws_access_key_id, aws_secret_access_key, region_name):
     self.aws_access_key_id = aws_access_key_id
     self.aws_secret_access_key = aws_secret_access_key
     self.region_name = region_name
 
-    self.client = boto3.client(
-      "s3",
+  def get_client(self, service_name = "s3", **boto_config_kwargs):
+    import boto3
+    from botocore.client import Config as BotoConfig
+
+    return boto3.client(
+      service_name,
       aws_access_key_id=self.aws_access_key_id,
       aws_secret_access_key=self.aws_secret_access_key,
       region_name=self.region_name,
@@ -33,27 +35,102 @@ class AWSClient:
 # ------ GCP Auth ------ #
 
 class GCPClient:
-  def __init__(self):
-    raise NotImplementedError()
+  @isthere("google-cloud-sdk", "google-cloud-storage", hard = True)
+  def __init__(self, project_id, credentials_file):
+    from google.oauth2 import service_account
+    
+    self.project_id = project_id
+    self.credentials_file = credentials_file
+    self.creds = service_account.Credentials.from_service_account_file(
+      self.credentials_file,
+      scopes=["https://www.googleapis.com/auth/cloud-platform"]
+    )
+
+  def get_client(self, service_name = "storage", **gcp_config_kwargs):
+    if service_name == "storage":
+      from google.cloud import storage
+      return storage.Client(
+        project=self.project_id,
+        credentials=self.creds,
+        **gcp_config_kwargs
+      )
+    
 
 # ------ Azure Auth ------ #
 
 class AzureClient:
+  @isthere("azure-storage-blob", hard = True)
   def __init__(self):
-    raise NotImplementedError()
+    from azure.storage.blob import BlobServiceClient
+    from azure.identity import DefaultAzureCredential
+
+    self.blob_service_client = BlobServiceClient(
+      credential=DefaultAzureCredential(),
+      endpoint="https://nbox.blob.core.windows.net"
+    )
+
+  def get_client(self, service_name = "blob", **azure_config_kwargs):
+    if service_name == "blob":
+      from azure.storage.blob import BlobClient
+
+      return BlobClient(
+        self.blob_service_client,
+        **azure_config_kwargs
+      )
 
 # ------ OCI Auth ------ #
 
 class OCIClient:
-  def __init__(self):
-    raise NotImplementedError()
+  @isthere("oci", "oci-py", hard = True)
+  def __init__(self, config_file):
+    from oci.config import from_file
+    from oci.signer import Signer
+
+    self.config = from_file(config_file)
+    self.signer = Signer(
+      tenancy=self.config["tenancy"],
+      user=self.config["user"],
+      fingerprint=self.config["fingerprint"],
+      private_key_file_location=self.config["key_file"]
+    )
+  
+  def get_client(self, service_name = "object_storage", **oci_config_kwargs):
+
+    if service_name == "object_storage":
+      from oci.object_storage.models import CreateBucketDetails
+      from oci.object_storage.models import CreateMultipartUploadDetails
+      from oci.object_storage.models import Object
+      from oci.object_storage.models import UploadPartDetails
+      from oci.object_storage.object_storage_client import ObjectStorageClient
+
+      return ObjectStorageClient(
+        self.config["user"],
+        self.signer,
+        **oci_config_kwargs
+      )
 
 
 # ------ Digital Ocean Auth ------ #
 
 class DOClient:
-  def __init__(self):
-    raise NotImplementedError()
+  @isthere("doctl", hard = True)
+  def __init__(self, config_file):
+    from doctl.doctl_client import DictCursor
+    from doctl.doctl_client import DoctlClient
+
+    self.doctl_client = DoctlClient(
+      config_file=config_file,
+      cursor_class=DictCursor
+    )
+  
+  def get_client(self, service_name = "object_storage", **oci_config_kwargs):
+    if service_name == "object_storage":
+      from doctl.object_storage.object_storage_client import ObjectStorageClient
+
+      return ObjectStorageClient(
+        self.doctl_client,
+        **oci_config_kwargs
+      )
 
 # ------ NBX Auth ------ #
 

@@ -17,18 +17,16 @@ logger = getLogger()
 
 from ..utils import join
 from ..framework.__airflow import AirflowMixin
-from ..framework.on_functions import get_nbx_flow
+from ..framework.on_functions import get_nbx_flow, DBase
 
 
-@dataclass
-class StateDictModel:
-  state: str
-  data: dict
-  inputs: dict
-  outputs: dict
-
-  def __post_init__(self):
-    self.data = OrderedDict(self.data)
+class StateDictModel(DBase):
+  __slots__ = [
+    "state", # :str
+    "data", # :dict
+    "inputs", # :dict
+    "outputs", # :dict
+  ]
 
 
 # class TraceObject:
@@ -120,6 +118,35 @@ class StateDictModel:
 #       })
 #   
 #     return dag
+
+class Tracer:
+  def __init__(self):
+    try:
+      # when this job is running on the NBX Platform, gRPC stubs are
+      # used for communication
+      import nbox_js_stub
+      self.l = nbox_js_stub.Trace()
+    except ImportError:
+      self.l = self.load_logger()
+
+  def load_logger(self):
+    class _logger:
+      def __init__(self, logger):
+        self.l = logger
+      
+      def __getattr__(self, name):
+        def _blank_log(x):
+          self.l.info(x, extra={"fn": name})
+        return _blank_log
+    return _logger(logger)
+
+  def pre(self, inputs, cls):
+    self.l.info(f"{cls.__class__.__name__}", extra={"fn": "pre"})
+    self.l.info(f"inputs: {inputs}", extra={"fn": "pre"})
+  
+  def post(self, out, cls):
+    self.l.info(f"{cls.__class__.__name__}", extra={"fn": "post"})
+    self.l.info(f"outputs: {out}", extra={"fn": "post"})
 
     
 
@@ -224,20 +251,6 @@ class Operator(AirflowMixin):
   def children(self):
     return self._operators.values()
 
-  _topo_tree = {}
-
-  # @property
-  # def topo_tree(self):
-  #   # the structure of topo_tree looks like this:
-  #   #  / -> B \
-  #   # A        -> D
-  #   #  \ -> C /
-  #   #
-  #   # {"D": ["B", "C"], "B": ["A"], "C": ["A"], "A": []}
-  #   class IdeaError(Exception):
-  #     pass
-  #   raise IdeaError("Cannot represent a data-flow (declarative) as control-flow (imperative)")
-
   @property
   def inputs(self):
     import inspect
@@ -273,7 +286,6 @@ class Operator(AirflowMixin):
   def propagate(self, **kwargs):
     for c in self.children:
       c.propagate(**kwargs)
-    
     for k, v in kwargs.items():
       setattr(self, k, v)
 
@@ -286,8 +298,8 @@ class Operator(AirflowMixin):
     # convienience method to register a forward method
     self.forward = python_callable
 
-  # _trace_object: TraceObject = None
-  #
+  _trace_object = None
+
   # def trace(self, *args, return_dag = True, **kwargs):
   #   self._trace_object = TraceObject(self)
   #   self.propagate(_trace_object = self._trace_object)
@@ -314,6 +326,8 @@ class Operator(AirflowMixin):
     2. Tracing, we want to trace the execution of the model
     3. Networking, when required to execute like RPC
     """
+
+    running_on_nbox = False
 
     # Type Checking and create input dicts
     inputs = self.inputs
@@ -365,13 +379,24 @@ class Operator(AirflowMixin):
       raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
 
     # flowchart-alpha
-    nodes, _, _ = get_nbx_flow(self.forward)
+    dag = get_nbx_flow(self.forward)
     try:
-      dag = get_nbx_flow(self.forward, True)
+      from json import dumps
+      dumps(dag)
     except:
       logger.error("Cannot perform pre-building, only live updates will be available!")
       logger.info("Please raise an issue on chat to get this fixed")
       dag = {"flowchart": None, "symbols": None}
+    
+    for n in dag["flowchart"]["nodes"]:
+      name = n["name"]
+      if name.startswith("self."):
+        name = name[5:]
+      operator_name = "CodeBlock" # default
+      cls_item = getattr(self, name, None)
+      if cls_item and cls_item.__class__.__base__ == Operator:
+        operator_name = cls_item.__class__.__name__
+      n["operator_name"] = operator_name
 
     schedule_meta = {
       "start_datetime": start_datetime,
@@ -382,16 +407,7 @@ class Operator(AirflowMixin):
       "dag": dag,
       "created": datetime.now().isoformat(),
     }
-
-    for n in nodes:
-      name = n.name
-      if name.startswith("self."):
-        name = name[5:]
-      operator_name = "CodeBlock" # default
-      cls_item = getattr(self, name, None)
-      if cls_item and cls_item.__class__.__base__ == Operator:
-        operator_name = cls_item.__class__.__name__
-      n.operator_name = operator_name
+    print(schedule_meta)
 
     # zip the folder
     import zipfile
@@ -403,7 +419,6 @@ class Operator(AirflowMixin):
         zip_file.write(os.path.join(root, file))
     zip_file.close()
 
-    deploy_job(zip_path = zip_path, schedule_meta = schedule_meta)
-
+    # deploy_job(zip_path = zip_path, schedule_meta = schedule_meta)
 
   # /nbx

@@ -219,8 +219,8 @@ def deploy_job(
         json = {
             "file_size": file_size,  # because in MB
             "file_type": "zip",
-            "model_name": schedule_meta["job_name"],
-            "schedule_meta": json.dumps(schedule_meta),
+            "job_name": schedule_meta["job_name"],
+            "schedule_meta": schedule_meta,
         }
     )
     try:

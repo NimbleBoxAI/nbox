@@ -14,13 +14,16 @@ import logging
 import numpy as np
 import torch
 
+# common/
+nbox_session = requests.Session()
+# /common
+
 # logging/
-
 logger = logging.getLogger()
-
 # /logging
 
-nbox_session = requests.Session()
+
+# lazy_loading/
 
 def _isthere(*packages):
     for package in packages:
@@ -47,8 +50,9 @@ def isthere(*packages, hard = False, ):
         return _fn
     return wrapper
 
-# ----- functions
+# /lazy_loading
 
+# file path/reading
 
 def fetch(url):
     # efficient loading of URLs
@@ -64,34 +68,36 @@ def fetch(url):
     return dat
 
 
-def get_image(file_path_or_url):
-    if os.path.exists(file_path_or_url):
-        return Image.open(file_path_or_url)
-    else:
-        return Image.open(io.BytesIO(fetch(file_path_or_url)))
-
-
 def folder(x):
     # get the folder of this file path
     return os.path.split(os.path.abspath(x))[0]
 
-
 def join(x, *args):
     return os.path.join(x, *args)
 
-
 NBOX_HOME_DIR = join(os.path.expanduser("~"), ".nbx")
 
+# /path
+
+# misc/
 
 def get_random_name(uuid = False):
     if uuid:
         return str(uuid4())
     return randomname.generate()
 
-
 def hash_(item, fn="md5"):
     return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
+# /misc
+
+# model/
+
+def get_image(file_path_or_url):
+    if os.path.exists(file_path_or_url):
+        return Image.open(file_path_or_url)
+    else:
+        return Image.open(io.BytesIO(fetch(file_path_or_url)))
 
 def convert_to_list(x):
     # recursively convert tensors -> list
@@ -104,6 +110,8 @@ def convert_to_list(x):
         return x.tolist()
     else:
         raise Exception("Unknown type: {}".format(type(x)))
+
+# /model
 
 # pool/
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -141,23 +149,21 @@ class Pool:
         """
         assert callable(fn)
         assert isinstance(args[0], (tuple, list))
-        if self.mode in ["thread", "pool"]:
-            futures = {}
-            for x in args:
-                print(x)
-                self.item_id += 1
-                futures[self.executor.submit(fn, *x)] = self.item_id
-            
-            results = []
-            for future in as_completed(futures):
-                try:
-                    result = future.result()
-                    results.append(result)
-                except Exception as e:
-                    logger.error(f"{self.mode} error: {e}")
-                    raise e
-        else:
-            raise Exception(f"Only {', '.join(POOL_SUPPORTED_MODES)} mode(s) are supported")
+
+        futures = {}
+        for x in args:
+            print(x)
+            self.item_id += 1
+            futures[self.executor.submit(fn, *x)] = self.item_id
+        
+        results = []
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                results.append(result)
+            except Exception as e:
+                logger.error(f"{self.mode} error: {e}")
+                raise e
 
         return results
 
@@ -166,6 +172,7 @@ class Pool:
 
 # --- classes
 
+# this needs to be redone
 # # Console is a rich console wrapper for beautifying statuses
 # class Console:
 #     T = SimpleNamespace(

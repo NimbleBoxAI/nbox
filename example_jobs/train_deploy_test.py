@@ -8,7 +8,7 @@ import os
 import json
 import torch
 import random
-from uuid import uuid1, uuid4
+from uuid import uuid1
 from tqdm.auto import trange
 from tempfile import gettempdir
 from torchvision import datasets
@@ -16,7 +16,6 @@ from torchvision import datasets
 from gperc import BinaryConfig, Perceiver
 from gperc.trainer import Trainer
 from gperc.arrow import ArrowConfig, ArrowConsumer
-from gperc.utils import timeit
 
 from nbox import Operator, Model
 from nbox.utils import Pool

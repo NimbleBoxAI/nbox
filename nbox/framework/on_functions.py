@@ -4,7 +4,6 @@
 
 import ast
 import inspect
-from json import dumps
 from uuid import uuid4
 from logging import getLogger
 logger = getLogger()
@@ -338,7 +337,7 @@ type_wise_logic = {
 
 # ==================
 
-def get_nbx_flow(forward, json = False):
+def get_nbx_flow(forward):
   # get code string from operator
   code = inspect.getsource(forward).strip()
   code_lines = code.splitlines()
@@ -422,6 +421,9 @@ def get_nbx_flow(forward, json = False):
   )
 
   return {
-    "flowchart": [x.get_dict() for x in nodes + edges],
+    "flowchart": {
+      "edges": [x.get_dict() for x in edges],
+      "nodes": [x.get_dict() for x in nodes],
+    },
     "symbols": symbols_to_nodes
   }
