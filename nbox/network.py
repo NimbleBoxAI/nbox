@@ -5,7 +5,10 @@ import os
 import requests
 from pprint import pp
 from time import sleep
+<<<<<<< HEAD
+=======
 from datetime import datetime
+>>>>>>> master
 
 from . import utils
 
@@ -21,8 +24,7 @@ def deploy_model(
     nbox_meta,
     wait_for_deployment=False,
 ):
-    """One-Click-Deploy method v1 that takes in the torch model, converts to ONNX and then deploys on NBX Platform.
-
+    """One-Click-Deploy method v3 that takes in a .nbox file and deploys it to the nbox server.
     Avoid using this function manually and use ``model.deploy()`` or nboxCLI instead.
 
     Args:
@@ -46,13 +48,27 @@ def deploy_model(
     """
     from nbox.auth import secret  # it can refresh so add it in the method
 
+<<<<<<< HEAD
+    # pp(nbox_meta)
+=======
     pp(nbox_meta)
+>>>>>>> master
 
     access_token = secret.get("access_token")
     URL = secret.get("nbx_url")
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
 
     # intialise the console logger
+<<<<<<< HEAD
+    logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
+    logger.info(f"Deploying on URL: {URL}")
+    deployment_type = nbox_meta["spec"]["deployment_type"]
+    deployment_id = nbox_meta["spec"]["deployment_id"]
+    deployment_name = nbox_meta["spec"]["deployment_name"]
+    model_name = nbox_meta["spec"]["model_name"]
+    
+    logger.info(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
+=======
     # console = utils.Console()
     logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
     logger.info(f"Deploying on URL: {URL}")
@@ -61,16 +77,23 @@ def deploy_model(
     deployment_id = nbox_meta["spec"]["deployment_id"]
     deployment_name = nbox_meta["spec"]["deployment_name"]
     logger.info(f"Deployment ID: {deployment_id}")
+>>>>>>> master
 
     if not deployment_id and not deployment_name:
         logger.info("Deployment ID not passed will create a new deployment with name >>")
         deployment_name = utils.get_random_name().replace("-", "_")
 
+<<<<<<< HEAD
+    logger.info(
+        f"Deployment Name: '{deployment_name}', Model Name: '{model_name}', Model Path: '{export_model_path}', file_size: {file_size} MBs"
+    )
+=======
     logger.info(f"Deployment Name: {deployment_name}")
     model_name = nbox_meta["spec"]["model_name"]
     logger.info(f"Model Name: {model_name}")
     logger.info(f"Model Path: {export_model_path}")
     logger.info(f"file_size: {file_size} MBs")
+>>>>>>> master
     logger.info("Getting bucket URL")
 
     # get bucket URL
@@ -78,7 +101,7 @@ def deploy_model(
         url=f"{URL}/api/model/get_upload_url",
         params={
             "file_size": file_size,  # because in MB
-            "file_type": export_model_path.split(".")[-1],
+            "file_type": "nbox",
             "model_name": model_name,
             "convert_args": nbox_meta["spec"]["convert_args"],
             "nbox_meta": json.dumps(nbox_meta),  # annoying, but otherwise only the first key would be sent
@@ -202,9 +225,64 @@ def deploy_model(
     return endpoint, access_key
 
 
+<<<<<<< HEAD
+def deploy_job(
+    zip_path: str,
+    schedule_meta: dict,
+):
+    from nbox.auth import secret  # it can refresh so add it in the method
+
+    access_token = secret.get("access_token")
+    URL = secret.get("nbx_url")
+    file_size = os.stat(zip_path).st_size // (1024 ** 2)  # in MBs
+
+    # intialise the console logger
+    logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
+    logger.info(f"Deploying on URL: {URL}")
+
+    # POST not GET !change vs. model
+    r = requests.post(
+        url=f"{URL}/api/jobs/get_upload_url",
+        headers={"Authorization": f"Bearer {access_token}"},
+        json = {
+            "file_size": file_size,  # because in MB
+            "file_type": "zip",
+            "job_name": schedule_meta["job_name"],
+            "schedule_meta": schedule_meta,
+        }
+    )
+    try:
+        r.raise_for_status()
+    except:
+        raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
+
+    out = r.json()
+    job_id = out["fields"]["x-amz-meta-job_id"]
+    jobs_deployment_id = out["fields"]["x-amz-meta-jobs_deployment_id"]
+    logger.info(f"job_id: {job_id}")
+    logger.info(f"jobs_deployment_id: {jobs_deployment_id}")
+
+    # upload the file to a S3 -> don't raise for status here
+    logger.info("Uploading model to S3 ...")
+    r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(zip_path, "rb"))})
+
+    # checking if file is successfully uploaded on S3 and tell webserver whether upload is completed or not because client tells
+    logger.info("Verifying upload ...")
+    r = requests.post(
+        url=f"{URL}/api/jobs/update_model_status",
+        json={"upload": True if r.status_code == 204 else False, "job_id": job_id, "jobs_deployment_id": jobs_deployment_id},
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    try:
+        r.raise_for_status()
+    except:
+        raise ValueError(f"Could not update model status: {r.content.decode('utf-8')}")
+
+=======
 def deploy_job(operator):
     data_dict = {
         "created": datetime.now()
     }
     pass
+>>>>>>> master
 

@@ -1,9 +1,286 @@
+from logging import getLogger
 import json
+import sys
 import os
+from typing import List
+from time import sleep
 
 from .network import deploy_model
+<<<<<<< HEAD
+from .auth import init_secret, secret
+from .utils import get_random_name, NBOX_HOME_DIR, join
+from .jobs import get_instance, Instance
+
+def status(loc = None):
+    from .jobs import print_status
+    print_status(f"https://{'' if not loc else loc+'.'}nimblebox.ai")
+
+
+def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
+    """the nbox way to SSH into your instance.
+
+    Usage:
+        tunn.py 8000 notebook:8000 2000:8001 -i "nbox-dev"
+
+    Args:
+        ssh: Local port to connect SSH to
+        *apps_to_ports: A tuple of values like <app_name>:<localport>
+        instance (str): IP address of the instance.
+        pwd (str): password to connect to that instance.
+    """
+
+    import socket
+    import logging
+
+    import ssl
+    import threading
+    import certifi
+
+    log_ = open(join(NBOX_HOME_DIR, "tunnel.log"), "w")
+    logger = lambda x: log_.write(x + "\n")
+
+    class RSockClient:
+        """
+        This is a RSockClient. It handels the client socket where client is the user application trying to connect to "client_port"
+        Connects to RSockServer listening on localhost:886.
+        RSockServer recieves instructions as a string and sends back a response.
+        RSockServer requires following steps to setup
+        First,
+            Authentication:
+                - Authentication happens by sending
+                    `"AUTH~{AUTH_TOKEN}"`
+                - AUTH_TOKEN is not defined and is default to 'password'
+            Seting config:
+                - you can set config by sending
+                    `"SET_CONFIG~{instance}~{instance_port}"`
+                - "instance" - Currently is the internal ip of the instance.
+                - "instance_port" - What port users wants to connect to.
+            Connect:
+                - This Starts the main loop which
+                    1. Listen on client_port
+                    2. On connection, 
+                        a. Send AUTH
+                        b. If AUTH is successful, send SET_CONFIG
+                        c. If SET_CONFIG is successful, send CONNECT
+                        d. If CONNECT is successful, start io_copy
+            IO_COPY:
+                - This is the main loop that handles the data transfer between client and server. This is done by creating a new thread for each connection.
+                - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
+                - When a connection is closed, the loop is stopped.
+        """
+
+        def __init__(self, connection_id, client_socket, instance, instance_port, auth, secure=False):
+            """
+            Initializes the client.
+            Args:
+                client_socket: The socket that the client is connected to.
+                instance: The instance that the client wants to connect to.
+                instance_port: The port that the instance is listening on.
+                auth: The authentication token that the client has to provide to connect to the RSockServer.
+                secure: Whether or not the client is using SSL.
+            
+            """
+            self.connection_id = connection_id
+            self.client_socket = client_socket
+            self.instance = instance
+            self.instance_port = instance_port
+            self.auth = auth
+            self.secure = secure
+
+            self.client_auth = False
+            self.rsock_thread_running = False
+            self.client_thread_running = False
+
+
+            self.log('Starting client')
+            self.connect_to_rsock_server()
+            self.log('Connected to RSockServer')
+            self.authenticate()
+            self.log('Authenticated client')
+            self.set_config()
+            self.log('Client init complete')
+        
+        def log(self, message, level=logging.INFO):
+            logger(f"[Client_ID: {self.connection_id}] {message}")
+            # print(f"[Client_ID: {self.connection_id}] {message}")
+        
+        def connect_to_rsock_server(self):
+            """
+            Connects to RSockServer.
+            """
+            self.log('Connecting to RSockServer', logging.DEBUG)
+            rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            rsock_socket.connect(('rsocks.nimblebox.ai', 886))
+
+            if self.secure:
+                self.log('Starting SSL')
+                self.rsock_socket = ssl.wrap_socket(rsock_socket, ca_certs=certifi.where(), cert_reqs=ssl.CERT_REQUIRED)
+            else:
+                self.rsock_socket = rsock_socket
+
+        def authenticate(self):
+            """
+            Authenticates the client.
+            Sends `"AUTH~{AUTH_TOKEN}"` to RSockServer.
+            """
+            self.log('Authenticating client')
+            self.rsock_socket.sendall(bytes('AUTH~{}'.format(self.auth), 'utf-8'))
+            auth = self.rsock_socket.recv(1024)
+            auth = auth.decode('utf-8')
+            if auth == 'OK':
+                self.log('Client authenticated')
+            else:
+                self.log('Client authentication failed', logging.ERROR)
+                self.client_auth = False
+                exit(1)
+        
+        def set_config(self):
+            """
+            Sets the config of the client.
+            Sends `"SET_CONFIG~{instance}~{instance_port}"` to RSockServer.
+            """
+            self.log('Setting config')
+            self.rsock_socket.sendall(bytes(f'SET_CLIENT~{self.instance}~{self.instance_port}', 'utf-8'))
+            config = self.rsock_socket.recv(1024)
+            config = config.decode('utf-8')
+            self.log('Config set to {}'.format(config))
+            if config == 'OK':
+                self.log('Config set')
+            else:
+                self.log('Config set failed', logging.ERROR)
+                exit(1)
+
+        def connect(self):
+            """
+            Connects the client to RSockServer.
+            Sends `"CONNECT"` to RSockServer.
+            """
+            self.log('Starting the io_copy loop')
+            self.rsock_socket.sendall(bytes('CONNECT', 'utf-8'))
+            
+            # start the io_copy loop
+            self.rsock_thread_running = True
+            self.rsock_thread = threading.Thread(target=self.io_copy, args=("server", ))
+            self.rsock_thread.start()
+
+            # start the io_copy loop
+            self.client_thread_running = True
+            self.client_thread = threading.Thread(target=self.io_copy, args=("client", ))
+            self.client_thread.start()
+
+        def io_copy(self, direction):
+            """
+            This is the main loop that handles the data transfer between client and server.
+            """
+            self.log('Starting {} io_copy'.format(direction))
+
+            if direction == 'client':
+                client_socket = self.client_socket
+                server_socket = self.rsock_socket
+
+            elif direction == 'server':
+                client_socket = self.rsock_socket
+                server_socket = self.client_socket
+
+            while True:
+                try:
+                    data = client_socket.recv(1024)
+                    if data:
+                        # self.log('{} data: {}'.format(direction, data))
+                        server_socket.sendall(data)
+                    else:
+                        self.log('{} connection closed'.format(direction))
+                        break
+                except Exception as e:
+                    self.log('Error in {} io_copy: {}'.format(direction, e), logging.ERROR)
+                    break
+            self.log('Stopping {} io_copy'.format(direction))
+
+
+    def create_connection(local_port, instance_id, instance_port, listen = 1):
+        listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        listen_socket.bind(('localhost', local_port))
+        listen_socket.listen(listen)
+
+        connection_id = 0
+
+        while True:
+            logger('Waiting for client')
+            client_socket, _ = listen_socket.accept()
+            logger('Client connected')
+
+            connection_id += 1
+            logger('Total clients connected -> '.format(connection_id))
+            # create the client
+            pwd = secret.get("access_token")
+
+            client = RSockClient(connection_id, client_socket, instance_id, instance_port, pwd, True)
+
+            # start the client
+            client.connect()
+
+    def port_in_use(port: int) -> bool:
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            return s.connect_ex(('localhost', port)) == 0
+    
+    # ===============
+
+    default_ports = {
+        "jupyter": 8888,
+        "mlflow": 5000,
+    }
+    apps = {} # <localport-cloudport>
+    for ap in apps_to_ports:
+        app, port = ap.split(':')
+        port = int(port)
+        if not app or not port:
+            raise ValueError(f"Invalid app:port pair {ap}")
+        try:
+            apps[int(app)] = port
+        except:
+            if app not in default_ports:
+                raise ValueError(f"Unknown '{app}' should be either integer or one of {', ' .join(default_ports.keys())}")
+            apps[port] = default_ports[app]
+    apps[ssh] = 22 # hard code
+
+    ports_used = []
+    for k in apps:
+        if port_in_use(k):
+            ports_used.append(str(k))
+
+    if ports_used:
+        raise ValueError(f"Ports {', '.join(ports_used)} are already in use")
+
+    # check if instance is the correct one
+    instance = Instance(instance, loc = "test-3")
+    if not instance.state == "RUNNING":
+        raise ValueError("Instance is not running")
+    passwd = instance.open_data["ssh_pass"]
+    logging.info(f"password: {passwd}")
+
+    # create the connection
+    threads = []
+    for local_port, cloud_port in apps.items():
+        logging.info(f"Creating connection from {cloud_port} -> {local_port}")
+        t = threading.Thread(target=create_connection, args=(local_port, instance.instance_id, cloud_port, 1))
+        t.start()
+        threads.append(t)
+
+    try:
+        # start the ssh connection on terminal
+        import subprocess
+        subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
+    except KeyboardInterrupt:
+        logging.info("KeyboardInterrupt, closing connections")
+        for t in threads:
+            t.join()
+
+    sys.exit(0) # graceful exit
+=======
 from .auth import init_secret
 from .utils import get_random_name
+>>>>>>> master
 
 
 def deploy(

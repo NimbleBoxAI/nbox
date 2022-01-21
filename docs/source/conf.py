@@ -23,7 +23,11 @@ copyright = "2021, nimblebox.ai"
 author = "nimblebox.ai"
 
 # The full version, including alpha/beta/rc tags
+<<<<<<< HEAD
+release = "0.8.0"
+=======
 release = "0.7.0"
+>>>>>>> master
 
 
 # -- General configuration ---------------------------------------------------

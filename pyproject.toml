@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nbox"
-version = "0.7.0"
+version = "0.8.0"
 description = "ML Inference 🥶"
 authors = [
   "NBX Research <research@nimblebox.ai>",
@@ -14,12 +14,7 @@ randomname = "^0.1.3"
 requests = "^2.25.1"
 numpy = "^1.19.5"
 Pillow = "^8.3.2"
-skl2onnx = "^1.9.3"
-onnxruntime = "1.9.0"
 tabulate = "0.8.9"
-torch = "^1.9.0"
-torchvision = "0.10.0"
-python-json-logger = "2.0.2"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"
