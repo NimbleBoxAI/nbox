@@ -1,5 +1,6 @@
 from logging import getLogger
 import json
+import sys
 import os
 from typing import List
 from time import sleep
@@ -7,7 +8,7 @@ from time import sleep
 from .network import deploy_model
 from .auth import init_secret, secret
 from .utils import get_random_name, NBOX_HOME_DIR, join
-from .jobs import get_instance
+from .jobs import get_instance, Instance
 
 def status(loc = None):
     from .jobs import print_status
@@ -195,7 +196,7 @@ def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
             self.log('Stopping {} io_copy'.format(direction))
 
 
-    def create_connection(local_port, instance_ip, instance_port, listen = 1):
+    def create_connection(local_port, instance_id, instance_port, listen = 1):
         listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         listen_socket.bind(('localhost', local_port))
         listen_socket.listen(listen)
@@ -211,10 +212,8 @@ def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
             logger('Total clients connected -> '.format(connection_id))
             # create the client
             pwd = secret.get("access_token")
-            pwd = "password" # TODO: remove this
-            instance_name = instance_ip
 
-            client = RSockClient(connection_id, client_socket, instance_name, instance_port, pwd, True)
+            client = RSockClient(connection_id, client_socket, instance_id, instance_port, pwd, True)
 
             # start the client
             client.connect()
@@ -253,30 +252,30 @@ def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
         raise ValueError(f"Ports {', '.join(ports_used)} are already in use")
 
     # check if instance is the correct one
-    # check it instance is an IP address
-    import re
-    is_ip = re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", instance)
-    if not is_ip:
-        raise ValueError(f"Instance '{instance}' is not an IP address")
-        instance = get_instance(secret.get("nbx_url"), instance)
-        if not instance["state"] == "RUNNING":
-            raise ValueError("Instance is not running")
+    instance = Instance(instance, loc = "test-3")
+    if not instance.state == "RUNNING":
+        raise ValueError("Instance is not running")
+    passwd = instance.open_data["ssh_pass"]
+    logging.info(f"password: {passwd}")
 
     # create the connection
     threads = []
     for local_port, cloud_port in apps.items():
-        print(f"Creating connection from {cloud_port} -> {local_port}")
-        t = threading.Thread(target=create_connection, args=(local_port, instance, cloud_port, 1))
+        logging.info(f"Creating connection from {cloud_port} -> {local_port}")
+        t = threading.Thread(target=create_connection, args=(local_port, instance.instance_id, cloud_port, 1))
         t.start()
         threads.append(t)
 
-    # start the ssh connection on terminal
-    import subprocess
-    subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
+    try:
+        # start the ssh connection on terminal
+        import subprocess
+        subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
+    except KeyboardInterrupt:
+        logging.info("KeyboardInterrupt, closing connections")
+        for t in threads:
+            t.join()
 
-    # stop the threads
-    for t in threads:
-        t.join()
+    sys.exit(0) # graceful exit
 
 
 def deploy(

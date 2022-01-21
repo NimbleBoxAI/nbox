@@ -147,12 +147,17 @@ class Instance():
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
     logger.info(f"Opening instance {self.name} ({self.instance_id})")
-    instance_url = self.web_server.open_instance(
+    self.open_data = self.web_server.open_instance(
       "post", data = {"instance_id":self.instance_id}
-    )["base_url"].lstrip("/").rstrip("/")
+    )
+    instance_url = self.open_data["base_url"].lstrip("/").rstrip("/")
     self.cs_url = f"{self.url}/{instance_url}"
     if self.cs_endpoint:
       self.cs_url += f"/{self.cs_endpoint}"
+
+    if self.cs_url.endswith("server"):
+      self.__opened = True
+      return
 
     # create a speced-subway, this requires capturing the openAPI spec first
     r = self.session.get(f"{self.cs_url}/openapi.json"); r.raise_for_status()
