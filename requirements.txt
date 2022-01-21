@@ -2,4 +2,4 @@ randomname==0.1.3
 requests==2.25.1
 numpy==1.19.5
 Pillow==8.3.2
-tabulate==.8.9
+tabulate==0.8.9
