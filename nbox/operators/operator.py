@@ -2,7 +2,6 @@
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # due to requirements of stability, some type enforcing is performed
 
-<<<<<<< HEAD
 import os
 from typing import Callable
 from functools import partial
@@ -150,119 +149,6 @@ class Tracer:
     print(dag_update)
 
 
-=======
-from collections import OrderedDict
-from dataclasses import dataclass
-from typing import Callable
-from datetime import datetime, timedelta
-
-from ..framework.__airflow import AirflowMixin
-
-
-@dataclass
-class StateDictModel:
-  state: str
-  data: dict
-  inputs: dict
-  outputs: dict
-
-  def __post_init__(self):
-    self.data = OrderedDict(self.data)
-
-
-class TraceObject:
-  def __init__(self, root):
-    self.root = root
-    self.flow = OrderedDict()
-
-  def pre(self, inputs, cls):
-    _id = id(cls)
-    self.flow[_id] = {
-      "id": _id,
-      "class_name": cls.__class__.__name__,
-      "inputs": {k: type(v) for k, v in inputs.items()},
-      "outputs": {},
-      "start": datetime.now(),
-      "end": None,
-    }
-
-  def post(self, out, cls):
-    _id = id(cls)
-    if _id not in self.flow:
-      raise ValueError(f"{_id} not found in flow")
-
-    outputs = {}
-    if out == None:
-      outputs = {"out_0": type(None)}
-    elif isinstance(out, dict):
-      outputs = {k: type(v) for k, v in out.items()}
-    elif isinstance(out, (list, tuple)):
-      outputs = {f"out_{i}": type(v) for i, v in enumerate(out)}
-    else:
-      outputs = {"out_0": type(out)}
-
-    self.flow[_id].update({
-      "outputs": outputs,
-      "end": datetime.now(),
-    })
-    self.flow[_id]["duration"] = self.flow[_id]["end"] - self.flow[_id]["start"]
-
-    # convert datetime to string objects for serialization
-    self.flow[_id]["start"] = self.flow[_id]["start"].isoformat()
-    self.flow[_id]["end"] = self.flow[_id]["end"].isoformat()
-    self.flow[_id]["duration"] = str(self.flow[_id]["duration"].total_seconds())
-
-  def to_dict(self):
-    return {
-      "root": self.root.__class__.__name__,
-      "root_id": id(self.root),
-      "flow": self.flow,
-    }
-
-  def dag(self, depth = 1, root_ = None):
-    if depth != 1:
-      raise ValueError("depth of 1 supported only")
-
-    if depth < 0:
-      return []
-
-    dag = []
-    # create nodes
-    root_ = root_ if root_ != None else self.root
-    for _name, c in root_._operators.items():
-      _id = id(c)
-      name = c.__class__.__name__
-      _trace = self.flow[_id]
-      _trace["code_name"] = _name
-
-      # if there is some depth left, recurse
-      if depth > 1:
-        children_dag = self.dag(depth - 1, c)
-        _trace["children"] = children_dag
-
-      dag.append({
-        "id": _id,
-        "type": "input" if len(dag) == 0 else None,
-        "data": {
-          "label": f"{_name} | {name}"
-        },
-        # "meta": _trace
-      })
-    dag[-1]["type"] = "output"
-
-    # create edges
-    for src, trg in zip(dag[:-1], dag[1:]):
-      dag.append({
-        "id": f"edge-{src['id']}-{trg['id']}",
-        "source": src["id"],
-        "target": trg["id"]
-      })
-    
-    return dag
-
-    
-
->>>>>>> master
 class Operator(AirflowMixin):
   _version: int = 1
 
@@ -327,11 +213,7 @@ class Operator(AirflowMixin):
 
   def __setattr__(self, key, value: 'Operator'):
     obj = getattr(self, key, None)
-<<<<<<< HEAD
     if key != "forward" and obj is not None and callable(obj):
-=======
-    if obj is not None and callable(obj):
->>>>>>> master
       raise AttributeError(f"cannot assign {key} as it is already a method")
     if isinstance(value, Operator):
       if not "_operators" in self.__dict__:
@@ -368,23 +250,6 @@ class Operator(AirflowMixin):
   def children(self):
     return self._operators.values()
 
-<<<<<<< HEAD
-=======
-  _topo_tree = {}
-
-  # @property
-  # def topo_tree(self):
-  #   # the structure of topo_tree looks like this:
-  #   #  / -> B \
-  #   # A        -> D
-  #   #  \ -> C /
-  #   #
-  #   # {"D": ["B", "C"], "B": ["A"], "C": ["A"], "A": []}
-  #   class IdeaError(Exception):
-  #     pass
-  #   raise IdeaError("Cannot represent a data-flow (declarative) as control-flow (imperative)")
-
->>>>>>> master
   @property
   def inputs(self):
     import inspect
@@ -420,10 +285,6 @@ class Operator(AirflowMixin):
   def propagate(self, **kwargs):
     for c in self.children:
       c.propagate(**kwargs)
-<<<<<<< HEAD
-=======
-    
->>>>>>> master
     for k, v in kwargs.items():
       setattr(self, k, v)
 
@@ -434,7 +295,6 @@ class Operator(AirflowMixin):
 
   def _register_forward(self, python_callable: Callable):
     # convienience method to register a forward method
-<<<<<<< HEAD
     self.forward = python_callable
 
   _trace_object = Tracer()
@@ -454,34 +314,12 @@ class Operator(AirflowMixin):
   #   if return_dag:
   #     output += (dag,)
   #   return output
-=======
-    self._new_forward = python_callable
-
-  _trace_object: TraceObject = None
-
-  def trace(self, *args, return_dag = True, **kwargs):
-    self._trace_object = TraceObject(self)
-    self.propagate(_trace_object = self._trace_object)
-    self(*args, **kwargs)
-    trace = self._trace_object.to_dict()
-    dag = self._trace_object.dag()
-    self.propagate(_trace_object = None)
-    self._trace_object = None
-
-    output = (trace,)
-    if return_dag:
-      output += (dag,)
-    return output
->>>>>>> master
 
   def __call__(self, *args, **kwargs):
     # blank comment so docstring below is not loaded
 
-<<<<<<< HEAD
     print(self.__class__.__name__, self.node_info)
 
-=======
->>>>>>> master
     """There is no need to perform ``self.is_dag`` check here, since it is
     a declarative model not an imperative one, so existance of DAG's is
     irrelevant.
@@ -507,9 +345,7 @@ class Operator(AirflowMixin):
       if key in inputs:
         input_dict[key] = value
 
-<<<<<<< HEAD
     if self.node_info != None:
-      print("----->>>>> pre")
       self.node_info["run_status"]["start"] = datetime.now().isoformat()
       self.node_info["run_status"]["inputs"] = {k: str(type(v)) for k, v in input_dict.items()}
       self._trace_object(self.node_info)
@@ -519,7 +355,6 @@ class Operator(AirflowMixin):
     # ----output
 
     if self.node_info != None:
-      print("----->>>>> post")
       outputs = {}
       if out == None:
         outputs = {"out_0": type(None)}
@@ -532,25 +367,11 @@ class Operator(AirflowMixin):
       self.node_info["run_status"]["end"] = datetime.now().isoformat()
       self.node_info["run_status"]["outputs"] = outputs
       self._trace_object(self.node_info)
-=======
-    if self._trace_object != None:
-      self._trace_object.pre(inputs = input_dict, cls = self)
-
-    try:
-      out = self._new_forward(**input_dict)
-    except:
-      # pass this through the user defined forward()
-      out = self.forward(**input_dict)
-    
-    if self._trace_object != None:
-      self._trace_object.post(out = out, cls = self)
->>>>>>> master
 
     return out
 
   # nbx/
 
-<<<<<<< HEAD
   def thaw(self, flowchart):
     nodes = flowchart["nodes"]
     edges = flowchart["edges"]
@@ -571,16 +392,11 @@ class Operator(AirflowMixin):
     self,
     init_folder: str = None,
     cache_dir: str = None,
-=======
-  def deploy(
-    self,
->>>>>>> master
     job_id = None,
     job_name = None,
     start_datetime: datetime = None,
     end_datetime: datetime = None,
     time_interval: timedelta = None,
-<<<<<<< HEAD
   ):
     logger.info(f"Deploying {self.__class__.__name__} -> '{job_id}/{job_name}'")
 
@@ -639,24 +455,5 @@ class Operator(AirflowMixin):
     return schedule_meta
 
     # deploy_job(zip_path = zip_path, schedule_meta = schedule_meta)
-=======
-    **trace_kwargs
-  ):
-    from nbox.network import deploy_job
-
-    _ = self(**trace_kwargs)
-
-    self._deploy_attributes = {
-      "job_id": job_id,
-      "job_name": job_name,
-      "start_datetime": start_datetime,
-      "end_datetime": end_datetime,
-      "time_interval": time_interval,
-    }
-
-    deploy_job(
-      self
-    )
->>>>>>> master
 
   # /nbx

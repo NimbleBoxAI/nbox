@@ -8,11 +8,7 @@ import os
 import json
 import torch
 import random
-<<<<<<< HEAD
 from uuid import uuid1
-=======
-from uuid import uuid1, uuid4
->>>>>>> master
 from tqdm.auto import trange
 from tempfile import gettempdir
 from torchvision import datasets
@@ -20,10 +16,6 @@ from torchvision import datasets
 from gperc import BinaryConfig, Perceiver
 from gperc.trainer import Trainer
 from gperc.arrow import ArrowConfig, ArrowConsumer
-<<<<<<< HEAD
-=======
-from gperc.utils import timeit
->>>>>>> master
 
 from nbox import Operator, Model
 from nbox.utils import Pool
@@ -206,19 +198,12 @@ class TestDeploy(Operator):
 class TrainTestDeploy(Operator):
   def __init__(self):
     super().__init__()
-<<<<<<< HEAD
-=======
-    # self.instance_start = NboxInstanceStartOperator(
-    #   instances = []
-    # )
->>>>>>> master
     self.downloader = Downloader()
     self.trainer = TrainOperator()
     self.deploy_tester = TestDeploy(workers = 2)
 
   def forward(self, n_steps = 100, test_every = 10, batch_size = 32):
     from uuid import uuid4
-<<<<<<< HEAD
     train_json, test_json, class_to_id = self.downloader()
     url, api_key = self.trainer(
       n_steps = n_steps,
@@ -228,22 +213,10 @@ class TrainTestDeploy(Operator):
       class_to_id = class_to_id,
       batch_size_train = batch_size,
       batch_size_test = batch_size * 4,
-=======
-    # self.instance_start()
-    train_json, test_json, class_to_id = self.downloader() # target_dir is already correct
-    url, api_key = self.trainer(
-      n_steps, test_every, train_json, test_json, class_to_id, batch_size, batch_size * 4,
->>>>>>> master
       model_name = str(uuid4()).replace("-", "_")[:43]
     )
     self.deploy_tester(url, api_key, n_hits = 20)
 
 # local test
-<<<<<<< HEAD
 # job = TrainTestDeploy()
 # job(n_steps = 10, test_every = 1, batch_size = 5)
-=======
-
-job = TrainTestDeploy()
-job(n_steps = 10, test_every = 1, batch_size = 5)
->>>>>>> master

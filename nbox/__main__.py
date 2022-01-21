@@ -24,7 +24,6 @@ The commands are broken down according to the products they are related to.
 """
 
 import fire
-<<<<<<< HEAD
 from . import cli as n # nbox-cli
 from .jobs import cli as j # jobx-cli
 
@@ -43,15 +42,3 @@ if __name__ == "__main__":
     "status": n.status,           # nbox status
     "tunnel": n.tunnel,
   })
-=======
-from .cli import deploy
-from .jobs import print_status
-from .jobs.cli import jobs_cli
-
-if __name__ == "__main__":
-    fire.Fire({
-        "deploy": deploy,
-        "jobs": jobs_cli,
-        "status": lambda loc = None: print_status(f"https://{'' if not loc else loc+'.'}nimblebox.ai")
-    })
->>>>>>> master

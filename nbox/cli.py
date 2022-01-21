@@ -6,7 +6,6 @@ from typing import List
 from time import sleep
 
 from .network import deploy_model
-<<<<<<< HEAD
 from .auth import init_secret, secret
 from .utils import get_random_name, NBOX_HOME_DIR, join
 from .jobs import get_instance, Instance
@@ -277,10 +276,6 @@ def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
             t.join()
 
     sys.exit(0) # graceful exit
-=======
-from .auth import init_secret
-from .utils import get_random_name
->>>>>>> master
 
 
 def deploy(

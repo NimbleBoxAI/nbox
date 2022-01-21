@@ -150,37 +150,21 @@ def from_airflow_dag(operator_cls, dag):
 
 
 class AirflowMixin:
-<<<<<<< HEAD
   @isthere("airflow", soft = False)
-=======
-  @isthere("airflow")
->>>>>>> master
   def to_airflow_operator(self, timeout, **operator_kwargs):
     return to_airflow_operator(self, timeout, operator_kwargs)
 
   @classmethod
-<<<<<<< HEAD
   @isthere("airflow", soft = False)
   def from_airflow_operator(cls, air_operator):
     return from_airflow_operator(cls, air_operator)
 
   @isthere("airflow", soft = False)
-=======
-  @isthere("airflow")
-  def from_airflow_operator(cls, air_operator):
-    return from_airflow_operator(cls, air_operator)
-
-  @isthere("airflow")
->>>>>>> master
   def to_airflow_dag(self, dag_kwargs, operator_kwargs):
     return to_airflow_dag(self, dag_kwargs, operator_kwargs)
 
   @classmethod
-<<<<<<< HEAD
   @isthere("airflow", soft = False)
-=======
-  @isthere("airflow")
->>>>>>> master
   def from_airflow_dag(cls, dag):
     return from_airflow_dag(cls, dag)
 

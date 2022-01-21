@@ -4,41 +4,25 @@ import logging
 import requests
 from getpass import getpass
 
-<<<<<<< HEAD
 from .utils import join, nbox_session, NBOX_HOME_DIR, isthere
-=======
-from .utils import join, nbox_session, NBOX_HOME_DIR
->>>>>>> master
 
 logger = logging.getLogger()
 
 # ------ AWS Auth ------ #
 
 class AWSClient:
-<<<<<<< HEAD
   @isthere("boto3", "botocore", soft = False)
   def __init__(self, aws_access_key_id, aws_secret_access_key, region_name):
-=======
-  def __init__(self, aws_access_key_id, aws_secret_access_key, region_name, **boto_config_kwargs):
-    import boto3
-    from botocore.client import Config as BotoConfig
-
->>>>>>> master
     self.aws_access_key_id = aws_access_key_id
     self.aws_secret_access_key = aws_secret_access_key
     self.region_name = region_name
 
-<<<<<<< HEAD
   def get_client(self, service_name = "s3", **boto_config_kwargs):
     import boto3
     from botocore.client import Config as BotoConfig
 
     return boto3.client(
       service_name,
-=======
-    self.client = boto3.client(
-      "s3",
->>>>>>> master
       aws_access_key_id=self.aws_access_key_id,
       aws_secret_access_key=self.aws_secret_access_key,
       region_name=self.region_name,
@@ -51,7 +35,6 @@ class AWSClient:
 # ------ GCP Auth ------ #
 
 class GCPClient:
-<<<<<<< HEAD
   @isthere("google-cloud-sdk", "google-cloud-storage", soft = False)
   def __init__(self, project_id, credentials_file):
     from google.oauth2 import service_account
@@ -72,15 +55,10 @@ class GCPClient:
         **gcp_config_kwargs
       )
     
-=======
-  def __init__(self):
-    raise NotImplementedError()
->>>>>>> master
 
 # ------ Azure Auth ------ #
 
 class AzureClient:
-<<<<<<< HEAD
   @isthere("azure-storage-blob", soft = False)
   def __init__(self):
     from azure.storage.blob import BlobServiceClient
@@ -99,15 +77,10 @@ class AzureClient:
         self.blob_service_client,
         **azure_config_kwargs
       )
-=======
-  def __init__(self):
-    raise NotImplementedError()
->>>>>>> master
 
 # ------ OCI Auth ------ #
 
 class OCIClient:
-<<<<<<< HEAD
   @isthere("oci", "oci-py", soft = False)
   def __init__(self, config_file):
     from oci.config import from_file
@@ -135,16 +108,11 @@ class OCIClient:
         self.signer,
         **oci_config_kwargs
       )
-=======
-  def __init__(self):
-    raise NotImplementedError()
->>>>>>> master
 
 
 # ------ Digital Ocean Auth ------ #
 
 class DOClient:
-<<<<<<< HEAD
   @isthere("doctl", soft = False)
   def __init__(self, config_file):
     from doctl.doctl_client import DictCursor
@@ -163,10 +131,6 @@ class DOClient:
         self.doctl_client,
         **oci_config_kwargs
       )
-=======
-  def __init__(self):
-    raise NotImplementedError()
->>>>>>> master
 
 # ------ NBX Auth ------ #
 
