@@ -25,22 +25,16 @@ logger = logging.getLogger()
 
 # lazy_loading/
 
-def _isthere(*packages):
-    for package in packages:
-        try:
-            __import__(package)
-        except Exception:
-            return False
-    return True
-
-def isthere(*packages, hard = False, ):
+def isthere(*packages, soft = True):
     def wrapper(fn):
         def _fn(*args, **kwargs):
             # since we are lazy evaluating this thing, we are checking when the function
             # is actually called. This allows checks not to happen during __init__.
             for package in packages:
-                if not _isthere(package):
-                    if hard:
+                try:
+                    __import__(package)
+                except ImportError:
+                    if not soft:
                         raise Exception(f"{package} is not installed")
                     # raise a warning, let the modulenotfound exception bubble up
                     logger.warn(
@@ -49,6 +43,14 @@ def isthere(*packages, hard = False, ):
             return fn(*args, **kwargs)
         return _fn
     return wrapper
+
+def _isthere(*packages):
+    for package in packages:
+        try:
+            __import__(package)
+        except ImportError:
+            return False
+    return True
 
 # /lazy_loading
 

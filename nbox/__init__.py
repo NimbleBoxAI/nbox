@@ -7,4 +7,4 @@ from .parsers import ImageParser, TextParser
 from .operators import Operator
 from .jobs import Instance
 
-__version__ = "0.7.0"
+__version__ = "0.8.0"

@@ -11,7 +11,7 @@ logger = logging.getLogger()
 # ------ AWS Auth ------ #
 
 class AWSClient:
-  @isthere("boto3", "botocore", hard = True)
+  @isthere("boto3", "botocore", soft = False)
   def __init__(self, aws_access_key_id, aws_secret_access_key, region_name):
     self.aws_access_key_id = aws_access_key_id
     self.aws_secret_access_key = aws_secret_access_key
@@ -35,7 +35,7 @@ class AWSClient:
 # ------ GCP Auth ------ #
 
 class GCPClient:
-  @isthere("google-cloud-sdk", "google-cloud-storage", hard = True)
+  @isthere("google-cloud-sdk", "google-cloud-storage", soft = False)
   def __init__(self, project_id, credentials_file):
     from google.oauth2 import service_account
     
@@ -59,7 +59,7 @@ class GCPClient:
 # ------ Azure Auth ------ #
 
 class AzureClient:
-  @isthere("azure-storage-blob", hard = True)
+  @isthere("azure-storage-blob", soft = False)
   def __init__(self):
     from azure.storage.blob import BlobServiceClient
     from azure.identity import DefaultAzureCredential
@@ -81,7 +81,7 @@ class AzureClient:
 # ------ OCI Auth ------ #
 
 class OCIClient:
-  @isthere("oci", "oci-py", hard = True)
+  @isthere("oci", "oci-py", soft = False)
   def __init__(self, config_file):
     from oci.config import from_file
     from oci.signer import Signer
@@ -113,7 +113,7 @@ class OCIClient:
 # ------ Digital Ocean Auth ------ #
 
 class DOClient:
-  @isthere("doctl", hard = True)
+  @isthere("doctl", soft = False)
   def __init__(self, config_file):
     from doctl.doctl_client import DictCursor
     from doctl.doctl_client import DoctlClient
