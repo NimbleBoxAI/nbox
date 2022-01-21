@@ -5,6 +5,10 @@ import os
 import requests
 from pprint import pp
 from time import sleep
+<<<<<<< HEAD
+=======
+from datetime import datetime
+>>>>>>> master
 
 from . import utils
 
@@ -44,13 +48,18 @@ def deploy_model(
     """
     from nbox.auth import secret  # it can refresh so add it in the method
 
+<<<<<<< HEAD
     # pp(nbox_meta)
+=======
+    pp(nbox_meta)
+>>>>>>> master
 
     access_token = secret.get("access_token")
     URL = secret.get("nbx_url")
     file_size = os.stat(export_model_path).st_size // (1024 ** 2)  # in MBs
 
     # intialise the console logger
+<<<<<<< HEAD
     logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
     logger.info(f"Deploying on URL: {URL}")
     deployment_type = nbox_meta["spec"]["deployment_type"]
@@ -59,14 +68,32 @@ def deploy_model(
     model_name = nbox_meta["spec"]["model_name"]
     
     logger.info(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
+=======
+    # console = utils.Console()
+    logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
+    logger.info(f"Deploying on URL: {URL}")
+    deployment_type = nbox_meta["spec"]["deployment_type"]
+    logger.info(f"Deployment Type: {deployment_type}")
+    deployment_id = nbox_meta["spec"]["deployment_id"]
+    deployment_name = nbox_meta["spec"]["deployment_name"]
+    logger.info(f"Deployment ID: {deployment_id}")
+>>>>>>> master
 
     if not deployment_id and not deployment_name:
         logger.info("Deployment ID not passed will create a new deployment with name >>")
         deployment_name = utils.get_random_name().replace("-", "_")
 
+<<<<<<< HEAD
     logger.info(
         f"Deployment Name: '{deployment_name}', Model Name: '{model_name}', Model Path: '{export_model_path}', file_size: {file_size} MBs"
     )
+=======
+    logger.info(f"Deployment Name: {deployment_name}")
+    model_name = nbox_meta["spec"]["model_name"]
+    logger.info(f"Model Name: {model_name}")
+    logger.info(f"Model Path: {export_model_path}")
+    logger.info(f"file_size: {file_size} MBs")
+>>>>>>> master
     logger.info("Getting bucket URL")
 
     # get bucket URL
@@ -198,6 +225,7 @@ def deploy_model(
     return endpoint, access_key
 
 
+<<<<<<< HEAD
 def deploy_job(
     zip_path: str,
     schedule_meta: dict,
@@ -250,4 +278,11 @@ def deploy_job(
     except:
         raise ValueError(f"Could not update model status: {r.content.decode('utf-8')}")
 
+=======
+def deploy_job(operator):
+    data_dict = {
+        "created": datetime.now()
+    }
+    pass
+>>>>>>> master
 

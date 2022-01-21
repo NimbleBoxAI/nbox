@@ -53,7 +53,11 @@ def get_instance(url, id_or_name, session = nbox_session):
   resp = r.json()
 
   if len(resp["data"]) == 0:
+<<<<<<< HEAD
     raise ValueError(f"No instance: '{id_or_name}' found, create manually from the dashboard or Instance.new(...)")
+=======
+    raise ValueError("No instance found, create manually from the dashboard or Instance.new(...)")
+>>>>>>> master
 
   key = "instance_id" if isinstance(id_or_name, int) else "name"
   instance = list(filter(lambda x: x[key] == id_or_name, resp["data"]))
@@ -147,18 +151,27 @@ class Instance():
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
     logger.info(f"Opening instance {self.name} ({self.instance_id})")
+<<<<<<< HEAD
     self.open_data = self.web_server.open_instance(
       "post", data = {"instance_id":self.instance_id}
     )
     instance_url = self.open_data["base_url"].lstrip("/").rstrip("/")
+=======
+    instance_url = self.web_server.open_instance(
+      "post", data = {"instance_id":self.instance_id}
+    )["base_url"].lstrip("/").rstrip("/")
+>>>>>>> master
     self.cs_url = f"{self.url}/{instance_url}"
     if self.cs_endpoint:
       self.cs_url += f"/{self.cs_endpoint}"
 
+<<<<<<< HEAD
     if self.cs_url.endswith("server"):
       self.__opened = True
       return
 
+=======
+>>>>>>> master
     # create a speced-subway, this requires capturing the openAPI spec first
     r = self.session.get(f"{self.cs_url}/openapi.json"); r.raise_for_status()
     self.cs_spec = r.json()

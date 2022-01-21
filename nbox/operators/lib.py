@@ -42,7 +42,11 @@ class NboxModelDeployOperator(Operator):
     ).deploy(name)
 
 
+<<<<<<< HEAD
 class NboxWaitTillJIDComplete(Operator):
+=======
+class WaitTillJIDComplete(Operator):
+>>>>>>> master
   def __init__(self, instance, jid):
     super().__init__()
     self.instance = instance
@@ -66,6 +70,7 @@ class NboxWaitTillJIDComplete(Operator):
 
 # /nbox
 
+<<<<<<< HEAD
 
 # arch/
 
@@ -96,6 +101,8 @@ class Python(Operator):
   def forward(self):
     return self.fak[0](*self.fak[1], **self.fak[2])
 
+=======
+>>>>>>> master
 class GitClone(Operator):
   def __init__(self, url, path = None, branch = None):
     super().__init__()
