@@ -42,7 +42,7 @@ class NboxModelDeployOperator(Operator):
     ).deploy(name)
 
 
-class WaitTillJIDComplete(Operator):
+class NboxWaitTillJIDComplete(Operator):
   def __init__(self, instance, jid):
     super().__init__()
     self.instance = instance
@@ -65,6 +65,36 @@ class WaitTillJIDComplete(Operator):
         raise Exception("Job {} failed".format(self.jid))
 
 # /nbox
+
+
+# arch/
+
+class Sequential():
+  def __init__(self, *ops):
+    super().__init__()
+    for op in ops:
+      assert isinstance(op, Operator), "Operator must be of type Operator"
+    self.ops = ops
+
+  def forward(self, x = None, capture_output = False):
+    out = x
+    outputs = []
+    for op in self.ops:
+      out = op(out)
+      outputs.append(out)
+    if capture_output:
+      return out, outputs
+    return out
+
+# /arch
+
+class Python(Operator):
+  def __init__(self, func, *args, **kwargs):
+    super().__init__()
+    self.fak = (func, args, kwargs)
+
+  def forward(self):
+    return self.fak[0](*self.fak[1], **self.fak[2])
 
 class GitClone(Operator):
   def __init__(self, url, path = None, branch = None):

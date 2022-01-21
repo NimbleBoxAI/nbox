@@ -93,7 +93,7 @@ class OCIClient:
       fingerprint=self.config["fingerprint"],
       private_key_file_location=self.config["key_file"]
     )
-  
+
   def get_client(self, service_name = "object_storage", **oci_config_kwargs):
 
     if service_name == "object_storage":

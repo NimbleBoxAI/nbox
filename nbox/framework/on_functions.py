@@ -3,6 +3,7 @@
 # read as "from nbox's framework on Functions import the pure-function Parser"
 
 import ast
+from datetime import datetime
 import inspect
 from uuid import uuid4
 from logging import getLogger
@@ -61,6 +62,7 @@ class Node(DBase):
     'node_info', # :Union[ExpressionNodeInfo, IfNodeInfo]
     'operator', # :str
     'nbox_string', # :str
+    'run_status', # :Dict[str, Any]
   ]
 
 class Edge(DBase):
@@ -70,6 +72,14 @@ class Edge(DBase):
     'target', # :str
     'type', # :str
     'nbox_string', # :str
+  ]
+
+class RunStatus(DBase):
+  __slots__ = [
+    'start', # :str
+    'end', # :str
+    'inputs', # :Dict
+    'outputs', # :Dict
   ]
 
 
@@ -371,6 +381,7 @@ def get_nbx_flow(forward):
           outputs = [], # :list[str]
         ),
       nbox_string = f"CODE: {str(type(expr))}", # :str
+      run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(node)
       continue
@@ -387,7 +398,8 @@ def get_nbx_flow(forward):
         type = "op-node",
         operator = "CodeBlock",
         node_info = output,
-        nbox_string = None
+        nbox_string = None,
+        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(output)
     elif isinstance(output, IfNodeInfo):
@@ -399,6 +411,7 @@ def get_nbx_flow(forward):
         operator = "Conditional",
         node_info = output,
         nbox_string = output.nbox_string,
+        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(output)
     elif "def" in output["type"]:

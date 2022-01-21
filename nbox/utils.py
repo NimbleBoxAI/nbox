@@ -127,6 +127,16 @@ class Pool:
                 k8s, nbx-instances etc.
             max_workers (int, optional): Numbers of workers to use
             _name (str, optional): Name of the pool, used for logging
+
+        Usage:
+            
+            def sleep_and_return(x):
+                from time import sleep
+                sleep(x)
+                return x
+            
+            pool = Pool()
+            results = pool(sleep_and_return, (2,),(6,),(4,),(5,)) # inputs must be a tuple
         """
         if mode not in POOL_SUPPORTED_MODES:
             raise Exception(f"Only {', '.join(POOL_SUPPORTED_MODES)} mode(s) are supported")
@@ -143,7 +153,7 @@ class Pool:
 
     def __call__(self, fn, *args):
         """Run any function ``fn`` in parallel, where each argument is a list of arguments to
-        pass to ``fn``. 
+        pass to ``fn``. Result is returned in the same order as the input.
             
             thread(fn, a) for a in args -> list of results
         """
@@ -151,21 +161,20 @@ class Pool:
         assert isinstance(args[0], (tuple, list))
 
         futures = {}
-        for x in args:
-            print(x)
-            self.item_id += 1
-            futures[self.executor.submit(fn, *x)] = self.item_id
-        
-        results = []
+        for i, x in enumerate(args):
+            futures[self.executor.submit(fn, *x)] = i # insertion index
+
+        self.item_id += len(futures)
+        results = {}
         for future in as_completed(futures):
             try:
                 result = future.result()
-                results.append(result)
+                results[futures[future]] = result # update that index
             except Exception as e:
                 logger.error(f"{self.mode} error: {e}")
                 raise e
 
-        return results
+        return [results[x] for x in range(len(results))]
 
 # /pool
 

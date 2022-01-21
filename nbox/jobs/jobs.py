@@ -53,7 +53,7 @@ def get_instance(url, id_or_name, session = nbox_session):
   resp = r.json()
 
   if len(resp["data"]) == 0:
-    raise ValueError("No instance found, create manually from the dashboard or Instance.new(...)")
+    raise ValueError(f"No instance: '{id_or_name}' found, create manually from the dashboard or Instance.new(...)")
 
   key = "instance_id" if isinstance(id_or_name, int) else "name"
   instance = list(filter(lambda x: x[key] == id_or_name, resp["data"]))

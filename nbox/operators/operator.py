@@ -3,18 +3,16 @@
 # due to requirements of stability, some type enforcing is performed
 
 import os
-from collections import OrderedDict
-from dataclasses import dataclass
-from tempfile import gettempdir
 from typing import Callable
+from functools import partial
+from tempfile import gettempdir
+from collections import OrderedDict
 from datetime import datetime, timedelta
 
 from logging import getLogger
-from venv import create
-
-from nbox.network import deploy_job
 logger = getLogger()
 
+from ..network import deploy_job
 from ..utils import join
 from ..framework.__airflow import AirflowMixin
 from ..framework.on_functions import get_nbx_flow, DBase
@@ -122,33 +120,34 @@ class StateDictModel(DBase):
 class Tracer:
   def __init__(self):
     try:
-      # when this job is running on the NBX Platform, gRPC stubs are
-      # used for communication
+      # when job is running on NBX, gRPC stubs are used
       import nbox_js_stub
       self.l = nbox_js_stub.Trace()
+      self._trace_obj = "stub"
     except ImportError:
-      self.l = self.load_logger()
+      def _trace(x, fn):
+        logger.info(x, extra={"fn": fn})
 
-  def load_logger(self):
-    class _logger:
-      def __init__(self, logger):
-        self.l = logger
-      
-      def __getattr__(self, name):
-        def _blank_log(x):
-          self.l.info(x, extra={"fn": name})
-        return _blank_log
-    return _logger(logger)
+      self.l = _trace
+      self._trace_obj = "logger"
 
-  def pre(self, inputs, cls):
-    self.l.info(f"{cls.__class__.__name__}", extra={"fn": "pre"})
-    self.l.info(f"inputs: {inputs}", extra={"fn": "pre"})
-  
-  def post(self, out, cls):
-    self.l.info(f"{cls.__class__.__name__}", extra={"fn": "post"})
-    self.l.info(f"outputs: {out}", extra={"fn": "post"})
+  def __getattr__(self, __name):
+    item = getattr(self.l, __name, None)
+    if self._trace_obj == "logger":
+      return partial(self.l, fn=__name)
+    elif self._trace_obj == "stub" and item:
+      return item
+    raise AttributeError(f"Service: '{__name}' not found")
 
-    
+  def __call__(self, dag_update):
+    # import requests
+    # r = requests.post(
+    #   url = "127.0.0.1:8000/log",
+    #   json = dag_update,
+    # )
+    # print(r.content)
+    print(dag_update)
+
 
 class Operator(AirflowMixin):
   _version: int = 1
@@ -298,7 +297,9 @@ class Operator(AirflowMixin):
     # convienience method to register a forward method
     self.forward = python_callable
 
-  _trace_object = None
+  _trace_object = Tracer()
+  node_info = None
+  source_edges = None
 
   # def trace(self, *args, return_dag = True, **kwargs):
   #   self._trace_object = TraceObject(self)
@@ -317,6 +318,8 @@ class Operator(AirflowMixin):
   def __call__(self, *args, **kwargs):
     # blank comment so docstring below is not loaded
 
+    print(self.__class__.__name__, self.node_info)
+
     """There is no need to perform ``self.is_dag`` check here, since it is
     a declarative model not an imperative one, so existance of DAG's is
     irrelevant.
@@ -326,8 +329,6 @@ class Operator(AirflowMixin):
     2. Tracing, we want to trace the execution of the model
     3. Networking, when required to execute like RPC
     """
-
-    running_on_nbox = False
 
     # Type Checking and create input dicts
     inputs = self.inputs
@@ -344,18 +345,50 @@ class Operator(AirflowMixin):
       if key in inputs:
         input_dict[key] = value
 
-    if self._trace_object != None:
-      self._trace_object.pre(inputs = input_dict, cls = self)
+    if self.node_info != None:
+      print("----->>>>> pre")
+      self.node_info["run_status"]["start"] = datetime.now().isoformat()
+      self.node_info["run_status"]["inputs"] = {k: str(type(v)) for k, v in input_dict.items()}
+      self._trace_object(self.node_info)
 
-    # pass this through the user defined forward()
-    out = self.forward(**input_dict)
-    
-    if self._trace_object != None:
-      self._trace_object.post(out = out, cls = self)
+    # ----input
+    out = self.forward(**input_dict) # pass this through the user defined forward()
+    # ----output
+
+    if self.node_info != None:
+      print("----->>>>> post")
+      outputs = {}
+      if out == None:
+        outputs = {"out_0": type(None)}
+      elif isinstance(out, dict):
+        outputs = {k: type(v) for k, v in out.items()}
+      elif isinstance(out, (list, tuple)):
+        outputs = {f"out_{i}": type(v) for i, v in enumerate(out)}
+      else:
+        outputs = {"out_0": type(out)}
+      self.node_info["run_status"]["end"] = datetime.now().isoformat()
+      self.node_info["run_status"]["outputs"] = outputs
+      self._trace_object(self.node_info)
 
     return out
 
   # nbx/
+
+  def thaw(self, flowchart):
+    nodes = flowchart["nodes"]
+    edges = flowchart["edges"]
+    for n in nodes:
+      name = n["name"]
+      if name.startswith("self."):
+        name = name[5:]
+      if hasattr(self, name):
+        op = getattr(self, name)
+        op.propagate(
+          node_info = n,
+          source_edges = list(filter(
+            lambda x: x["target"] == n["id"], edges
+          ))
+        )
 
   def deploy(
     self,
@@ -369,15 +402,6 @@ class Operator(AirflowMixin):
   ):
     logger.info(f"Deploying {self.__class__.__name__} -> '{job_id}/{job_name}'")
 
-    if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
-      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
-    if os.path.isdir(init_folder):
-      os.chdir(init_folder)
-      if not os.path.exists("./exe.py"):
-        raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
-    else:
-      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
-
     # flowchart-alpha
     dag = get_nbx_flow(self.forward)
     try:
@@ -387,7 +411,7 @@ class Operator(AirflowMixin):
       logger.error("Cannot perform pre-building, only live updates will be available!")
       logger.info("Please raise an issue on chat to get this fixed")
       dag = {"flowchart": None, "symbols": None}
-    
+
     for n in dag["flowchart"]["nodes"]:
       name = n["name"]
       if name.startswith("self."):
@@ -407,7 +431,18 @@ class Operator(AirflowMixin):
       "dag": dag,
       "created": datetime.now().isoformat(),
     }
-    print(schedule_meta)
+    # print(schedule_meta)
+    return schedule_meta
+
+    # check if this is a valif folder or not
+    if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
+      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
+    if os.path.isdir(init_folder):
+      os.chdir(init_folder)
+      if not os.path.exists("./exe.py"):
+        raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
+    else:
+      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
 
     # zip the folder
     import zipfile
@@ -418,6 +453,8 @@ class Operator(AirflowMixin):
       for file in files:
         zip_file.write(os.path.join(root, file))
     zip_file.close()
+
+    return schedule_meta
 
     # deploy_job(zip_path = zip_path, schedule_meta = schedule_meta)
 
