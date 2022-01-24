@@ -250,6 +250,9 @@ class Operator(AirflowMixin):
   def children(self):
     return self._operators.values()
 
+  # user can manually define inputs if they want, avoid this user if you don't know
+  # how this system works
+  _inputs = []
   @property
   def inputs(self):
     import inspect
@@ -258,6 +261,8 @@ class Operator(AirflowMixin):
       args.remove('self')
     except:
       pass
+    if self._inputs:
+      args += self._inputs
     return args
 
   @property
@@ -317,8 +322,6 @@ class Operator(AirflowMixin):
 
   def __call__(self, *args, **kwargs):
     # blank comment so docstring below is not loaded
-
-    print(self.__class__.__name__, self.node_info)
 
     """There is no need to perform ``self.is_dag`` check here, since it is
     a declarative model not an imperative one, so existance of DAG's is

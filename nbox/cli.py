@@ -1,4 +1,3 @@
-from logging import getLogger
 import json
 import sys
 import os
@@ -274,10 +273,10 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
         subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
     except KeyboardInterrupt:
         logging.info("KeyboardInterrupt, closing connections")
-        # TODO:@yashbonde Make Platform agnostic
         for t in threads:
             t.join()
 
+    # TODO:@yashbonde Make Platform agnostic
     subprocess.run(["ssh-keygen", "-R", f"localhost[{ssh}]"])
     sys.exit(0) # graceful exit
 

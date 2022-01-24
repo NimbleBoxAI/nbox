@@ -1,5 +1,6 @@
 # MIT-License code for all operators that are open sourced
 
+from ast import arg
 from .operator import Operator
 
 from ..utils import Pool
@@ -118,13 +119,21 @@ class GitClone(Operator):
 class ShellCommand(Operator):
   def __init__(self, *commands):
     super().__init__()
-    import shlex
-    self.commands = [shlex.split(c) for c in commands]
+    import string
 
-  def forward(self):
+    self.commands = commands
+    all_in = []
+    for c in self.commands:
+      all_in.extend([tup[1] for tup in string.Formatter().parse(c) if tup[1] is not None])
+    self._inputs = all_in
+
+  def forward(self, *args, **kwargs):
+    import shlex
     import subprocess
-    for command in self.commands:
-      subprocess.run(command, check = True)
+    for comm in self.commands:
+      comm = comm.format(*args, **kwargs)
+      comm = shlex.split(comm)
+      subprocess.run(comm, check = True)
 
 class Notify(Operator):
   _mode_to_packages = {

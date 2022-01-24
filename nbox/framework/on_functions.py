@@ -52,6 +52,15 @@ class IfNodeInfo(DBase):
 
 
 # these classes are for the FE
+class RunStatus(DBase):
+  __slots__ = [
+    'start', # :str
+    'end', # :str
+    'inputs', # :Dict
+    'outputs', # :Dict
+  ]
+
+
 class Node(DBase):
   __slots__ = [
     'id', # :str
@@ -61,7 +70,7 @@ class Node(DBase):
     'node_info', # :Union[ExpressionNodeInfo, IfNodeInfo]
     'operator', # :str
     'nbox_string', # :str
-    'run_status', # :Dict[str, Any]
+    'run_status', # :RunStatus
   ]
 
 class Edge(DBase):
@@ -71,14 +80,6 @@ class Edge(DBase):
     'target', # :str
     'type', # :str
     'nbox_string', # :str
-  ]
-
-class RunStatus(DBase):
-  __slots__ = [
-    'start', # :str
-    'end', # :str
-    'inputs', # :Dict
-    'outputs', # :Dict
   ]
 
 

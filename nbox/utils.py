@@ -6,7 +6,6 @@ import hashlib
 import requests
 import tempfile
 import randomname
-from PIL import Image
 from uuid import uuid4
 
 import logging
