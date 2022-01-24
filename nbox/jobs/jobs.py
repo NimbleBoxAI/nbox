@@ -15,7 +15,6 @@ import re
 import sys
 import time
 from functools import partial
-from datasets import inspect
 from tabulate import tabulate
 from requests.sessions import Session
 
