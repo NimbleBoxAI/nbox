@@ -48,7 +48,7 @@ def _isthere(*packages):
     for package in packages:
         try:
             __import__(package)
-        except ImportError:
+        except Exception:
             return False
     return True
 

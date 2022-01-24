@@ -4,7 +4,8 @@ reset_log()
 from .model import Model
 from .load import load, plug, PRETRAINED_MODELS
 from .parsers import ImageParser, TextParser
-from .operators import Operator
 from .jobs import Instance
+from .auth import AWSClient, GCPClient, OCIClient, DOClient, AzureClient
+from .operators import Operator
 
 __version__ = "0.8.0"

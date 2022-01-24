@@ -15,16 +15,17 @@ def status(loc = None):
     print_status(f"https://{'' if not loc else loc+'.'}nimblebox.ai")
 
 
-def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
-    """the nbox way to SSH into your instance.
+def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
+    """the nbox way to SSH into your instance, by default ``"jupyter": 8888 and "mlflow": 5000``
 
     Usage:
         tunn.py 8000 notebook:8000 2000:8001 -i "nbox-dev"
 
     Args:
         ssh: Local port to connect SSH to
-        *apps_to_ports: A tuple of values like <app_name>:<localport>
-        instance (str): IP address of the instance.
+        *apps_to_ports: A tuple of values ``<app_name/instance_port>:<localport>``.
+            For example, ``jupyter:8888`` or ``2001:8002``
+        i(str): The instance to connect to
         pwd (str): password to connect to that instance.
     """
 
@@ -252,7 +253,7 @@ def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
         raise ValueError(f"Ports {', '.join(ports_used)} are already in use")
 
     # check if instance is the correct one
-    instance = Instance(instance, loc = "test-3")
+    instance = Instance(i, loc = "test-3")
     if not instance.state == "RUNNING":
         raise ValueError("Instance is not running")
     passwd = instance.open_data["ssh_pass"]
@@ -269,12 +270,15 @@ def tunnel(ssh: int, *apps_to_ports: List[str], instance: str):
     try:
         # start the ssh connection on terminal
         import subprocess
+        logging.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
         subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
     except KeyboardInterrupt:
         logging.info("KeyboardInterrupt, closing connections")
+        # TODO:@yashbonde Make Platform agnostic
         for t in threads:
             t.join()
 
+    subprocess.run(["ssh-keygen", "-R", f"localhost[{ssh}]"])
     sys.exit(0) # graceful exit
 
 

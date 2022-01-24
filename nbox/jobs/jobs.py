@@ -15,6 +15,7 @@ import re
 import sys
 import time
 from functools import partial
+from datasets import inspect
 from tabulate import tabulate
 from requests.sessions import Session
 
@@ -110,7 +111,8 @@ class Instance():
     r.raise_for_status() # if its not 200, it's an error
     return cls(name, url)
 
-  def start(self, cpu_only = True, gpu_count = 1):
+  def start(self, cpu_only = True, cpu_count = 2, gpu = "p100", gpu_count = 1):
+    """``cpu_count`` should be one of [2, 4, 8]"""
     if self.__opened:
       logger.info(f"Instance {self.name} ({self.instance_id}) is already opened")
       return
@@ -123,8 +125,8 @@ class Instance():
           "instance_id": self.instance_id,
           "hw":"cpu" if cpu_only else "gpu",
           "hw_config":{
-            "cpu":"n1-standard-2",
-            "gpu":"nvidia-tesla-p100",
+            "cpu":f"n1-standard-{cpu_count}",
+            "gpu":f"nvidia-tesla-{gpu}",
             "gpuCount": gpu_count,
           }
         }
@@ -155,6 +157,7 @@ class Instance():
     if self.cs_endpoint:
       self.cs_url += f"/{self.cs_endpoint}"
 
+    # TODO:@yashbonde remove this check, once v2 on prod
     if self.cs_url.endswith("server"):
       self.__opened = True
       return
