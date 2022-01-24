@@ -12,7 +12,6 @@ from uuid import uuid4
 import logging
 
 import numpy as np
-import torch
 
 # common/
 nbox_session = requests.Session()
@@ -103,6 +102,7 @@ def get_image(file_path_or_url):
 
 def convert_to_list(x):
     # recursively convert tensors -> list
+    import torch
     if isinstance(x, list):
         return x
     if isinstance(x, dict):
