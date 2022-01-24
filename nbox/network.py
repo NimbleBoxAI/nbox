@@ -3,7 +3,7 @@
 import json
 import os
 import requests
-from pprint import pp
+from pprint import pprint as pp
 from time import sleep
 
 from . import utils
