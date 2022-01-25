@@ -20,7 +20,9 @@ class DBase:
   def get_dict(self):
     data = {}
     for k in self.__slots__:
-      _obj = getattr(self, k)
+      _obj = getattr(self, k, None)
+      if _obj == None:
+        continue
       if isinstance(_obj, DBase):
         data[k] = _obj.get_dict()
       elif _obj and isinstance(_obj, list) and isinstance(_obj[0], DBase):
@@ -28,6 +30,9 @@ class DBase:
       else:
         data[k] = _obj
     return data
+
+  def __repr__(self):
+    return str(self.get_dict())
 
 class ExpressionNodeInfo(DBase):
   __slots__ = [

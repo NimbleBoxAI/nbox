@@ -23,70 +23,53 @@ Documentation
 -------------
 """
 
+from .common import IllegalFormatError
+from ..utils import _isthere
+
 # this function is for getting the meta data and is framework agnostic, so adding this in the
 # __init__ of framework submodule
 def get_meta(input_names, input_shapes, args, output_names, output_shapes, outputs):
-    """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
-    # get the meta object
-    def __get_struct(names_, shapes_, tensors_):
-        return {
-            name: {
-                "dtype": str(tensor.dtype),
-                "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
-                "name": name,
-            }
-            for name, shapes, tensor in zip(names_, shapes_, tensors_)
-        }
+  """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
+  # get the meta object
+  def __get_struct(names_, shapes_, tensors_):
+    return {
+      name: {
+        "dtype": str(tensor.dtype),
+        "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
+        "name": name,
+      }
+      for name, shapes, tensor in zip(names_, shapes_, tensors_)
+    }
 
-    meta = {"inputs": __get_struct(input_names, input_shapes, args), "outputs": __get_struct(output_names, output_shapes, outputs)}
+  meta = {"inputs": __get_struct(input_names, input_shapes, args), "outputs": __get_struct(output_names, output_shapes, outputs)}
 
-    return meta
-
-
-__all__ = ["get_meta"]
-
-from types import SimpleNamespace
-from ..utils import _isthere, folder, join
-
-def update_all_lazy_loading(*modules, fname):
-    """Lazy load modules and update the ``__all__`` list"""
-    import sys
-    global __all__
-    if _isthere(*modules):
-        sys.path.append(join(folder(__file__), f"{fname}.py"))
-        _all_name = f"{fname}_all"
-        eval(f"from .{fname} import *")
-        eval(f"from .{fname} import __all__ as {_all_name}")
-        maps = {f"{x}": globals()[x] for x in _all_name}
-        maps.update({"IMPORTS": [*modules]})
-        _name_of_module = fname.strip("_")
-        eval(f"{_name_of_module} = SimpleNamespace(**maps)")
-        __all__ += [f"{_name_of_module}"]
-
-# update_all_lazy_loading("torch", fname = "__pytorch")  
-# update_all_lazy_loading("sklearn", "sk2onnx", fname = "__sklearn")
+  return meta
 
 
-_pt_modules = ["torch"]
-if _isthere(*_pt_modules):
-    from .__pytorch import *
-    from .__pytorch import __all__ as _pt_all
-    maps = {f"{x}": globals()[x] for x in _pt_all}
-    maps.update({"IMPORTS": _pt_modules})
-    pytorch = SimpleNamespace(**maps)
-    __all__ += ["pytorch"]
+from .__nbx import NBXDeployMixin
 
-_sk_modules = ["sklearn", "sk2onnx"]
-if _isthere(*_sk_modules):
-    from .__sklearn import *
-    from .__sklearn import __all__ as _sk_all
-    maps = {f"{x}": globals()[x] for x in _sk_all}
-    maps.update({"IMPORTS": _sk_modules})
-    sklearn = SimpleNamespace(**maps)
-    __all__ += ["sklearn"]
+all_mixin = [NBXDeployMixin]
 
-_onnx_modules = ["onnx", "onnxruntime"]
-if _isthere(*_onnx_modules):
-    maps = {"IMPORTS": _onnx_modules}
-    onnx = SimpleNamespace(**maps)
-    __all__ += ["onnx"]
+if _isthere("torch"):
+  from .__pytorch import TorchMixin
+  all_mixin.append(TorchMixin)
+
+if _isthere("sklearn", "sk2onnx"):
+  from .__sklearn import SklearnMixin
+  all_mixin.append(SklearnMixin)
+
+if _isthere("onnxruntime"):
+  from .__onnxrt import ONNXRtMixin
+  all_mixin.append(ONNXRtMixin)
+
+def get_mixin(model):
+  for m in all_mixin:
+    try: return m.load_model(model)
+    except IllegalFormatError: pass
+
+  raise IllegalFormatError(f"This model: '{type(model)}' is not supported")
+
+__all__ = [
+  "get_meta",
+  "get_mixin",
+]

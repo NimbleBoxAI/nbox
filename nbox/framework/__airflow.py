@@ -4,7 +4,7 @@
 import inspect # used for __doc__
 from functools import partial
 from datetime import timedelta
-from nbox.utils import isthere
+from ..utils import isthere
 
 
 def to_airflow_operator(operator, timeout: timedelta = None, operator_kwargs = {}):

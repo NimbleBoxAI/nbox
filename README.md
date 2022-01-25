@@ -1,6 +1,6 @@
 <a href="https://nimblebox.ai/" target="_blank"><img src="./assets/built_at_nbx.svg" align="right"></a>
 
-# Nbox
+# 🏖️ Nbox
 
 `master` code is working, pypi `nbox` is breaking.
 
@@ -23,7 +23,7 @@ Totals grouped by language (dominant language first):
 python:        1084 (100.00%)
 ```
 
-## Usage
+## 🔥 Usage
 
 ```python
 import nbox
@@ -54,7 +54,7 @@ out = model([Image.open('cat.jpg'), np.array(Image.open('cat.jpg'))])
 tuple(out.shape) == (2, 1000)
 ```
 
-## CLI
+## ⚙️ CLI
 
 Just add this to your dockerfile or github actions.
 
@@ -66,7 +66,7 @@ NBX_AUTH=1 python -m nbox deploy --model_path=my/model.onnx --deployment_type="n
 python -m nbox --help
 ```
 
-## Things for Repo
+## ✏️ Things for Repo
 
 - Using [`poetry`](https://python-poetry.org/) for proper package management as @cshubhamrao says.
   - Add new packages with `poetry add <name>`. Do not add `torch`, `tensorflow` and others, useless burden to manage those.
@@ -81,6 +81,6 @@ python -m nbox --help
   cd ../build/html && python3 -m http.server 80
   ```
 
-# License
+# 🧩 License
 
 The code in thist repo is licensed as [BSD 3-Clause](./LICENSE). Please check for individual repositories for licenses.

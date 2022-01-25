@@ -218,5 +218,30 @@ class TrainTestDeploy(Operator):
     self.deploy_tester(url, api_key, n_hits = 20)
 
 # local test
-# job = TrainTestDeploy()
-# job(n_steps = 10, test_every = 1, batch_size = 5)
+job = TrainTestDeploy()
+
+job.to_airflow_dag()
+job.to_airflow_operator()
+
+job(n_steps = 10, test_every = 1, batch_size = 5)
+
+
+class MySticher(Operator):
+  def __init__(self, *sources):
+    self.sources = sources
+    s3 = 
+    redshift = 
+
+    ...
+
+    my_database = 
+
+  def forward(self,):
+    stiched_data = ...
+    
+    self.my_database.store(stiched_data)
+
+
+op = MySticher()
+stiched_data = op()
+
