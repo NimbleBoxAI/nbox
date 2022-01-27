@@ -1,13 +1,11 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
-import re
 import os
 import json
 import shutil
 import inspect
 import tarfile
 import requests
-import numpy as np
 from glob import glob
 from time import time
 from tempfile import gettempdir
