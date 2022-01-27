@@ -7,4 +7,4 @@ from .jobs import Instance
 from .auth import AWSClient, GCPClient, OCIClient, DOClient, AzureClient
 from .operators import Operator
 
-__version__ = "0.8.2"
+__version__ = "0.8.4"

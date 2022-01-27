@@ -5,7 +5,6 @@ import json
 import shutil
 import inspect
 import tarfile
-import numpy as np
 from glob import glob
 from tempfile import gettempdir
 

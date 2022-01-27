@@ -10,7 +10,6 @@ from uuid import uuid4
 
 import logging
 
-import numpy as np
 
 # common/
 nbox_session = requests.Session()

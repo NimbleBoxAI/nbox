@@ -1,6 +1,4 @@
 import os
-import numpy as np
-from PIL import Image
 
 from nbox import utils
 
@@ -82,15 +80,15 @@ class ImageParser(BaseParser):
             setattr(self, k, v)
 
     # common operations
-    # if not cloud_infer and input is int then rescale it -1, 1
-    def rescale(self, x: np.ndarray):
+    # if not cloud_infer and input is int then rescale it 0, 1
+    def rescale(self, x):
         if not self.cloud_infer and "int" in str(x.dtype):
             x = x.astype(np.float32)
             x -= 127.5
             x /= 127.5
         return x
 
-    def rearrange(self, x: np.ndarray):
+    def rearrange(self, x):
         if len(x.shape) == 3 and x.shape[0] != 3:
             return x.transpose(2, 0, 1)
         elif len(x.shape) == 4 and x.shape[1] != 3:
@@ -99,8 +97,8 @@ class ImageParser(BaseParser):
 
     def process_primitive(self, x, target_shape=None):
         """primitive can be string, array, Image"""
-        if isinstance(x, np.ndarray):
-            utils.info(" - ImageParser - (C2) np.ndarray")
+        if isinstance(x):
+            logger.info(" - ImageParser - (C2) np.ndarray")
             # if shape == 3, unsqueeze it, numpy arrays cannot be reshaped
             out = x[None, ...] if len(x.shape) == 3 else x
         elif isinstance(x, Image.Image):
