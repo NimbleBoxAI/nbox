@@ -54,6 +54,17 @@ def _isthere(*packages):
 
 # file path/reading
 
+def get_files_in_folder(folder, ext = [".txt"]):
+  # this method is faster than glob
+  import os
+  all_paths = []
+  for root,_,files in os.walk(folder):
+    for f in files:
+      for e in ext:
+        if f.endswith(e):
+          all_paths.append(os.path.join(root,f))
+  return all_paths
+
 def fetch(url):
   # efficient loading of URLs
   fp = os.path.join(tempfile.gettempdir(), hash_(url))
@@ -66,7 +77,6 @@ def fetch(url):
       f.write(dat)
     os.rename(fp + ".tmp", fp)
   return dat
-
 
 def folder(x):
   # get the folder of this file path
