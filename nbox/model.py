@@ -1,35 +1,19 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
-from calendar import c
-from dataclasses import dataclass
-import re
 import os
 import json
 import shutil
 import inspect
 import tarfile
-import requests
 import numpy as np
 from glob import glob
-from time import time
 from tempfile import gettempdir
-from pprint import pprint as pp
 
-# import nbox things
 from . import utils
-from .framework.on_functions import DBase
-
-# required for lazy loading --> the underlying framework as the information
-# on what modules are to be loaded using IMPORTS variable defined in each framework
-# conditional
 from .framework import get_meta, get_mixin
-
 from .network import deploy_model
-from .framework.parsers import ImageParser, TextParser
-from .auth import secret
 
 import logging
-
 logger = logging.getLogger()
 
 
@@ -59,6 +43,7 @@ class Model(GenericMixin):
   def __init__(
     self,
     model,
+    model_support,
     cache_dir = None,
     verbose=False,
 
@@ -143,11 +128,12 @@ class Model(GenericMixin):
     """
     
     
-    self.src = model
+    self.user_model = model
+    self.model_support = model_support
     self.cache_dir = cache_dir
     self.verbose = verbose
 
-    self.model = get_mixin(self.src)
+    self.model = get_mixin(self.user_model, self.model_support)
 
     # # values coming from the blocks above
     # self.model_or_model_url = model_or_model_url
@@ -164,8 +150,8 @@ class Model(GenericMixin):
     # self.cache_dir = gettempdir() if cache_dir == None else cache_dir
 
     logger.info(f"Model loaded successfully")
-    logger.info(f"Model framework: {self.__framework}")
-    logger.info(f"Model category: {self.category}")
+    # logger.info(f"Model framework: {self.__framework}")
+    # logger.info(f"Model category: {self.category}")
 
   def __call__(self, input_object, return_inputs=False, return_dict=False, method=None, sklearn_args=None):
     r"""Caller is the most important UI/UX. The ``input_object`` can be anything from
@@ -190,28 +176,28 @@ class Model(GenericMixin):
 
     # the forward_pass is a method for the current model, this is responsible for parsing and
     # processing the input object.
-    out = self.model.forward_pass(input_object)
+    out = self.model(input_object)
 
     # add post here
  
-    # convert to dictionary if needed
-    if return_dict:
-      output_names = list(self.nbox_meta["metadata"]["outputs"].keys())
-      if isinstance(out, (tuple, list)):
-        out = {k: v for k, v in zip(output_names, out)}
-      elif isinstance(out, dict):
-        pass
-      else:
-        try:
-          if isinstance(out, (torch.Tensor, np.ndarray)):
-            out = {k: v.tolist() for k, v in zip(output_names, [out])}
-        except NameError:
-          pass
+    # # convert to dictionary if needed
+    # if return_dict:
+    #   output_names = list(self.nbox_meta["metadata"]["outputs"].keys())
+    #   if isinstance(out, (tuple, list)):
+    #     out = {k: v for k, v in zip(output_names, out)}
+    #   elif isinstance(out, dict):
+    #     pass
+    #   else:
+    #     try:
+    #       if isinstance(out, (torch.Tensor, np.ndarray)):
+    #         out = {k: v.tolist() for k, v in zip(output_names, [out])}
+    #     except NameError:
+    #       pass
 
-        raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
+    #     raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
 
-    if return_inputs:
-      return out, model_input
+    # if return_inputs:
+    #   return out, model_input
     return out
 
   def _handle_input_object(self, input_object):
@@ -485,13 +471,16 @@ class Model(GenericMixin):
 
     try:
       if export_type == "onnx":
+        import onnxruntime
         model = onnxruntime.InferenceSession(model_path)
       elif src_framework == "pt":
         if export_type == "torchscript":
+          import torch
           model = torch.jit.load(model_path, map_location="cpu")
       elif src_framework == "sk":
         if export_type == "pkl":
           with open(model_path, "rb") as f:
+            import joblib
             model = joblib.load(f)
     except Exception as e:
       raise ValueError(f"{export_type} not supported, are you missing packages? {e}")

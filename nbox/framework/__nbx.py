@@ -4,59 +4,63 @@ import requests
 from logging import getLogger
 logger = getLogger()
 
-from .common import IllegalFormatError, ModelMeta
+from .common import *
 from ..auth import secret
 
-def load_model(model, nbx_api_key):
-  def load_condition():
-    if not model.startswith("https://") or model.startswith("http://"):
-      raise IllegalFormatError("Model URL must start with http:// or https://")
-    if isinstance(nbx_api_key, str):
-      raise IllegalFormatError("Nbx API key must be a string")
-    if nbx_api_key.startswith("nbxdeploy_"):
-      raise IllegalFormatError("Not a valid NBX Api key, please check again.")
-    if model.startswith("http"):
-      raise IllegalFormatError("Are you sure this is a valid URL?")
+class NBXModel(FrameworkAgnosticModel):
+  def __init__(self, url, key):
+    self.url = url
+    self.key = key
 
-  load_condition()
-  logger.info(f"Trying to load from url: {model}")
+    logger.info(f"Trying to load as url")
+    def load_condition():
+      if not isinstance(url, str):
+        raise IllegalFormatError(f"Model must be a string, got: {type(url)}")
+      if not (url.startswith("https://") or url.startswith("http://")):
+        raise IllegalFormatError("Model URL must start with http:// or https://")
+      if not isinstance(key, str):
+        raise IllegalFormatError("Nbx API key must be a string")
+      if not key.startswith("nbxdeploy_"):
+        raise IllegalFormatError("Not a valid NBX Api key, please check again.")
 
-  # fetch the metadata from the cloud
-  model_url = model.rstrip("/")
-  logger.info("Getting model metadata")
-  URL = secret.get("nbx_url")
-  r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={model}&key={nbx_api_key}")
-  try:
-    r.raise_for_status()
-  except:
-    raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
+    load_condition()
 
-  # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
-  content = json.loads(r.content.decode())["meta"]
-  nbox_meta = content["nbox_meta"]
+    # fetch the metadata from the cloud
+    model_url = url.rstrip("/")
+    logger.info("Getting model metadata")
+    URL = secret.get("nbx_url")
+    r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={model_url}&key={key}")
+    try:
+      r.raise_for_status()
+    except:
+      raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
 
-  all_inputs = nbox_meta["metadata"]["inputs"]
-  templates = {}
-  for node, meta in all_inputs.items():
-    templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
-  logger.info("Cloud infer metadata obtained")
+    # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
+    content = json.loads(r.content.decode())["meta"]
+    nbox_meta = content["nbox_meta"]
 
-  category = nbox_meta["spec"]["category"]
+    all_inputs = nbox_meta["metadata"]["inputs"]
+    templates = {}
+    for node, meta in all_inputs.items():
+      templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
+    logger.info("Cloud infer metadata obtained")
 
-  # if category is "text" or if it is dict then any key is "text"
-  tokenizer = None
-  max_len = None
-  if category == "text" or (isinstance(category, dict) and any([x == "text" for x in category.values()])):
-    import transformers
+    category = nbox_meta["spec"]["category"]
 
-    model_key = nbox_meta["spec"]["model_key"].split("::")[0].split("transformers/")[-1]
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
-    max_len = templates["input_ids"][-1]
+    # if category is "text" or if it is dict then any key is "text"
+    tokenizer = None
+    max_len = None
+    if category == "text" or (isinstance(category, dict) and any([x == "text" for x in category.values()])):
+      import transformers
 
-  image_parser = ImageParser(cloud_infer=True, post_proc_fn=lambda x: x.tolist(), templates=templates)
-  text_parser = TextParser(tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist())
+      model_key = nbox_meta["spec"]["model_key"].split("::")[0].split("transformers/")[-1]
+      tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
+      max_len = templates["input_ids"][-1]
 
-  def forward_pass(meta: ModelMeta):
+    image_parser = ImageParser(cloud_infer=True, post_proc_fn=lambda x: x.tolist(), templates=templates)
+    text_parser = TextParser(tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist())
+
+  def forward(self, model_input):
     logger.info(f"Hitting API: {self.model_or_model_url}")
     st = time()
     # OVMS has :predict endpoint and nbox has /predict
@@ -64,7 +68,7 @@ def load_model(model, nbx_api_key):
     json = {"inputs": model_input}
     if "export_type" in self.nbox_meta["spec"]:
       json["method"] = method
-    r = requests.post(model_url + f"/{_p}predict", json=json, headers={"NBX-KEY": nbx_api_key})
+    r = requests.post(self.url + f"/{_p}predict", json=json, headers={"NBX-KEY": self.key = key})
     et = time() - st
     out = None
 
@@ -83,7 +87,5 @@ def load_model(model, nbx_api_key):
     except Exception as e:
       logger.info(f"Failed: {str(e)} | {r.content.decode()}")
 
-  return forward_pass
-
-class NBXDeployMixin:
-  load_model = load_model
+  def serialise(self):
+    raise IllegalFormatError("Cannot export an already deployed model")

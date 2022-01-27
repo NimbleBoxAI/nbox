@@ -62,9 +62,9 @@ if _isthere("onnxruntime"):
   from .__onnxrt import ONNXRtMixin
   all_mixin.append(ONNXRtMixin)
 
-def get_mixin(model):
+def get_mixin(model, support):
   for m in all_mixin:
-    try: return m.load_model(model)
+    try: return m.load_model(model, support)
     except IllegalFormatError: pass
 
   raise IllegalFormatError(f"This model: '{type(model)}' is not supported")

@@ -1,11 +1,13 @@
 # this file has the utilities and functions required for processing pytorch items
 # such as conversion to ONNX, getting the metadata and so on.
 
+from re import L
 import torch
 
-from nbox.framework.common import IllegalFormatError
+from logging import getLogger
+logger = getLogger()
 
-from .common import ModelMeta
+from .common import ModelMeta, IllegalFormatError, FrameworkAgnosticModel
 
 
 def export_to_onnx(
@@ -42,51 +44,45 @@ def export_to_torchscript(model, args, export_model_path, **kwargs):
   torch.jit.save(traced_model, export_model_path)
 
 
-def load_model(model, ):
+def load_model(model, inputs):
+  logger.info(f"Trying to load as torch model")
   if not isinstance(model, torch.nn.Module):
     raise IllegalFormatError
+  
+  if not (inputs == None or isinstance(inputs, dict)):
+    raise ValueError(f"Inputs must be a None/dict, got: {type(inputs)}")
 
-  logger.info(f"Trying to load from torch model")
-  __framework = "pytorch"
-  assert category is not None, "Category for inputs must be provided, when loading model manually"
+  def forward_pass(input_object):
+    if isinstance(inputs, dict):
+      if not isinstance(input_object, dict):
+        raise ValueError(f"Inputs must be a dict, got: {type(input_object)}")
+      if set(inputs.keys()) != set(input_object.keys()):
+        raise ValueError(f"Inputs keys do not match: {inputs.keys()} != {input_object.keys()}")
+      
+      _input = {}
+      for k, v in input_object.items():
+        if inputs[k] != None and callable(inputs[k]):
+          _input[k] = inputs[k](v)
+        else:
+          _input[k] = v
+      input_object = _input
 
-  model_key = model_key
-
-  # initialise all the parsers
-  image_parser = ImageParser(post_proc_fn=lambda x: torch.from_numpy(x).float())
-  text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: torch.from_numpy(x).int())
-
-  if isinstance(category, dict):
-    assert all([v in ["image", "text", "tensor"] for v in category.values()])
-  else:
-    if category not in ["image", "text", "tensor"]:
-      raise ValueError(f"Category: {category} is not supported yet. Raise a PR!")
-
-  if category == "text":
-    assert tokenizer != None, "tokenizer cannot be none for a text model!"
+    with torch.no_grad():
+      if isinstance(input_object, dict):
+        return model(**{k: v.to("cpu") for k, v in input_object.items()})
+      else:
+        assert isinstance(input_object, torch.Tensor)
+        return model(input_object)
 
   return ModelMeta(
     framework = "pytorch",
+    forward_pass = forward_pass,
   )
-
-def forward_pass(meta: ModelMeta):
-  with torch.no_grad():
-    if isinstance(model_input, dict):
-      model_input = {k: v.to(self.__device) for k, v in model_input.items()}
-      out = self.model_or_model_url(**model_input)
-    else:
-      assert isinstance(model_input, torch.Tensor)
-      model_input = model_input.to(self.__device)
-      out = self.model_or_model_url(model_input)
-  return out
 
 
 class TorchMixin:
   def load_model(*a, **b):
     return load_model(*a, **b)
-
-  def forward_pass(*a, **b):
-    return forward_pass(*a, **b)
 
   def export_to_onnx(*a, **b):
     export_to_onnx(*a, **b)
