@@ -21,5 +21,8 @@ class FrameworkAgnosticModel:
   def forward(self):
     raise NotImplementedError("User must implement forward()")
 
+  def process_input(input_object):
+    raise NotImplementedError("User must implement process_input()")
+
   def __call__(self, input_object):
     return self.forward(input_object)
