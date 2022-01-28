@@ -11,7 +11,7 @@ from tempfile import gettempdir
 from . import utils
 from .framework import get_meta, get_mixin
 from .network import deploy_model
-from .framework.common import ModelOutput
+from .framework.on_ml import ModelOutput
 
 import logging
 logger = logging.getLogger()

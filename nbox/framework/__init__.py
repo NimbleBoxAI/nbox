@@ -23,8 +23,7 @@ Documentation
 -------------
 """
 
-from .common import IllegalFormatError
-from ..utils import _isthere
+from .on_ml import NBXModel, TorchModel, SklearnModel, ONNXRtModel, IllegalFormatError
 
 # this function is for getting the meta data and is framework agnostic, so adding this in the
 # __init__ of framework submodule
@@ -46,31 +45,21 @@ def get_meta(input_names, input_shapes, args, output_names, output_shapes, outpu
   return meta
 
 
-from .__nbx import NBXModel
-
-all_mixin = [NBXModel]
-
-if _isthere("torch"):
-  from .__pytorch import TorchModel
-  all_mixin.append(TorchModel)
-
-# if _isthere("sklearn", "sk2onnx"):
-#   from .__sklearn import SklearnMixin
-#   all_mixin.append(SklearnMixin)
-
-# if _isthere("onnxruntime"):
-#   from .__onnxrt import ONNXRtMixin
-#   all_mixin.append(ONNXRtMixin)
-
 def get_mixin(i0, i1):
-  for m in all_mixin:
+  all_e = []
+  for m in (
+    NBXModel, TorchModel, SklearnModel, ONNXRtModel
+  ):
     try:
       # if this is the correct method 
       return m(i0, i1)
-    except IllegalFormatError:
-      pass
+    except IllegalFormatError as e:
+      all_e.append(f"--> ERROR: {type(m)}: {e}")
 
-  raise IllegalFormatError(f"Unkown inputs: {type(i0)} {type(i1)}!")
+  raise IllegalFormatError(
+    f"Unkown inputs: {type(i0)} {type(i1)}!" + \
+    "\n".join(all_e)
+  )
 
 __all__ = [
   "get_meta",

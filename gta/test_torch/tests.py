@@ -1,9 +1,8 @@
 import torch
 import unittest
-import numpy as np
 
 from nbox import Model
-from nbox.framework.common import IllegalFormatError, ModelOutput
+from nbox.framework.on_ml import ModelOutput
 
 
 class SampleModel(torch.nn.Module):
@@ -46,3 +45,4 @@ class Test_Model(unittest.TestCase):
     with self.assertRaises(TypeError):
       out = m({x:y.tolist() for x,y in _m.sample.items()})
       self.assertEqual(out.outputs.shape, torch.Size([2, 16]))
+

@@ -110,7 +110,7 @@ class Instance():
     r.raise_for_status() # if its not 200, it's an error
     return cls(name, url)
 
-  def start(self, cpu_only = True, cpu_count = 2, gpu = "p100", gpu_count = 1):
+  def start(self, cpu_only = True, cpu_count = 2, gpu = "p100", gpu_count = 1, region = "asia-south-1"):
     """``cpu_count`` should be one of [2, 4, 8]"""
     if self.__opened:
       logger.info(f"Instance {self.name} ({self.instance_id}) is already opened")
@@ -127,7 +127,8 @@ class Instance():
             "cpu":f"n1-standard-{cpu_count}",
             "gpu":f"nvidia-tesla-{gpu}",
             "gpuCount": gpu_count,
-          }
+          },
+          "region": region,
         }
       )["msg"]
       if not message == "success":

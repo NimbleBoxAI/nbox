@@ -16,6 +16,9 @@ class DBase:
   def __init__(self, **kwargs):
     for k, v in kwargs.items():
       setattr(self, k, v)
+
+  def get(self, k, v = None):
+    return getattr(self, k, v)
   
   def get_dict(self):
     data = {}
