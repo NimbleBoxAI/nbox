@@ -25,7 +25,7 @@ class DBase:
         continue
       if isinstance(_obj, DBase):
         data[k] = _obj.get_dict()
-      elif _obj and isinstance(_obj, list) and isinstance(_obj[0], DBase):
+      elif _obj != None and isinstance(_obj, list) and isinstance(_obj[0], DBase):
         data[k] = [_obj.get_dict() for _obj in _obj]
       else:
         data[k] = _obj

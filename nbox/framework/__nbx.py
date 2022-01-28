@@ -68,7 +68,7 @@ class NBXModel(FrameworkAgnosticModel):
     json = {"inputs": model_input}
     if "export_type" in self.nbox_meta["spec"]:
       json["method"] = method
-    r = requests.post(self.url + f"/{_p}predict", json=json, headers={"NBX-KEY": self.key = key})
+    r = requests.post(self.url + f"/{_p}predict", json=json, headers={"NBX-KEY": self.key})
     et = time() - st
     out = None
 

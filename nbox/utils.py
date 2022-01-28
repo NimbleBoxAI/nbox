@@ -34,7 +34,7 @@ def isthere(*packages, soft = True):
           if not soft:
             raise Exception(f"{package} is not installed")
           # raise a warning, let the modulenotfound exception bubble up
-          logger.warn(
+          logger.warning(
             f"{package} is not installed, but is required by {fn.__module__}, some functionality may not work"
           )
       return fn(*args, **kwargs)

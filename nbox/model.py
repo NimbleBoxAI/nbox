@@ -11,6 +11,7 @@ from tempfile import gettempdir
 from . import utils
 from .framework import get_meta, get_mixin
 from .network import deploy_model
+from .framework.common import ModelOutput
 
 import logging
 logger = logging.getLogger()
@@ -152,7 +153,7 @@ class Model(GenericMixin):
     # logger.info(f"Model framework: {self.__framework}")
     # logger.info(f"Model category: {self.category}")
 
-  def __call__(self, input_object, return_inputs=False, return_dict=False, method=None, sklearn_args=None):
+  def __call__(self, input_object) -> ModelOutput:
     r"""Caller is the most important UI/UX. The ``input_object`` can be anything from
     a tensor, an image file, filepath as string, string and must be processed automatically by a
     well written ``nbox.parser.BaseParser`` object . This ``__call__`` should understand the different
@@ -175,7 +176,7 @@ class Model(GenericMixin):
 
     # the forward_pass is a method for the current model, this is responsible for parsing and
     # processing the input object.
-    out = self.model(input_object)
+    out = self.model.forward(input_object)
 
     # add post here
  

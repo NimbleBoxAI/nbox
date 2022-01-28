@@ -46,28 +46,31 @@ def get_meta(input_names, input_shapes, args, output_names, output_shapes, outpu
   return meta
 
 
-from .__nbx import NBXDeployMixin
+from .__nbx import NBXModel
 
-all_mixin = [NBXDeployMixin]
+all_mixin = [NBXModel]
 
 if _isthere("torch"):
-  from .__pytorch import TorchMixin
-  all_mixin.append(TorchMixin)
+  from .__pytorch import TorchModel
+  all_mixin.append(TorchModel)
 
-if _isthere("sklearn", "sk2onnx"):
-  from .__sklearn import SklearnMixin
-  all_mixin.append(SklearnMixin)
+# if _isthere("sklearn", "sk2onnx"):
+#   from .__sklearn import SklearnMixin
+#   all_mixin.append(SklearnMixin)
 
-if _isthere("onnxruntime"):
-  from .__onnxrt import ONNXRtMixin
-  all_mixin.append(ONNXRtMixin)
+# if _isthere("onnxruntime"):
+#   from .__onnxrt import ONNXRtMixin
+#   all_mixin.append(ONNXRtMixin)
 
-def get_mixin(model, support):
+def get_mixin(i0, i1):
   for m in all_mixin:
-    try: return m.load_model(model, support)
-    except IllegalFormatError: pass
+    try:
+      # if this is the correct method 
+      return m(i0, i1)
+    except IllegalFormatError:
+      pass
 
-  raise IllegalFormatError(f"This model: '{type(model)}' is not supported")
+  raise IllegalFormatError(f"Unkown inputs: {type(i0)} {type(i1)}!")
 
 __all__ = [
   "get_meta",
