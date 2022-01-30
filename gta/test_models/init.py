@@ -9,7 +9,7 @@ def main():
     # just the forward pass
     "NBOX_TEST_SKLEARN_FORWARD": {
       "condition": int(_isthere('sklearn')),
-      "functions": []
+      "functions": [abc, xyz]
     },
     "NBOX_TEST_TORCH_FORWARD": {
       "condition": int(_isthere('torch')),

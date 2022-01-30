@@ -14,16 +14,15 @@ datapoint (model hierarchy, constants, data, etc.)
 Lazy Loading
 ------------
 
-Lazy loading is a mechanism that allows you to load the model only when you need it, this is easier said than
-done because you need to add many checks and balances at varaious locations in the code. The way it works here
-is that we check from a list of modules which are required to import which part of the model.
-
+All the dependencies are checked at runtime only, meaning all the modules coded can be referenced
+removing blockers and custom duct taping.
 
 Documentation
 -------------
 """
 
 from .on_ml import NBXModel, TorchModel, SklearnModel, ONNXRtModel, IllegalFormatError
+from .on_operators import AirflowMixin
 
 # this function is for getting the meta data and is framework agnostic, so adding this in the
 # __init__ of framework submodule
@@ -44,8 +43,7 @@ def get_meta(input_names, input_shapes, args, output_names, output_shapes, outpu
 
   return meta
 
-
-def get_mixin(i0, i1):
+def get_model_mixin(i0, i1):
   all_e = []
   for m in (
     NBXModel, TorchModel, SklearnModel, ONNXRtModel
@@ -60,8 +58,3 @@ def get_mixin(i0, i1):
     f"Unkown inputs: {type(i0)} {type(i1)}!" + \
     "\n".join(all_e)
   )
-
-__all__ = [
-  "get_meta",
-  "get_mixin",
-]

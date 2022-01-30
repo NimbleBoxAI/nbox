@@ -225,23 +225,4 @@ job.to_airflow_operator()
 
 job(n_steps = 10, test_every = 1, batch_size = 5)
 
-
-class MySticher(Operator):
-  def __init__(self, *sources):
-    self.sources = sources
-    s3 = 
-    redshift = 
-
-    ...
-
-    my_database = 
-
-  def forward(self,):
-    stiched_data = ...
-    
-    self.my_database.store(stiched_data)
-
-
-op = MySticher()
-stiched_data = op()
-
+job.deploy()

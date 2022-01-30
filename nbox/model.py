@@ -9,7 +9,7 @@ from glob import glob
 from tempfile import gettempdir
 
 from . import utils
-from .framework import get_meta, get_mixin
+from .framework import get_meta, get_model_mixin
 from .network import deploy_model
 from .framework.on_ml import ModelOutput
 
@@ -38,8 +38,6 @@ class GenericMixin:
 # model/
 
 class Model(GenericMixin):
-  # @cshubhamrao suggested lazy evaulation of packages that would avoid initialization Errors
-  @utils.isthere("torch", "sklearn", "onnxruntime", "skl2onnx")
   def __init__(
     self,
     model,
@@ -54,49 +52,9 @@ class Model(GenericMixin):
     nbox_meta=None,
     
   ):
-    """Model class designed for inference. Seemlessly remove boundaries between local and cloud inference
-    from ``nbox==0.1.10`` ``nbox.Model`` handles both local and remote models. from ``nbox==0.4.0`` can load
-    and serve ONNX models.
+    """Top of the stack Model class.
 
-    Usage:
-
-      .. code-block:: python
-
-        from nbox import Model
-
-        # when on NBX-Deploy
-        model = Model("https://nbx.cloud/model/url", "nbx_api_key")
-
-        # when loading a scikit learn model
-        from sklearn.datasets import load_iris
-        from sklearn.ensemble import RandomForestClassifier
-        iris = load_iris()
-        clr = RandomForestClassifier()
-        clr.fit(iris.data, iris.target)
-        model = nbox.Model(clr)
-
-        # when loading a pytorch model
-        import torch
-
-        class DoubleInSingleOut(torch.nn.Module):
-          def __init__(self):
-            super().__init__()
-            self.f1 = torch.nn.Linear(2, 4)
-            self.f2 = torch.nn.Linear(2, 4)
-            self.logit_scale = torch.nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
-
-          def forward(self, x, y):
-            out = self.f1(x) + self.f2(y)
-            logit_scale = self.logit_scale.exp()
-            out = logit_scale - out @ out.t()
-            return out
-
-        model = nbox.Model(
-          DoubleInSingleOut(),
-          category = {"x": "image", "y": "image"} # <- this is pre-proc type for input
-        )
-        # this is not the best approach, but it works for now
-
+    >> BREAKING <<
 
     Args:
       model_or_model_url (Any): Model to be wrapped or model url
@@ -114,12 +72,12 @@ class Model(GenericMixin):
 
     .. code-block::
 
-      ``torch.nn.Module`` |      |      |
-          ``sklearn`` | __init__ > serialise > S-*
-         ``nbx-deploy`` |___________|___________|____
-           ``S-onnx`` |       |
-       ``S-torchscript`` | .deserialise > __init__
-           ``S-pkl`` |______________|___________
+      ``torch.nn.Module`` |           |           |
+              ``sklearn`` | __init__ > serialise > S-*
+           ``nbx-deploy`` |___________|___________|____
+               ``S-onnx`` |              |
+        ``S-torchscript`` | .deserialise > __init__
+                ``S-pkl`` |______________|___________
 
     Serialised models are 1-3 models that have been serialised to load later. This is especially useful for
     ``nbox-serving``, one of the server types we use in NBX Deploy, yes production. This is also part of
@@ -133,7 +91,7 @@ class Model(GenericMixin):
     self.cache_dir = cache_dir
     self.verbose = verbose
 
-    self.model = get_mixin(self.user_model, self.model_support)
+    self.model = get_model_mixin(self.user_model, self.model_support)
 
     # # values coming from the blocks above
     # self.model_or_model_url = model_or_model_url

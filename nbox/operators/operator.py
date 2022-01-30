@@ -3,6 +3,7 @@
 # due to requirements of stability, some type enforcing is performed
 
 import os
+import requests
 from typing import Callable
 from functools import partial
 from tempfile import gettempdir
@@ -14,7 +15,7 @@ logger = getLogger()
 
 from ..network import deploy_job
 from ..utils import join
-from ..framework.__airflow import AirflowMixin
+from ..framework import AirflowMixin
 from ..framework.on_functions import get_nbx_flow, DBase
 
 
@@ -141,16 +142,16 @@ class Tracer:
 
   def __call__(self, dag_update):
     # import requests
-    # r = requests.post(
-    #   url = "127.0.0.1:8000/log",
-    #   json = dag_update,
-    # )
-    # print(r.content)
-    print(dag_update)
+    r = requests.post(
+      url = "127.0.0.1:8000/log",
+      json = dag_update,
+    )
+    print(r.content)
+    # print(dag_update)
 
 
 class Operator(AirflowMixin):
-  _version: int = 1
+  _version: int = 1 # always try to keep this an i32
 
   def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
@@ -165,14 +166,19 @@ class Operator(AirflowMixin):
   def deserialise(cls, state_dict):
     pass
 
+  # /classmethods
+
+  # mixin/
+
   # AirflowMixin methods
   # --------------------
   # AirflowMixin.to_airflow_operator(self, timeout, **operator_kwargs):
-  # AirflowMixin.from_airflow_operator(cls, air_operator) <- classmethod
   # AirflowMixin.to_airflow_dag(self, dag_kwargs, operator_kwargs)
-  # AirflowMixin.from_airflow_dag(cls, dag) <- classmethod
+  # 
+  # AirflowMixin.from_airflow_operator(cls, air_operator)
+  # AirflowMixin.from_airflow_dag(cls, dag)
 
-  # /classmethods
+  # /mixin
 
   def __repr__(self):
     # from torch.nn.Module

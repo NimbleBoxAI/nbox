@@ -11,6 +11,8 @@ descibed in this single file that then has the methods for:
 1. ``torch``
 2. ``sklearn``
 3. ``onnruntime``
+
+Read the code for best understanding.
 """
 
 # weird file name, yessir. Why? because
@@ -63,6 +65,7 @@ class FrameworkAgnosticModel(object):
 # objects that other models can consume.
 ################################################################################
 
+# TODO:@yashbonde
 class NBXModel(FrameworkAgnosticModel):
   @isthere("numpy", soft=False)
   def __init__(self, url, key):
@@ -223,11 +226,12 @@ class TorchModel(FrameworkAgnosticModel):
 # ONNX Runtime
 # ============
 # OnnxRuntime is a C++ library that allows you to run ONNX models in your
-# application. It is a wrapper around the ONNX Runtime C API. It *does not*
+# application. It is a wrapper around the ONNX API. It *does not*
 # work on Apple M1 machines and so suck it up! But this is useful for server
 # side processing.
 ################################################################################
 
+# TODO:@yashbonde
 class ONNXRtModel(FrameworkAgnosticModel):
   @isthere("onnxruntime", soft = False)
   def __init__(self, ort_session, nbox_meta):
@@ -279,6 +283,7 @@ class ONNXRtModel(FrameworkAgnosticModel):
 # means that a dedicate Input DataModel is required.
 ################################################################################
 
+# TODO:@yashbonde
 class SklearnInput(DBase):
   __slots__ = [
     "inputs", # :Any

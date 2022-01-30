@@ -24,7 +24,6 @@ class NboxInstanceStartOperator(Operator):
     )
     return None
 
-
 class NboxModelDeployOperator(Operator):
   def __init__(self, model_name, model_path, model_weights, model_labels):
     super().__init__()
@@ -41,7 +40,6 @@ class NboxModelDeployOperator(Operator):
       self.model_weights,
       self.model_labels,
     ).deploy(name)
-
 
 class NboxWaitTillJIDComplete(Operator):
   def __init__(self, instance, jid):
@@ -66,7 +64,6 @@ class NboxWaitTillJIDComplete(Operator):
         raise Exception("Job {} failed".format(self.jid))
 
 # /nbox
-
 
 # arch/
 
