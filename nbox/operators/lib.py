@@ -1,6 +1,5 @@
 # MIT-License code for all operators that are open sourced
 
-from ast import arg
 from .operator import Operator
 
 from ..utils import Pool

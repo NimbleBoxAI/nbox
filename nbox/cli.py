@@ -2,12 +2,16 @@ import json
 import sys
 import os
 from typing import List
-from time import sleep
 
 from .network import deploy_model
 from .auth import init_secret, secret
 from .utils import get_random_name, NBOX_HOME_DIR, join
-from .jobs import get_instance, Instance
+from .jobs import Instance
+
+import webbrowser
+
+def open_home():
+  webbrowser.open(secret.get("nbx_url"))
 
 def status(loc = None):
   from .jobs import print_status
@@ -252,11 +256,10 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
     raise ValueError(f"Ports {', '.join(ports_used)} are already in use")
 
   # check if instance is the correct one
-  instance = Instance(i, loc = "test-3")
+  instance = Instance(i)
   if not instance.state == "RUNNING":
     raise ValueError("Instance is not running")
-  passwd = instance.open_data["ssh_pass"]
-  logging.info(f"password: {passwd}")
+  logging.info(f"password: {instance.open_data['ssh_pass']}")
 
   # create the connection
   threads = []

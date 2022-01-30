@@ -28,4 +28,5 @@ if __name__ == "__main__":
     },
     "status": n.status,           # nbox status
     "tunnel": n.tunnel,
+    "open": n.open_home,
   })
