@@ -1,5 +1,3 @@
-
-from .instance import create as create_instance
 from .utils import Subway
 from ..utils import nbox_session
 
@@ -125,16 +123,4 @@ def deploy(folder: str = "./"):
   sys.path.append(folder)
   os.chdir(folder)
   subprocess.call(["./exe.py", "deploy"])
-
-
-################################################################################
-# Instance CLI
-# ============
-# This has functions for the CLI of NBX-Instances
-################################################################################
-
-def new_instance(name: str):
-  create_instance(name)
-
-# -------------------------
 

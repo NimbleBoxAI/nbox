@@ -25,7 +25,7 @@ if __name__ == "__main__":
       "new": ij.new_job,          # nbox jobs init PROJECT_NAME
       "deploy": ij.deploy,        # nbox jobs deploy FOLDER
     },
-    "status": n.status,           # nbox status
+    "status": Instance.print_status, # nbox status
     "tunnel": n.tunnel,
     "open": n.open_home,
   })

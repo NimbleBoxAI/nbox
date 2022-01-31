@@ -33,26 +33,7 @@ logger = getLogger()
 # make the entire process functional.
 ################################################################################
 
-def get_instance_meta(id_or_name, session = nbox_session):
-  url = secret.get("nbx_url")
-  if not isinstance(id_or_name, (int, str)):
-    raise ValueError("Instance id must be an integer or a string")
-
-  r = session.get(f"{url}/api/instance/get_user_instances")
-  r.raise_for_status()
-  resp = r.json()
-
-  if len(resp["data"]) == 0:
-    raise ValueError(f"No instance: '{id_or_name}' found, create manually from the dashboard or Instance.new(...)")
-
-  key = "instance_id" if isinstance(id_or_name, int) else "name"
-  instance = list(filter(lambda x: x[key] == id_or_name, resp["data"]))
-  if len(instance) == 0:
-    raise KeyError(id_or_name)
-  instance = instance[0] # pick the first one
-  return instance
-
-def get_status(session = nbox_session):
+def print_status(session = nbox_session):
   url = secret.get("nbx_url")
   r = session.get(f"{url}/api/instance/get_user_instances")
   r.raise_for_status()
@@ -62,24 +43,11 @@ def get_status(session = nbox_session):
 
   money = r.json()["nbBucks"]
   data = [{k: x[k] for k in Instance.useful_keys} for x in r.json()["data"]]
-  return money, data
 
-def print_status():
-  money, data = get_status()
   logger.info(f"Total NimbleBox.ai credits left: {money}")
   data_table = [[x[k] for k in Instance.useful_keys] for x in data]
   for x in tabulate(data_table, headers=Instance.useful_keys).splitlines():
     logger.info(x)
-
-def create(name) -> 'Instance':
-  url = secret.get("nbx_url")
-  r = nbox_session.post(
-    f"{url}/api/instance/create_new_instance_v4",
-    json = {"project_name": name, "project_template": "blank"}
-  )
-  r.raise_for_status() # if its not 200, it's an error
-  return Instance(name, url)
-
 
 ################################################################################
 # NimbleBox.ai Instances
@@ -95,8 +63,7 @@ class Instance():
   def __init__(self, i, cs_endpoint = "server"):
     super().__init__()
 
-    url = secret.get('nbx_url')
-    self.url = f"{url}/nimblebox.ai"
+    self.url = secret.get('nbx_url')
     self.cs_url = None
     self.cs_endpoint = cs_endpoint
     self.session = Session()
@@ -116,13 +83,40 @@ class Instance():
 
   __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
+  print_status = staticmethod(print_status)
+
+  @classmethod
+  def new(cls, name) -> 'Instance':
+    url = secret.get("nbx_url")
+    r = nbox_session.post(
+      f"{url}/api/instance/create_new_instance_v4",
+      json = {"project_name": name, "project_template": "blank"}
+    )
+    r.raise_for_status() # if its not 200, it's an error
+    return cls(name, url)
+
   def refresh(self, id_or_name = None):
     id_or_name = id_or_name or self.instance_id
-    out = get_instance_meta(id_or_name, session = self.session)
-    for k,v in out.items():
+    if not isinstance(id_or_name, (int, str)):
+      raise ValueError("Instance id must be an integer or a string")
+
+    r = self.session.get(f"{self.url}/api/instance/get_user_instances")
+    r.raise_for_status()
+    resp = r.json()
+
+    if len(resp["data"]) == 0:
+      raise ValueError(f"No instance: '{id_or_name}' found, create manually from the dashboard or Instance.new(...)")
+
+    key = "instance_id" if isinstance(id_or_name, int) else "name"
+    instance = list(filter(lambda x: x[key] == id_or_name, resp["data"]))
+    if len(instance) == 0:
+      raise KeyError(id_or_name)
+    instance = instance[0] # pick the first one
+
+    for k,v in instance.items():
       if k in self.useful_keys:
         setattr(self, k, v)
-    self.data = out
+    self.data = instance
 
     if self.state == "RUNNING":
       self.start()

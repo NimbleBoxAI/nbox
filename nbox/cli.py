@@ -15,11 +15,6 @@ import webbrowser
 def open_home():
   webbrowser.open(secret.get("nbx_url"))
 
-def status(loc = None):
-  from .jobs import print_status
-  print_status()
-
-
 def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
   """the nbox way to SSH into your instance, by default ``"jupyter": 8888 and "mlflow": 5000``
 
