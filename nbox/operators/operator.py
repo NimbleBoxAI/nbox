@@ -146,7 +146,7 @@ class Tracer:
       url = "127.0.0.1:8000/log",
       json = dag_update,
     )
-    print(r.content)
+    logger.info(r.content)
     # print(dag_update)
 
 

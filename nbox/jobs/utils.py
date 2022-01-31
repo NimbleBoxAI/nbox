@@ -20,10 +20,10 @@ class Subway():
         fn = getattr(self._session, method)
         url = f"{self._url}{trailing}"
         if _verbose:
-            print(f"Calling {url}")
+            logger.info(f"Calling {url}")
         r = fn(url, json = data)
         if _verbose:
-            print(r.content.decode())
+            logger.info(r.content.decode())
         r.raise_for_status() # good when server is good
         return r.json()
 
@@ -145,8 +145,8 @@ class SpecSubway():
         if self._caller and "/" in self._spec:
             url += "/"
         if _verbose:
-            print(f"{spec['method'].upper()} {url}")
-            print("-->>", data)
+            logger.info(f"{spec['method'].upper()} {url}")
+            logger.info("-->>", data)
         r = fn(url, json = data)
         if not r.status_code == 200:
             raise ValueError(r.content.decode())

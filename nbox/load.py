@@ -191,11 +191,6 @@ def load(model_key_or_url, verbose=False, **loader_kwargs):
   model_instr = model_instr.replace(":", "") # remove the :
   model_key = model_key_or_url
 
-  # print(" model_key:", model_key)
-  # print("    src:", src)
-  # print("  src_key:", src_key)
-  # print("model_instr:", model_instr)
-
   model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
   if model_meta is None:
     model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))

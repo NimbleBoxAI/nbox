@@ -3,6 +3,8 @@ import sys
 import os
 from typing import List
 
+from lark import logger
+
 from .network import deploy_model
 from .auth import init_secret, secret
 from .utils import get_random_name, NBOX_HOME_DIR, join
@@ -352,7 +354,7 @@ def deploy(
     # check if nbox_meta is correct
     if nbox_meta == None:
       nbox_meta = ".".join(model_path.split(".")[:-1]) + ".json"
-      print("Trying to find nbox meta at path:", nbox_meta)
+      logger.info("Trying to find nbox meta at path:", nbox_meta)
       assert os.path.exists(nbox_meta), "nbox_meta not provided"
     else:
       raise ValueError("nbox_meta is not supported yet")
@@ -381,5 +383,5 @@ def deploy(
 
     # print to logs if needed
     if wait_for_deployment and print_in_logs:
-      print(" Endpoint:", endpoint)
-      print("Model Key:", key)
+      logger.info(" Endpoint:", endpoint)
+      logger.info("Model Key:", key)

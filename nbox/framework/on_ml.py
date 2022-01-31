@@ -324,7 +324,7 @@ class SklearnModel(FrameworkAgnosticModel):
         method = getattr(self.model_or_model_url, "predict") if method == None else getattr(self.model_or_model_url, method)
         out = method(model_input)
       except Exception as e:
-        print("[ERROR] Model Prediction Function is not yet registered " + e)
+        logger.info(f"[ERROR] Model Prediction Function is not yet registered {e}")
     
     return ModelOutput(
       inputs = model_input,

@@ -1,5 +1,5 @@
 
-from .instance import create, get_status as get_instance_status
+from .instance import create as create_instance
 from .utils import Subway
 from ..utils import nbox_session
 
@@ -134,8 +134,7 @@ def deploy(folder: str = "./"):
 ################################################################################
 
 def new_instance(name: str):
-  create(name)
-
+  create_instance(name)
 
 # -------------------------
 
