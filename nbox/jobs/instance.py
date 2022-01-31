@@ -26,25 +26,15 @@ from logging import getLogger
 logger = getLogger()
 
 
-def get_status(url = "https://nimblebox.ai", session = nbox_session):
-  r = session.get(f"{url}/api/instance/get_user_instances")
-  r.raise_for_status()
-  message = r.json()["msg"]
-  if message != "success":
-    raise Exception(message)
+################################################################################
+# NBX-Instances Functions
+# =======================
+# The methods below are used to talk to the Webserver APIs and other methods
+# make the entire process functional.
+################################################################################
 
-  money = r.json()["nbBucks"]
-  data = [{k: x[k] for k in Instance.useful_keys} for x in r.json()["data"]]
-  return money, data
-
-def print_status(url = "https://nimblebox.ai"):
-  money, data = get_status(url)
-  logger.info(f"Total NimbleBox.ai credits left: {money}")
-  data_table = [[x[k] for k in Instance.useful_keys] for x in data]
-  for x in tabulate(data_table, headers=Instance.useful_keys).splitlines():
-    logger.info(x)
-
-def get_instance(url, id_or_name, session = nbox_session):
+def get_instance_meta(id_or_name, session = nbox_session):
+  url = secret.get("nbx_url")
   if not isinstance(id_or_name, (int, str)):
     raise ValueError("Instance id must be an integer or a string")
 
@@ -60,21 +50,53 @@ def get_instance(url, id_or_name, session = nbox_session):
   if len(instance) == 0:
     raise KeyError(id_or_name)
   instance = instance[0] # pick the first one
-
   return instance
 
-def is_random_name(name):
-  return re.match(r"[a-z]+-[a-z]+", name) is not None
+def get_status(session = nbox_session):
+  url = secret.get("nbx_url")
+  r = session.get(f"{url}/api/instance/get_user_instances")
+  r.raise_for_status()
+  message = r.json()["msg"]
+  if message != "success":
+    raise Exception(message)
 
+  money = r.json()["nbBucks"]
+  data = [{k: x[k] for k in Instance.useful_keys} for x in r.json()["data"]]
+  return money, data
+
+def print_status():
+  money, data = get_status()
+  logger.info(f"Total NimbleBox.ai credits left: {money}")
+  data_table = [[x[k] for k in Instance.useful_keys] for x in data]
+  for x in tabulate(data_table, headers=Instance.useful_keys).splitlines():
+    logger.info(x)
+
+def create(name) -> 'Instance':
+  url = secret.get("nbx_url")
+  r = nbox_session.post(
+    f"{url}/api/instance/create_new_instance_v4",
+    json = {"project_name": name, "project_template": "blank"}
+  )
+  r.raise_for_status() # if its not 200, it's an error
+  return Instance(name, url)
+
+
+################################################################################
+# NimbleBox.ai Instances
+# ======================
+# NBX-Instances is compute abstracted away to get the best hardware for your
+# task. To that end each Instance from the platform is a single class.
+################################################################################
 
 class Instance():
   # each instance has a lot of data against it, we need to store only a few as attributes
   useful_keys = ["state", "used_size", "total_size", "public", "instance_id", "name"]
 
-  def __init__(self, id_or_name, loc = None, cs_endpoint = "server"):
+  def __init__(self, i, cs_endpoint = "server"):
     super().__init__()
 
-    self.url = f"https://{'' if not loc else loc+'.'}nimblebox.ai"
+    url = secret.get('nbx_url')
+    self.url = f"{url}/nimblebox.ai"
     self.cs_url = None
     self.cs_endpoint = cs_endpoint
     self.session = Session()
@@ -86,29 +108,24 @@ class Instance():
     self.__opened = False
     self.running_scripts = []
 
-    self.refresh(id_or_name)
+    self.refresh(i)
     logger.info(f"Instance added: {self.name} ({self.instance_id})")
 
     if self.state == "RUNNING":
       self.start()
 
-  def __eq__(self, __o: object):
-    return self.instance_id == __o.instance_id
+  __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
-  def __repr__(self):
-    return f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
+  def refresh(self, id_or_name = None):
+    id_or_name = id_or_name or self.instance_id
+    out = get_instance_meta(id_or_name, session = self.session)
+    for k,v in out.items():
+      if k in self.useful_keys:
+        setattr(self, k, v)
+    self.data = out
 
-  # normally all the methods that depend on a certain source (eg. webserver) are defined in ext.py
-  # file that has all the extensions. However because create is a special method we are defining it
-  # as a class method.
-  @classmethod
-  def create(cls, name, url = "https://nimblebox.ai"):
-    r = nbox_session.post(
-      f"{url}/api/instance/create_new_instance_v4",
-      json = {"project_name": name, "project_template": "blank"}
-    )
-    r.raise_for_status() # if its not 200, it's an error
-    return cls(name, url)
+    if self.state == "RUNNING":
+      self.start()
 
   def start(self, cpu_only = True, cpu_count = 2, gpu = "p100", gpu_count = 1, region = "asia-south-1"):
     """``cpu_count`` should be one of [2, 4, 8]"""
@@ -235,7 +252,7 @@ class Instance():
     if not message == "success":
       raise ValueError(message)
 
-  def __call__(self, x):
+  def __call__(self, x: str):
     """Caller is the most important UI/UX. The letter ``x`` in programming is reserved the most
     arbitrary thing, and this ``nbox.Instance`` is the gateway to a cloud instance. You can:
     1. run a script on the cloud
@@ -249,9 +266,6 @@ class Instance():
     execution (seeds included for probabilistic functions). Writing such functions in python with
     any IDE with checker is dead easy, however the performace guarantee is premium given high
     costs. Thus the logic to parsing these will have to be written as a seperate module.
-
-    Returns:
-      [type]: [description]
     """
     if not self.__opened:
       raise ValueError("Instance is not opened, please call .start() first")
@@ -267,7 +281,7 @@ class Instance():
         raise ValueError(f"File {x} not found on instance {self.name} ({self.instance_id})")
       return self.compute_server.rpc.start(fpath)["uid"]
 
-    if is_random_name(x):
+    if re.match(r"[a-z]+-[a-z]+", x) is not None:
       logger.info(f"Getting status of Job '{x}' on instance {self.name} ({self.instance_id})")
       data = self.compute_server.rpc.status(x)
       if not data["msg"] == "success":
@@ -284,7 +298,6 @@ class Instance():
           return "error-done"
         else:
           return "done"
-      
       return status
     elif os.path.isfile(x):
       self.mv(x, f"nbx://{x}")
@@ -298,14 +311,3 @@ class Instance():
       return uid
     else:
       raise ValueError(f"Unknown: {x}")
-
-  def refresh(self, id_or_name = None):
-    id_or_name = id_or_name or self.instance_id
-    out = get_instance(self.url, id_or_name, session = self.session)
-    for k,v in out.items():
-      if k in self.useful_keys:
-        setattr(self, k, v)
-    self.data = out
-
-    if self.state == "RUNNING":
-      self.start()

@@ -1,15 +1,20 @@
-import logging
 
-from .jobs import (
-  get_status, Instance, Subway
-)
+from .instance import create, get_status as get_instance_status
+from .utils import Subway
 from ..utils import nbox_session
 
+import logging
 logger = logging.getLogger()
 web_server_subway = Subway("https://nimblebox.ai", nbox_session)
 
-def init(project_name):
-  print("-" * 69)
+################################################################################
+# Jobs CLI
+# ========
+# This has functions for the CLI of NBX-Jobs
+################################################################################
+
+def new_job(project_name):
+  logger.info("-" * 69)
   import os, re
   from datetime import datetime
   created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -21,11 +26,11 @@ def init(project_name):
   if os.path.exists(project_name):
     raise ValueError(f"Project {project_name} already exists")
   
-  print(f"Creating a folder: {project_name}")
+  logger.info(f"Creating a folder: {project_name}")
   os.mkdir(project_name)
   os.chdir(project_name)
 
-  print("Creating: exe.py")
+  logger.info("Creating: exe.py")
   with open("exe.py", "w") as f:
     code_ = f'''
 #!/usr/bin/env python3
@@ -91,10 +96,10 @@ If you still want to do so, try moving as much as possible to `__init__`.
 
     '''.strip() + "\n")
 
-  open("requirements.txt", "w").close()
+  open("requirements.txt", "w").close() # ~ touch requirements.txt
 
-  print("Completed")
-  print("-" * 69)
+  logger.info("Completed")
+  logger.info("-" * 69)
 
 def deploy(folder: str = "./"):
   """Deploy a job on NimbleBox.ai's NBX-Jobs. This convinience function will
@@ -121,11 +126,15 @@ def deploy(folder: str = "./"):
   os.chdir(folder)
   subprocess.call(["./exe.py", "deploy"])
 
-def status(id_or_name: str):
-  raise NotImplementedError
 
-def new(name: str):
-  Instance.create(name)
+################################################################################
+# Instance CLI
+# ============
+# This has functions for the CLI of NBX-Instances
+################################################################################
+
+def new_instance(name: str):
+  create(name)
 
 
 # -------------------------

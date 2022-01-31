@@ -28,7 +28,7 @@ class DBase:
         continue
       if isinstance(_obj, DBase):
         data[k] = _obj.get_dict()
-      elif _obj != None and isinstance(_obj, list) and isinstance(_obj[0], DBase):
+      elif _obj != None and isinstance(_obj, list) and len(_obj) and isinstance(_obj[0], DBase):
         data[k] = [_obj.get_dict() for _obj in _obj]
       else:
         data[k] = _obj
@@ -58,8 +58,6 @@ class IfNodeInfo(DBase):
     'outputs', # :list[str]
   ]
 
-
-# these classes are for the FE
 class RunStatus(DBase):
   __slots__ = [
     'start', # :str
@@ -68,13 +66,12 @@ class RunStatus(DBase):
     'outputs', # :Dict
   ]
 
-
 class Node(DBase):
   __slots__ = [
     'id', # :str
     'execution_index', # :int
     'name', # :str
-    'type', # :str
+    'type', # :str: OneOf['op-node', 'if-node']
     'node_info', # :Union[ExpressionNodeInfo, IfNodeInfo]
     'operator', # :str
     'nbox_string', # :str

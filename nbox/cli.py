@@ -15,7 +15,7 @@ def open_home():
 
 def status(loc = None):
   from .jobs import print_status
-  print_status(f"https://{'' if not loc else loc+'.'}nimblebox.ai")
+  print_status()
 
 
 def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
