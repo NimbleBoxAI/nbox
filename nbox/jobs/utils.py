@@ -1,10 +1,6 @@
-from multiprocessing.sharedctypes import Value
 import re
 import string
-from json import loads
 from functools import lru_cache
-
-from ..utils import Pool
 
 from logging import getLogger
 logger = getLogger()
@@ -36,7 +32,6 @@ class Subway():
         return r.json()
 
 
-
 @lru_cache
 def filter_templates(paths):
     re_temps = []
@@ -51,7 +46,6 @@ def filter_templates(paths):
         else:
             re_temps.append((re.compile("^"+x+"$"), x,))
     return re_temps
-
 
 class Sub30:
     def __init__(self, _url, _api, _session, *, prefix = ""):
