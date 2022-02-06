@@ -22,7 +22,7 @@ if __name__ == "__main__":
     "deploy": n.deploy,           # nbox deploy
     "instance": Instance,         # nbox jobs instance
     "jobs": {
-      "new": ij.new_job,          # nbox jobs init PROJECT_NAME
+      "new": ij.new_job,          # nbox jobs new PROJECT_NAME
       "deploy": ij.deploy,        # nbox jobs deploy FOLDER
     },
     "status": Instance.print_status, # nbox status

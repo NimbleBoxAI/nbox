@@ -3,8 +3,6 @@ import sys
 import os
 from typing import List
 
-from lark import logger
-
 from .network import deploy_model
 from .auth import init_secret, secret
 from .utils import get_random_name, NBOX_HOME_DIR, join

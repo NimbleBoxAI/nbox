@@ -1,5 +1,6 @@
 # this file has methods for netorking related things
 
+from datetime import datetime, timedelta
 import json
 import os
 import requests
@@ -188,10 +189,64 @@ def deploy_model(
   logger.info("NBX Deploy")
   return endpoint, access_key
 
+class Cron:
+  _days = {
+    k:str(i) for i,k in enumerate(
+      ["sun","mon","tue","wed","thu","fri","sat"]
+    )
+  }
+  _months = {
+    k:str(i+1) for i,k in enumerate(
+      ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"]
+    )
+  }
+
+  def __init__(
+    self,
+    hour: int,
+    minute: int,
+    days: list = [],
+    months: list = [],
+    starts: datetime = None,
+    ends: datetime = None
+  ):
+    # check values out of range
+
+    self.hour = hour
+    self.minute = minute
+
+    diff = set(days) - set(self._days.keys())
+    if diff != set():
+      raise ValueError(f"Invalid days: {diff}")
+    self.days = ",".join([self._days[d] for d in days]) if days else "*"
+
+    diff = set(months) - set(self._months.keys())
+    if diff != set():
+      raise ValueError(f"Invalid months: {diff}")
+    self.months = ",".join([self._months[m] for m in months]) if months else "*"
+
+    self.starts = starts.isoformat()
+    self.ends = ends.isoformat()
+
+  @property
+  def cron(self):
+    return f"{self.minute} {self.hour} * {self.months} {self.days}"
+
+  def get_dict(self):
+    return {
+      "cron": self.cron,
+      "starts": self.starts,
+      "ends": self.ends,
+    }
+
+  def __repr__(self):
+    return str(self.get_dict())
+
 
 def deploy_job(
   zip_path: str,
-  schedule_meta: dict,
+  schedule: Cron,
+  data: dict
 ):
   from nbox.auth import secret # it can refresh so add it in the method
 
@@ -200,45 +255,77 @@ def deploy_job(
   file_size = os.stat(zip_path).st_size // (1024 ** 2) # in MBs
 
   # intialise the console logger
-  logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
+  logger.info("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.info(f"Deploying on URL: {URL}")
 
-  # POST not GET !change vs. model
-  r = requests.post(
-    url=f"{URL}/api/jobs/get_upload_url",
-    headers={"Authorization": f"Bearer {access_token}"},
-    json = {
-      "file_size": file_size, # because in MB
-      "file_type": "zip",
-      "job_name": schedule_meta["job_name"],
-      "schedule_meta": schedule_meta,
-    }
-  )
-  try:
-    r.raise_for_status()
-  except:
-    raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
+  # gRPC baby
+  from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
+  from .hyperloop.job_pb2 import Job, NBXAuthInfo
+  from .hyperloop.dag_pb2 import DAG
 
-  out = r.json()
-  job_id = out["fields"]["x-amz-meta-job_id"]
-  jobs_deployment_id = out["fields"]["x-amz-meta-jobs_deployment_id"]
+  from google.protobuf.timestamp_pb2 import Timestamp
+  from google.protobuf.json_format import MessageToJson, ParseDict
+
+  try:
+    job = utils.nbx_stub(
+      UploadCodeRequest(
+        job=Job(
+          code=Job.Code(
+            size=file_size,
+            type=Job.Code.Type.NBOX
+          ),
+          name="test_job",
+          dag=DAG(
+            flowchart=data["dag"],
+          ),
+          schedule = Job.Schedule(
+            start = Timestamp(
+              seconds = int(schedule.starts.timestamp()),
+              nanos = 0
+            ),
+            end = Timestamp(
+              seconds = int(schedule.ends.timestamp()),
+              nanos = 0
+            ),
+            cron = None
+          ),
+        ),
+        auth = NBXAuthInfo(
+          username=secret.get("username"),
+          workspace=None
+        ),
+      ),
+      metadata = [
+        ("authorization", f"{access_token}"),
+      ]
+    )
+  except Exception as e:
+    logger.info(f"Failed to deploy job: {e}")
+    return
+  
+  out = MessageToJson(job.code)
+  s3_url = out["s3_url"]
+  s3_meta = out["s3_meta"]
+
+  job_id = s3_meta["x-amz-meta-job_id"]
+  jobs_deployment_id = s3_meta["x-amz-meta-jobs_deployment_id"]
   logger.info(f"job_id: {job_id}")
   logger.info(f"jobs_deployment_id: {jobs_deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
   logger.info("Uploading model to S3 ...")
-  r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(zip_path, "rb"))})
+  r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
 
-  # checking if file is successfully uploaded on S3 and tell webserver whether upload is completed or not because client tells
-  logger.info("Verifying upload ...")
-  r = requests.post(
-    url=f"{URL}/api/jobs/update_model_status",
-    json={"upload": True if r.status_code == 204 else False, "job_id": job_id, "jobs_deployment_id": jobs_deployment_id},
-    headers={"Authorization": f"Bearer {access_token}"},
-  )
+  # Once the file is loaded create a new job
+  logger.info("Creating new job ...")
   try:
-    r.raise_for_status()
-  except:
-    raise ValueError(f"Could not update model status: {r.content.decode('utf-8')}")
+    job = utils.nbx_stub(
+      CreateJobRequest(
+        job = job
+      )
+    )
+  except Exception as e:
+    logger.info(f"Failed to create job: {e}")
+    return
 
-
+  return job

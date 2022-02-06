@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from logging import getLogger
 logger = getLogger()
 
-from ..network import deploy_job
+from ..network import deploy_job, Cron
 from ..utils import join
 from ..framework import AirflowMixin
 from ..framework.on_functions import get_nbx_flow, DBase
@@ -399,15 +399,23 @@ class Operator(AirflowMixin):
 
   def deploy(
     self,
+    schedule: Cron,
     init_folder: str = None,
     cache_dir: str = None,
     job_id = None,
     job_name = None,
-    start_datetime: datetime = None,
-    end_datetime: datetime = None,
-    time_interval: timedelta = None,
   ):
     logger.info(f"Deploying {self.__class__.__name__} -> '{job_id}/{job_name}'")
+
+    # check if this is a valid folder or not
+    if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
+      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+    if os.path.isdir(init_folder):
+      os.chdir(init_folder)
+      if not os.path.exists("./exe.py"):
+        raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+    else:
+      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
 
     # flowchart-alpha
     dag = get_nbx_flow(self.forward)
@@ -429,40 +437,32 @@ class Operator(AirflowMixin):
         operator_name = cls_item.__class__.__name__
       n["operator_name"] = operator_name
 
-    schedule_meta = {
-      "start_datetime": start_datetime,
-      "end_datetime": end_datetime,
-      "time_interval": time_interval,
+    logger.info(f"Schedule: {schedule.get_dict}")
+
+    data = {
+      "dag": dag,
+      "schedule": schedule.get_dict(),
       "job_id": job_id,
       "job_name": job_name,
-      "dag": dag,
       "created": datetime.now().isoformat(),
     }
-    # print(schedule_meta)
-    return schedule_meta
 
-    # check if this is a valif folder or not
-    if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
-      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
-    if os.path.isdir(init_folder):
-      os.chdir(init_folder)
-      if not os.path.exists("./exe.py"):
-        raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
-    else:
-      raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs init <name>")
+    with open(join(init_folder, "meta.json"), "w") as f:
+      f.write(dumps(data))
 
-    # zip the folder
+    # zip all the files folder
+    all_f = []
+    for root, dirs, files in os.walk(init_folder):
+      for file in files:
+        all_f.append(join(root, file))
+    
     import zipfile
     zip_path = join(cache_dir if cache_dir else gettempdir(), "project.zip")
     logger.info(f"Zipping project to '{zip_path}'")
-    zip_file = zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED)
-    for root, dirs, files in os.walk(init_folder):
-      for file in files:
-        zip_file.write(os.path.join(root, file))
-    zip_file.close()
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+      for f in all_f:
+        zip_file.write(f)
 
-    return schedule_meta
-
-    # deploy_job(zip_path = zip_path, schedule_meta = schedule_meta)
+    deploy_job(zip_path = zip_path, schedule = schedule, data = data)
 
   # /nbx

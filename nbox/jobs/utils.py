@@ -1,3 +1,11 @@
+from multiprocessing.sharedctypes import Value
+import re
+import string
+from json import loads
+from functools import lru_cache
+
+from ..utils import Pool
+
 from logging import getLogger
 logger = getLogger()
 
@@ -28,15 +36,105 @@ class Subway():
         return r.json()
 
 
+
+@lru_cache
+def filter_templates(paths):
+    re_temps = []
+    for x in paths:
+        if "{" in x:
+            temp_str = "^"
+            for y in string.Formatter().parse(x):
+                temp_str += y[0]
+                if y[1]:
+                    temp_str += "\w+"
+            re_temps.append((re.compile(temp_str + "$"), x,))
+        else:
+            re_temps.append((re.compile("^"+x+"$"), x,))
+    return re_temps
+
+
+class Sub30:
+    def __init__(self, _url, _api, _session, *, prefix = ""):
+        self._url = _url.strip("/")
+        self._session = _session
+        self._api = _api
+        self._prefix = prefix
+
+    def __repr__(self):
+        return f"<Sub30 ({self._url})>"
+
+    def __getattr__(self, attr):
+        return Sub30(f"{self._url}/{attr}", self._api, self._session, prefix=f"{self._prefix}/{attr}")
+
+    def __call__(self, _method: str = None, **kwargs):
+        r"""
+        Args:
+            _method (str, optional): if only one method is present this will be ignored else "get" will be used. Defaults to None.
+        """
+        paths = self._api["paths"]
+        for v,s in enumerate(self._api["servers"]):
+            # {url: "/api/v1"}, {url: "/api/v2"}
+            setattr(self, f"v{v}", s["url"])
+        params = None
+        json = None
+
+        ft = filter_templates(tuple(paths.keys()))
+        path = None
+        for t, index in ft:
+            if re.match(t, self._prefix):
+                path = index
+                break
+        if path == None:
+            raise ValueError(f"No path found for '{self._prefix}'")
+        
+        logger.info("Calling path: " + path)
+
+        # this is a match
+        p = paths[index]
+        method = tuple(p.keys())[0] if len(p) == 1 else (
+            _method if _method != None else "get"
+        )
+        body = p[method]
+
+        if "parameters" in body:
+            # likely a GET call
+            params = kwargs
+
+        if "requestBody" in body:
+            # likely a POST call
+            content_type = body["requestBody"]["content"]
+            if "application/json" in content_type:
+                json = {}
+                schema_ref = content_type["application/json"]["schema"]
+                for p in schema_ref["properties"]:
+                    if p in schema_ref.get("required", []):
+                        assert p in kwargs, f"{p} is required but not provided"
+                        json[p] = kwargs[p]
+                    else:
+                        json[p] = kwargs[p] if p in kwargs else schema_ref["properties"][p]["default"]
+            # elif "plain/text" in content_type:
+
+        # call and return
+        path = re.sub(r"\/_", "/", self._url)
+        r = self._session.request(method, path, json = json, params = params)
+        try:
+            r.raise_for_status()
+        except Exception as e:
+            logger.error(r.content.decode())
+            raise e
+        return r.json()
+
+
 class SpecSubway():
-    """Subway is simple when starting, but what if we had a spec that could perform sanity checks
-    and parse data when __call__ ed. In this version it can read an OpenAPI spec and perform lazy
-    checking"""
     def __init__(self, _url, _session, _spec, __name = None):
+        """Subway is simple when starting, but what if we had a spec that could perform sanity checks
+        and parse data when __call__ ed. In this version it can read an OpenAPI spec and perform lazy
+        checking"""
         self._url = _url.rstrip('/')
         self._session = _session
         self._spec = _spec
         self._name = __name
+
         self._caller = (
             (len(_spec) == 3 and set(_spec) == set(["method", "meta", "src"])) or
             (len(_spec) == 4 and set(_spec) == set(["method", "meta", "src", "response_kwargs_dict"])) or
@@ -45,6 +143,7 @@ class SpecSubway():
 
     @classmethod
     def from_openapi(cls, openapi, _url, _session):
+        logger.info("Loading for OpenAPI version latest")
         paths = openapi["paths"]
         spec = openapi["components"]["schemas"]
         
@@ -109,6 +208,8 @@ class SpecSubway():
         return SpecSubway(f"{self._url}/{attr}", self._session, self._spec[attr], attr)
     
     def __call__(self, *args, _verbose = False, _parse = False, **kwargs):
+        from pprint import pprint
+        pprint(self._spec)
         if not self._caller:
             raise AttributeError(f"'.{self._name}' is not an endpoint")
         spec = self._spec
@@ -133,12 +234,12 @@ class SpecSubway():
                         data[kwargs_dict[i]] = args[i]
                 for key in kwargs:
                     if key not in kwargs_dict:
-                        raise AttributeError(f"{key} is not a valid argument")
+                        raise ValueError(f"{key} is not a valid argument")
                     data[key] = kwargs[key]
                 if required != None:
                     for key in required:
                         if key not in data:
-                            raise AttributeError(f"{key} is a required argument")
+                            raise ValueError(f"{key} is a required argument")
 
         fn = getattr(self._session, spec["method"])
         url = f"{self._url}"

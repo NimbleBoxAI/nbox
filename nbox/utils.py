@@ -1,3 +1,8 @@
+############################################################
+# This file is d0 meaning that this has no dependencies!
+# Do not import anything from rest of nbox here! 
+############################################################
+
 # this file has bunch of functions that are used everywhere
 
 import os
@@ -13,6 +18,13 @@ import logging
 
 # common/
 nbox_session = requests.Session()
+
+import grpc
+from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
+
+channel = grpc.insecure_channel("[::]:50051")
+nbx_stub = WSJobServiceStub(channel)
+
 # /common
 
 # logging/
@@ -66,7 +78,7 @@ def get_files_in_folder(folder, ext = [".txt"]):
 
 def fetch(url):
   # efficient loading of URLs
-  fp = os.path.join(tempfile.gettempdir(), hash_(url))
+  fp = join(tempfile.gettempdir(), hash_(url))
   if os.path.isfile(fp) and os.stat(fp).st_size > 0:
     with open(fp, "rb") as f:
       dat = f.read()

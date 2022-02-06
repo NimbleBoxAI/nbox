@@ -186,3 +186,7 @@ class Notify(Operator):
       from discord import Webhook, RequestsWebhookAdapter
       webhook = Webhook.from_url(self.notify_id, adapter = RequestsWebhookAdapter())
       webhook.send(message, **kwargs)
+
+
+def down() -> None:
+  pass
