@@ -12,11 +12,19 @@ import requests
 import tempfile
 import randomname
 from uuid import uuid4
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+# logging/
 
 import logging
+logger = logging.getLogger()
 
+# /logging
 
 # common/
+POOL_SUPPORTED_MODES = ["thread"]
+
 nbox_session = requests.Session()
 
 import grpc
@@ -26,11 +34,6 @@ channel = grpc.insecure_channel("[::]:50051")
 nbx_stub = WSJobServiceStub(channel)
 
 # /common
-
-# logging/
-logger = logging.getLogger()
-# /logging
-
 
 # lazy_loading/
 
@@ -137,11 +140,24 @@ def convert_to_list(x):
 
 # /model
 
-# pool/
-from concurrent.futures import ThreadPoolExecutor, as_completed
-POOL_SUPPORTED_MODES = ["thread"]
 
-class Pool:
+################################################################################
+# Parallel
+# ========
+# There already are many multiprocessing libraries for thread, core, pod, cluster
+# but thee classes below are inspired by https://en.wikipedia.org/wiki/Collective_operation
+#
+# And that is why they are blocking classes, ie. it won't stop till all the tasks
+# are completed. For reference please open the link above which has diagrams, there
+# nodes can just be threads/cores/... Here is description for each of them:
+#
+# - Pool: apply same functions on different inputs
+# - Branch: apply different functions on different inputs
+################################################################################
+
+# pool/
+
+class PoolBranch:
   def __init__(self, mode = "thread", max_workers = 2, _name: str = get_random_name(True)):
     """Threading is hard, your brain is not wired to handle parallelism. You are a blocking
     python program. So a blocking function for you.
@@ -177,16 +193,26 @@ class Pool:
 
   def __call__(self, fn, *args):
     """Run any function ``fn`` in parallel, where each argument is a list of arguments to
-    pass to ``fn``. Result is returned in the same order as the input.
-      
-      thread(fn, a) for a in args -> list of results
-    """
-    assert callable(fn)
-    assert isinstance(args[0], (tuple, list))
+    pass to ``fn``. Result is returned in the **same order as the input**.
 
+      ..code-block
+      
+        if fn is callable:
+          thread(fn, a) for a in args -> list of results
+        elif fn is list and fn[0] is callable:
+          thread(_fn, a) for _fn, a in (fn args) -> list of results
+    """
+    assert isinstance(args[0], (tuple, list))
+    
     futures = {}
-    for i, x in enumerate(args):
-      futures[self.executor.submit(fn, *x)] = i # insertion index
+    if isinstance(fn, (list, tuple)) and callable(fn[0]):
+      assert len(fn) == len(args), "Number of functions and arguments must be same in branching"
+    else:
+      assert callable(fn), "fn must be callable in pooling"
+      fn = [fn for _ in range(len(args))] # convinience
+
+    for i, (_fn, x) in enumerate(zip(fn, args)):
+      futures[self.executor.submit(_fn, *x)] = i # insertion index
 
     self.item_id += len(futures)
     results = {}
@@ -201,7 +227,6 @@ class Pool:
     return [results[x] for x in range(len(results))]
 
 # /pool
-
 
 # --- classes
 
