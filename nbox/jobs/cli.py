@@ -53,6 +53,8 @@ def deploy():
     # if job_id is None, new job will be created with job_name
     job_id = job_id,     # :str: job id
     job_name = job_name, # :str: job name
+    
+    # simple scheduler like your Calender App
     schedule = Cron(
       hour,          # :int: Hour for the job to run
       minute,        # :int: Minute for the job to run
@@ -62,6 +64,7 @@ def deploy():
       ends = None,   # :datetime: Ending datetime for the job
     )
 
+    # no need to change this
     init_folder = folder(__file__), # no need to change this
   )
 
@@ -70,7 +73,7 @@ def run():
   op: Operator = get_op()
   op(
     # if your operator is scheduled, avoid passing anything here
-    # if your operator is run one time, pass the input here
+    # if your operator is run one time, try passing all inputs here
   )
 '''
 
@@ -95,7 +98,7 @@ Steps to complete:
 1. Add all your code module here in this folder
 2. Add in requirements.txt file if needed
 3. Fill The Three functions (`get_operator`, `deploy`, `run`) in exe.py
-4. Run `nbox jobs deploy <folder_path> or `nbox jobs deploy -h` for more help
+4. Run `python exe.py deploy`
 
 Rule of Thumb:
 

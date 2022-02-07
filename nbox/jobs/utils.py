@@ -80,8 +80,6 @@ class Sub30:
                 break
         if path == None:
             raise ValueError(f"No path found for '{self._prefix}'")
-        
-        logger.info("Calling path: " + path)
 
         # this is a match
         p = paths[index]
@@ -110,6 +108,7 @@ class Sub30:
 
         # call and return
         path = re.sub(r"\/_", "/", self._url)
+        logger.info(method.upper() + " " + path)
         r = self._session.request(method, path, json = json, params = params)
         try:
             r.raise_for_status()
