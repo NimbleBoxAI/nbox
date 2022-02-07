@@ -175,21 +175,21 @@ class PoolBranch:
         sleep(x)
         return x
       
-      pool = Pool()
+      pool = PoolBranch()
       results = pool(sleep_and_return, (2,),(6,),(4,),(5,)) # inputs must be a tuple
     """
-    if mode not in POOL_SUPPORTED_MODES:
-      raise Exception(f"Only {', '.join(POOL_SUPPORTED_MODES)} mode(s) are supported")
-
     self.mode = mode
-    self.pool = None
-    logger.info(f"Starting ThreadPool ({_name}) with {max_workers} workers")
-    self.executor = ThreadPoolExecutor(
-      max_workers=max_workers,
-      thread_name_prefix=_name
-    )
     self.item_id = -1 # because +1 later
     self.futures = {}
+
+    if mode == "thread":
+      self.executor = ThreadPoolExecutor(
+        max_workers=max_workers,
+        thread_name_prefix=_name
+      )
+    else:
+      raise Exception(f"Only {', '.join(POOL_SUPPORTED_MODES)} mode(s) are supported")
+    logger.info(f"Starting {mode.upper()}-PoolBranch ({_name}) with {max_workers} workers")
 
   def __call__(self, fn, *args):
     """Run any function ``fn`` in parallel, where each argument is a list of arguments to

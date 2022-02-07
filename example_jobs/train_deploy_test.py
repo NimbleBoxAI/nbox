@@ -18,7 +18,7 @@ from gperc.trainer import Trainer
 from gperc.arrow import ArrowConfig, ArrowConsumer
 
 from nbox import Operator, Model
-from nbox.utils import Pool
+from nbox.utils import PoolBranch
 from nbox.operators import NboxInstanceStartOperator
 
 class Downloader(Operator):
@@ -177,7 +177,7 @@ class TestDeploy(Operator):
   def __init__(self, workers):
     super().__init__()
     self.workers = workers
-    self.pool = Pool("thread", workers)
+    self.pool = PoolBranch("thread", workers)
 
   def forward(self, url, key, n_hits = 100):
     def __test_deploy(url, key, n_hits):
