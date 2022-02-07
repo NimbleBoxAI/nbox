@@ -2,7 +2,7 @@
 
 from .operator import Operator
 
-from ..utils import Pool
+from ..utils import PoolBranch
 from ..jobs import Instance
 
 # nbox/
@@ -14,7 +14,7 @@ class NboxInstanceStartOperator(Operator):
       instances = [instances]
     assert instances[0].__class__ == Instance, "instances must be of type Instance"
     self.instances = instances
-    self.pool = Pool("thread", len(instances), _name = "instance_starter")
+    self.pool = PoolBranch("thread", len(instances), _name = "instance_starter")
 
   def forward(self):
     self.pool(
