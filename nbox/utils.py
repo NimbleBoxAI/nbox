@@ -37,6 +37,11 @@ nbx_stub = WSJobServiceStub(channel)
 # lazy_loading/
 
 def isthere(*packages, soft = True):
+  """Checks all the packages
+
+  Args:
+      soft (bool, optional): If ``False`` raises ``ImportError``. Defaults to True.
+  """
   def wrapper(fn):
     def _fn(*args, **kwargs):
       # since we are lazy evaluating this thing, we are checking when the function
@@ -46,7 +51,7 @@ def isthere(*packages, soft = True):
           __import__(package)
         except ImportError:
           if not soft:
-            raise Exception(f"{package} is not installed")
+            raise ImportError(f"{package} is not installed")
           # raise a warning, let the modulenotfound exception bubble up
           logger.warning(
             f"{package} is not installed, but is required by {fn.__module__}, some functionality may not work"
@@ -68,6 +73,7 @@ def _isthere(*packages):
 # file path/reading
 
 def get_files_in_folder(folder, ext = [".txt"]):
+  """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os
   all_paths = []
@@ -79,7 +85,7 @@ def get_files_in_folder(folder, ext = [".txt"]):
   return all_paths
 
 def fetch(url, force = False):
-  # efficient loading of URLs
+  """Fetch and cache a url for faster loading, ``force`` re-downloads"""
   fp = join(tempfile.gettempdir(), hash_(url))
   if os.path.isfile(fp) and os.stat(fp).st_size > 0 and not force:
     with open(fp, "rb") as f:
@@ -92,10 +98,11 @@ def fetch(url, force = False):
   return dat
 
 def folder(x):
-  # get the folder of this file path
+  """get the folder of this file path"""
   return os.path.split(os.path.abspath(x))[0]
 
 def join(x, *args):
+  """convienience function for os.path.join"""
   return os.path.join(x, *args)
 
 NBOX_HOME_DIR = join(os.path.expanduser("~"), ".nbx")
@@ -105,11 +112,13 @@ NBOX_HOME_DIR = join(os.path.expanduser("~"), ".nbx")
 # misc/
 
 def get_random_name(uuid = False):
+  """Get a random name, if ``uuid`` is ``True``, return a uuid4"""
   if uuid:
     return str(uuid4())
   return randomname.generate()
 
 def hash_(item, fn="md5"):
+  """Hash sting of any item"""
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
 # /misc
@@ -157,47 +166,72 @@ def convert_to_list(x):
 # pool/
 
 class PoolBranch:
-  def __init__(self, mode = "thread", max_workers = 2, _name: str = get_random_name(True)):
+  def __init__(self, mode = "thread", max_workers = 2):
     """Threading is hard, your brain is not wired to handle parallelism. You are a blocking
-    python program. So a blocking function for you.
+    python program. So a blocking function for you. There are some conditions:
+
+
+    Usage:
+
+    .. code-block:: python
+
+      # define some functions
+
+      def add_zero(x):  return x + 0
+      def add_one(x):   return x + 1
+      def add_ten(x):   return x + 10
+      def add_fifty(x): return x + 50
+
+      all_fn = [add_zero, add_one, add_ten, add_fifty]
+
+      # define some arguments
+      args = [(1,), (2,), (3,), (4,),]
+
+      # branching is applying different functions on different inputs
+      branch = PoolBranch("thread")
+      out = branch(all_fn, *args)
+
+      # pooling is applying same functions on different inputs
+      pool = PoolBranch("thread")
+      out = pool(add_zero, *args)
+  
+    When using ``mode = "process"`` write your code in a function and ensure that the
+    function is called from ``__main__ == "__name__"``. From the documentation of ``concurrent.futures``:
+
+      The __main__ module must be importable by worker subprocesses. This means that
+      ``ProcessPoolExecutor`` will not work in the interactive interpreter.
+    
+    - `StackOverflow <https://stackoverflow.com/questions/27932987/multiprocessing-package-in-interactive-python>`_
+    - `Another <https://stackoverflow.com/questions/24466804/multiprocessing-breaks-in-interactive-mode>`_
+
+    .. code-block:: python
+
+      def multiprocess():
+        print("MultiProcessing")
+
+        branch = PoolBranch("process")
+        out = branch(all_fn, *args)
+
+        pool = PoolBranch("process")
+        out = pool(add_zero, *args)
+
+      if __name__ == "__main__":
+        multiprocess()
 
     Args:
       mode (str, optional): There can be multiple pooling strategies across cores, threads,
         k8s, nbx-instances etc.
       max_workers (int, optional): Numbers of workers to use
-      _name (str, optional): Name of the pool, used for logging
-
-    Usage:
-      
-      fn = [
-        lambda x : x + 0,
-        lambda x : x + 1,
-        lambda x : x + 2,
-        lambda x : x + 3,
-      ]
-
-      args = [
-        (1,), (2,), (3,), (4,),
-      ]
-
-      pool = PoolBranch()
-      out = pool(fn[2], *args)
-      # [1+2, 2+2, 3+2, 4+2] => [3, 4, 5, 6]
-      print(out)
-
-      branch = PoolBranch()
-      out = branch(fn, *args)
-      # [1+0, 2+1, 3+2, 4+3] => [1, 3, 5, 7]
-      print(out)
     """
     self.mode = mode
     self.item_id = -1 # because +1 later
     self.futures = {}
+    self._name = get_random_name(True)
 
     if mode == "thread":
       self.executor = ThreadPoolExecutor(
         max_workers=max_workers,
-        thread_name_prefix=_name
+        thread_name_prefix=self._name
       )
     elif mode == "process":
       self.executor = ProcessPoolExecutor(
@@ -205,7 +239,8 @@ class PoolBranch:
       )
     else:
       raise Exception(f"Only 'thread/process' modes are supported")
-    logger.info(f"Starting {mode.upper()}-PoolBranch ({_name}) with {max_workers} workers")
+
+    logger.info(f"Starting {mode.upper()}-PoolBranch ({self._name}) with {max_workers} workers")
 
   def __call__(self, fn, *args):
     """Run any function ``fn`` in parallel, where each argument is a list of arguments to
@@ -229,8 +264,8 @@ class PoolBranch:
 
     self.item_id += len(futures)
     results = {}
-    
-    if self.mode == "thread":
+
+    if self.mode in ("thread", "process"):
       for i, (_fn, x) in enumerate(zip(fn, args)):
         futures[self.executor.submit(_fn, *x)] = i # insertion index
       for future in as_completed(futures):
@@ -242,21 +277,6 @@ class PoolBranch:
           raise e
 
       res = [results[x] for x in range(len(results))]
-    
-    elif self.mode == "process":
-      res = {}
-      for i in range(len(args)):
-        # print(args[i],)
-        out = self.executor.submit(
-          fn[i], args[i],
-        )
-        res[out] = i
-        # print(out)
-
-      print(res)
-
-      for x in as_completed(res):
-        print(x)
     
     return res
 

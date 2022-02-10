@@ -203,12 +203,12 @@ class Cron:
 
   def __init__(
     self,
-    hour: int,
-    minute: int,
+    hour: int  = None,
+    minute: int = None,
     days: list = [],
     months: list = [],
     starts: datetime = None,
-    ends: datetime = None
+    ends: datetime = None,
   ):
     """Scheduling is nothing but a type of data sturcture that should be able to process
     all patterns that the users can throw at this.
@@ -219,74 +219,81 @@ class Cron:
     .. code-block:: python
 
       # 4:20 everyday
-      Cron(4, 20)
+      Cron(4, 0)
 
       # 4:20 every friday
       Cron(4, 20, ["fri"])
 
-      # 4:20 every fri and sat
-      Cron(4, 20, "all")
-
       # 4:20 every friday from jan to feb
       Cron(4, 20, ["fri"], ["jan", "feb"])
 
-      # 4:20 everyday starting in 2 days
-      Cron(4, 20, starts = datetime.now() + timedelta(days=2))
+      # 4:20 everyday starting in 2 days and runs for 3 days
+      starts = datetime.utcnow() + timedelta(days = 2) # NOTE: that time is in UTC
+      Cron(4, 20, starts = starts, ends = starts + timedelta(days = 3))
 
       # Every 1 hour
       Cron(1)
 
-      # Every 4 minutes
-      Cron(minute = 4)
-
-    Args
-    ----
+      # Every 69 minutes
+      Cron(minute = 69)
 
     Args:
         hour (int): Hour of the day, if only this value is passed it will run every ``hour``
         minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
         days (list, optional): List of days (first three chars) of the week, if not passed it will run every day.
         months (list, optional): List of months (first three chars) of the year, if not passed it will run every month.
-        starts (datetime, optional): Start time of the schedule, if not passed it will start now.
-        ends (datetime, optional): End time of the schedule, if not passed it will run for 420 days.
+        starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now. 
+        ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
     """
-    # check values out of range
-
     self.hour = hour
     self.minute = minute
 
-    self.is_cron = self.hour and self.minute
-    if not self.is_cron:
-      assert self.hour or self.minute, "Atleast one of hour or minute should be passed"
-      assert not (self.hour and self.minute), "Both hour and minute cannot be passed"
-      assert len(days) == 0, "Days cannot be passed when a recurring"
-      assert len(months) == 0, "Months cannot be passed when not a cron"
-    else:
-      diff = set(days) - set(self._days.keys())
-      if diff != set():
-        raise ValueError(f"Invalid days: {diff}")
-      self.days = ",".join([self._days[d] for d in days]) if days else "*"
+    self._is_repeating = self.hour or self.minute
+    self.mode = None
+    if self.hour == None and self.minute == None:
+      raise ValueError("Atleast one of hour or minute should be passed")
+    elif self.hour != None and self.minute != None:
+      assert self.hour in list(range(0, 24)), f"Hour must be in range 0-23, got {self.hour}"
+      assert self.minute in list(range(0, 60)), f"Minute must be in range 0-59, got {self.minute}"
+    elif self.hour != None:
+      assert self.hour in list(range(0, 24)), f"Hour must be in range 0-23, got {self.hour}"
+      self.mode = "every"
+      self.minute = "*"
+      self.hour = f"*/{self.hour}"
+    elif self.minute != None:
+      self.hour = self.minute // 60
+      assert self.hour in list(range(0, 24)), f"Hour must be in range 0-23, got {self.hour}"
+      self.minute = f"*/{self.minute % 60}"
+      self.hour = f"*/{self.hour}" if self.hour > 0 else "*"
+      self.mode = "every"
 
-      diff = set(months) - set(self._months.keys())
-      if diff != set():
-        raise ValueError(f"Invalid months: {diff}")
-      self.months = ",".join([self._months[m] for m in months]) if months else "*"
+    diff = set(days) - set(self._days.keys())
+    if diff != set():
+      raise ValueError(f"Invalid days: {diff}")
+    self.days = ",".join([self._days[d] for d in days]) if days else "*"
 
-    starts = starts or datetime.now()
+    diff = set(months) - set(self._months.keys())
+    if diff != set():
+      raise ValueError(f"Invalid months: {diff}")
+    self.months = ",".join([self._months[m] for m in months]) if months else "*"
+
+    starts = starts or datetime.utcnow()
     self.starts = starts.isoformat()
 
-    ends = ends or datetime.now() + timedelta(days=420)
+    ends = ends or datetime.utcnow() + timedelta(days = 7)
     self.ends = ends.isoformat()
 
   @property
   def cron(self):
-    if not self.is_cron:
-      raise f"* * * * *"
+    """Cron string"""
+    if self.mode == "every":
+      return f"{self.minute} {self.hour} * * *"
     return f"{self.minute} {self.hour} * {self.months} {self.days}"
 
   def get_dict(self):
     return {
       "cron": self.cron,
+      "mode": self.mode,
       "starts": self.starts,
       "ends": self.ends,
     }
@@ -301,6 +308,17 @@ def deploy_job(
   data: dict,
   workspace: str
 ):
+  """Deploy an NBX-Job
+
+  Args:
+      zip_path (str): Path to the zip file
+      schedule (Cron): Schedule of the job
+      data (dict): Metadata generated for the job
+      workspace (str): Name of the workspace this is to be deployed at
+
+  Returns:
+      [type]: [description]
+  """
   from nbox.auth import secret # it can refresh so add it in the method
 
   access_token = secret.get("access_token")
