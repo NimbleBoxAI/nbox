@@ -1,11 +1,11 @@
 # this file has methods for netorking related things
 
-from datetime import datetime, timedelta
-import json
 import os
+import json
 import requests
-from pprint import pprint as pp
 from time import sleep
+from pprint import pprint as pp
+from datetime import datetime, timedelta
 
 from . import utils
 
@@ -210,26 +210,78 @@ class Cron:
     starts: datetime = None,
     ends: datetime = None
   ):
+    """Scheduling is nothing but a type of data sturcture that should be able to process
+    all patterns that the users can throw at this.
+
+    Usage
+    -----
+
+    .. code-block:: python
+
+      # 4:20 everyday
+      Cron(4, 20)
+
+      # 4:20 every friday
+      Cron(4, 20, ["fri"])
+
+      # 4:20 every fri and sat
+      Cron(4, 20, "all")
+
+      # 4:20 every friday from jan to feb
+      Cron(4, 20, ["fri"], ["jan", "feb"])
+
+      # 4:20 everyday starting in 2 days
+      Cron(4, 20, starts = datetime.now() + timedelta(days=2))
+
+      # Every 1 hour
+      Cron(1)
+
+      # Every 4 minutes
+      Cron(minute = 4)
+
+    Args
+    ----
+
+    Args:
+        hour (int): Hour of the day, if only this value is passed it will run every ``hour``
+        minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
+        days (list, optional): List of days (first three chars) of the week, if not passed it will run every day.
+        months (list, optional): List of months (first three chars) of the year, if not passed it will run every month.
+        starts (datetime, optional): Start time of the schedule, if not passed it will start now.
+        ends (datetime, optional): End time of the schedule, if not passed it will run for 420 days.
+    """
     # check values out of range
 
     self.hour = hour
     self.minute = minute
 
-    diff = set(days) - set(self._days.keys())
-    if diff != set():
-      raise ValueError(f"Invalid days: {diff}")
-    self.days = ",".join([self._days[d] for d in days]) if days else "*"
+    self.is_cron = self.hour and self.minute
+    if not self.is_cron:
+      assert self.hour or self.minute, "Atleast one of hour or minute should be passed"
+      assert not (self.hour and self.minute), "Both hour and minute cannot be passed"
+      assert len(days) == 0, "Days cannot be passed when a recurring"
+      assert len(months) == 0, "Months cannot be passed when not a cron"
+    else:
+      diff = set(days) - set(self._days.keys())
+      if diff != set():
+        raise ValueError(f"Invalid days: {diff}")
+      self.days = ",".join([self._days[d] for d in days]) if days else "*"
 
-    diff = set(months) - set(self._months.keys())
-    if diff != set():
-      raise ValueError(f"Invalid months: {diff}")
-    self.months = ",".join([self._months[m] for m in months]) if months else "*"
+      diff = set(months) - set(self._months.keys())
+      if diff != set():
+        raise ValueError(f"Invalid months: {diff}")
+      self.months = ",".join([self._months[m] for m in months]) if months else "*"
 
+    starts = starts or datetime.now()
     self.starts = starts.isoformat()
+
+    ends = ends or datetime.now() + timedelta(days=420)
     self.ends = ends.isoformat()
 
   @property
   def cron(self):
+    if not self.is_cron:
+      raise f"* * * * *"
     return f"{self.minute} {self.hour} * {self.months} {self.days}"
 
   def get_dict(self):
@@ -246,7 +298,8 @@ class Cron:
 def deploy_job(
   zip_path: str,
   schedule: Cron,
-  data: dict
+  data: dict,
+  workspace: str
 ):
   from nbox.auth import secret # it can refresh so add it in the method
 
@@ -264,7 +317,7 @@ def deploy_job(
   from .hyperloop.dag_pb2 import DAG
 
   from google.protobuf.timestamp_pb2 import Timestamp
-  from google.protobuf.json_format import MessageToJson, ParseDict
+  from google.protobuf.json_format import MessageToJson
 
   try:
     job = utils.nbx_stub(
@@ -287,12 +340,12 @@ def deploy_job(
               seconds = int(schedule.ends.timestamp()),
               nanos = 0
             ),
-            cron = None
+            cron = schedule.cron
           ),
         ),
         auth = NBXAuthInfo(
           username=secret.get("username"),
-          workspace=None
+          workspace=workspace
         ),
       ),
       metadata = [
@@ -315,6 +368,11 @@ def deploy_job(
   # upload the file to a S3 -> don't raise for status here
   logger.info("Uploading model to S3 ...")
   r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
+  try:
+    r.raise_for_status()
+  except:
+    logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
+    return
 
   # Once the file is loaded create a new job
   logger.info("Creating new job ...")

@@ -187,6 +187,3 @@ class Notify(Operator):
       webhook = Webhook.from_url(self.notify_id, adapter = RequestsWebhookAdapter())
       webhook.send(message, **kwargs)
 
-
-def down() -> None:
-  pass

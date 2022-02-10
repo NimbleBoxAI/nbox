@@ -82,6 +82,7 @@ class Sub30:
             raise ValueError(f"No path found for '{self._prefix}'")
 
         # this is a match
+        logger.info("Matched path: " + path)
         p = paths[index]
         method = tuple(p.keys())[0] if len(p) == 1 else (
             _method if _method != None else "get"

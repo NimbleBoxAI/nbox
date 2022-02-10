@@ -19,11 +19,13 @@ from .jobs import Instance
 
 if __name__ == "__main__":
   fire.Fire({
-    "deploy": n.deploy,           # nbox deploy
     "instance": Instance,         # nbox jobs instance
+    "deploy": n.deploy,           # nbox deploy
     "jobs": {
       "new": ij.new_job,          # nbox jobs new PROJECT_NAME
       "deploy": ij.deploy,        # nbox jobs deploy FOLDER
+      "open": ij.open_jobs,       # nbox jobs open
+      "trigger": NotImplementedError()
     },
     "status": Instance.print_status, # nbox status
     "tunnel": n.tunnel,

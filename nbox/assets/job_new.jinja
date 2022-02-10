@@ -1,0 +1,64 @@
+# Auto generated code by 'nbox jobs new' command
+# project name: {{ project_name }}
+# created time: {{ created_time }}
+#   created by: {{ username }}
+#
+# > feeling stuck, start by populating the functions below <
+
+import sys
+from fire import Fire{% if scheduled %}
+from datetime import datetime
+{% endif %}
+
+from nbox import Operator
+from nbox.utils import folder{% if scheduled %}
+from nbox.network import Cron{% endif %}
+
+
+def get_op() -> Operator:
+  # since initialising your operator might require passing a bunch of arguments
+  # you can use this function to get the operator by manually defining things here
+
+  return None
+
+
+def deploy():
+  op: Operator = get_op()
+  op.deploy(
+    workspace = workspace, # :str: workspace name or id
+
+    # if job_id is None, new job will be created with job_name
+    job_id = job_id,     # :str: job id
+    job_name = job_name, # :str: job name
+    # no need to change these
+    init_folder = folder(__file__),
+    {% if scheduled %}
+    # simple scheduler like your Calender App
+    # "run at 4:30 every Friday" = Cron(4, 30, ["fri", "sat"], ["jan"])
+    #       "run every 10 hours" = Cron(10)
+    schedule = Cron(
+      hour,          # :int: Hour for the job to run
+      minute,        # :int: Minute for the job to run
+      days = [],     # :list: Days of the week for the job to run, first three characters
+      months = [],   # :list: Months of the year for the job to run, first three characters
+      starts = None, # :datetime: Starting datetime for the job
+      ends = None,   # :datetime: Ending datetime for the job
+    ),{% endif %}
+  )
+
+def run():
+  op: Operator = get_op()
+  {% if scheduled %}
+  op() # your operator is recurring avoid passing any values here
+  {% else %}
+  op(
+    # your operator is going to run once, try passing all inputs here
+  )
+  {% endif %}
+
+
+if __name__ == "__main__":
+  Fire({"deploy": deploy, "run": run})
+  sys.exit(0)
+
+# end of auto generated code

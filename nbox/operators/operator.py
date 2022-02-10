@@ -400,6 +400,7 @@ class Operator(AirflowMixin):
   def deploy(
     self,
     schedule: Cron,
+    workspace: str,
     init_folder: str = None,
     cache_dir: str = None,
     job_id = None,
@@ -463,6 +464,6 @@ class Operator(AirflowMixin):
       for f in all_f:
         zip_file.write(f)
 
-    deploy_job(zip_path = zip_path, schedule = schedule, data = data)
+    deploy_job(zip_path = zip_path, schedule = schedule, data = data, workspace = workspace)
 
   # /nbx

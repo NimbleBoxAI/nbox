@@ -12,7 +12,7 @@ import requests
 import tempfile
 import randomname
 from uuid import uuid4
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed, wait
 
 
 # logging/
@@ -23,7 +23,6 @@ logger = logging.getLogger()
 # /logging
 
 # common/
-POOL_SUPPORTED_MODES = ["thread"]
 
 nbox_session = requests.Session()
 
@@ -79,10 +78,10 @@ def get_files_in_folder(folder, ext = [".txt"]):
           all_paths.append(os.path.join(root,f))
   return all_paths
 
-def fetch(url):
+def fetch(url, force = False):
   # efficient loading of URLs
   fp = join(tempfile.gettempdir(), hash_(url))
-  if os.path.isfile(fp) and os.stat(fp).st_size > 0:
+  if os.path.isfile(fp) and os.stat(fp).st_size > 0 and not force:
     with open(fp, "rb") as f:
       dat = f.read()
   else:
@@ -170,13 +169,26 @@ class PoolBranch:
 
     Usage:
       
-      def sleep_and_return(x):
-        from time import sleep
-        sleep(x)
-        return x
-      
+      fn = [
+        lambda x : x + 0,
+        lambda x : x + 1,
+        lambda x : x + 2,
+        lambda x : x + 3,
+      ]
+
+      args = [
+        (1,), (2,), (3,), (4,),
+      ]
+
       pool = PoolBranch()
-      results = pool(sleep_and_return, (2,),(6,),(4,),(5,)) # inputs must be a tuple
+      out = pool(fn[2], *args)
+      # [1+2, 2+2, 3+2, 4+2] => [3, 4, 5, 6]
+      print(out)
+
+      branch = PoolBranch()
+      out = branch(fn, *args)
+      # [1+0, 2+1, 3+2, 4+3] => [1, 3, 5, 7]
+      print(out)
     """
     self.mode = mode
     self.item_id = -1 # because +1 later
@@ -187,8 +199,12 @@ class PoolBranch:
         max_workers=max_workers,
         thread_name_prefix=_name
       )
+    elif mode == "process":
+      self.executor = ProcessPoolExecutor(
+        max_workers=max_workers,
+      )
     else:
-      raise Exception(f"Only {', '.join(POOL_SUPPORTED_MODES)} mode(s) are supported")
+      raise Exception(f"Only 'thread/process' modes are supported")
     logger.info(f"Starting {mode.upper()}-PoolBranch ({_name}) with {max_workers} workers")
 
   def __call__(self, fn, *args):
@@ -206,25 +222,43 @@ class PoolBranch:
     
     futures = {}
     if isinstance(fn, (list, tuple)) and callable(fn[0]):
-      assert len(fn) == len(args), "Number of functions and arguments must be same in branching"
+      assert len(fn) == len(args), f"Number of functions ({len(fn)}) and arguments ({len(args)}) must be same in branching"
     else:
       assert callable(fn), "fn must be callable in pooling"
       fn = [fn for _ in range(len(args))] # convinience
 
-    for i, (_fn, x) in enumerate(zip(fn, args)):
-      futures[self.executor.submit(_fn, *x)] = i # insertion index
-
     self.item_id += len(futures)
     results = {}
-    for future in as_completed(futures):
-      try:
-        result = future.result()
-        results[futures[future]] = result # update that index
-      except Exception as e:
-        logger.error(f"{self.mode} error: {e}")
-        raise e
+    
+    if self.mode == "thread":
+      for i, (_fn, x) in enumerate(zip(fn, args)):
+        futures[self.executor.submit(_fn, *x)] = i # insertion index
+      for future in as_completed(futures):
+        try:
+          result = future.result()
+          results[futures[future]] = result # update that index
+        except Exception as e:
+          logger.error(f"{self.mode} error: {e}")
+          raise e
 
-    return [results[x] for x in range(len(results))]
+      res = [results[x] for x in range(len(results))]
+    
+    elif self.mode == "process":
+      res = {}
+      for i in range(len(args)):
+        # print(args[i],)
+        out = self.executor.submit(
+          fn[i], args[i],
+        )
+        res[out] = i
+        # print(out)
+
+      print(res)
+
+      for x in as_completed(res):
+        print(x)
+    
+    return res
 
 # /pool
 

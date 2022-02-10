@@ -3,6 +3,7 @@
 # read as "from nbox's framework on Functions import the pure-function Parser"
 
 import ast
+import base64
 import inspect
 from uuid import uuid4
 from logging import getLogger
@@ -37,6 +38,8 @@ class DBase:
   def __repr__(self):
     return str(self.get_dict())
 
+# ================== These classes are the code nodes
+
 class ExpressionNodeInfo(DBase):
   __slots__ = [
     'name', # :str
@@ -57,6 +60,22 @@ class IfNodeInfo(DBase):
     'inputs', # :list[Dict[Any, Any]]
     'outputs', # :list[str]
   ]
+
+class ForNodeInfo(DBase):
+  __slots__ = [
+    'nbox_string', # :str
+    'iterable', # :list[str]
+    'inputs', # :list[Dict[Any, Any]]
+    'node_info', # :ExpressionNodeInfo
+    'code', # :str
+  ]
+
+class ReturnNodeInfo(DBase):
+  __slots__ = [
+    'nbox_string', # :str
+  ]
+
+# ================== These classes create the DAG
 
 class RunStatus(DBase):
   __slots__ = [
@@ -95,7 +114,8 @@ class NboxStrings:
   OP_TO_STRING = {
     "function": "FUNCTION: {name} ( {inputs} ) => [ {outputs} ]",
     "define": "DEFINE: {name} ( {inputs} )",
-    "for": "FOR: {name} ( {iter} ) => ( {target} )",
+    "for": "FOR: ( {iter} ) => [ {target} ]",
+    "return": "RETURN: [ {value} ]",
   }
 
   def __init__(self):
@@ -114,21 +134,26 @@ class NboxStrings:
       inputs=", ".join([f"{x['kwarg']}={x['value']}" for x in inputs])
     )
 
-  def _for(self, name, iter, target):
+  def for_loop(self, iter, target):
     return self.OP_TO_STRING["for"].format(
-      name=name,
       iter=iter,
       target=target
+    )
+
+  def return_statement(self, value):
+    return self.OP_TO_STRING["return"].format(
+      value=value
     )
 
 nbxl = NboxStrings()
 
 def write_program(nodes):
   for i, n in enumerate(nodes):
-    if n.nbox_string == None:
-      logger.info(f"{i:03d}|{n.node_info.nbox_string}")
+    if n.get("nbox_string") == None:
+      logger.info(f"{i:03d}|{n.get('node_info').get('nbox_string')}")
     else:
-      logger.info(f"{i:03d}|{n.nbox_string}")
+      logger.info(f"{i:03d}|{n.get('nbox_string')}")
+
 
 # ==================
 
@@ -147,7 +172,6 @@ def get_code_portion(cl, lineno, col_offset, end_lineno, end_col_offset, b64 = T
   
   # convert to base64
   if b64:
-    import base64
     return base64.b64encode(code.encode()).decode()
   return code
 
@@ -211,7 +235,7 @@ def parse_kwargs(node, lines):
   if isinstance(node, ast.Call):
     return get_code_portion(lines, **node.func.__dict__)
 
-def node_assign_or_expr(node, lines):
+def node_assign_or_expr(node, lines) -> ExpressionNodeInfo:
   # print(get_code_portion(lines, **node.__dict__))
   value = node.value
   try:
@@ -249,7 +273,7 @@ def node_assign_or_expr(node, lines):
     end_col_offset = node.end_col_offset,
   )
 
-def node_if_expr(node, lines):
+def node_if_expr(node, lines) -> IfNodeInfo:
   def if_cond(node, lines, conds = []):
     if not hasattr(node, "test"):
       else_cond = list(filter(lambda x: x["condition"] == "else", conds))
@@ -324,8 +348,28 @@ def node_if_expr(node, lines):
     outputs = []
   )
 
+def node_for_expr(node, lines) -> ForNodeInfo:
+  targets = [x.id for x in node.target.elts]
+  iter_str = get_code_portion(lines, **node.iter.__dict__)
+  code = get_code_portion(lines, **node.body[0].__dict__)
+  return ForNodeInfo(
+    targets = targets,
+    iter_str = iter_str,
+    code = code,
+    nbox_string = nbxl.for_loop(iter_str, targets),
+  )
+
+def node_return(node, lines) -> ReturnNodeInfo:
+  return ReturnNodeInfo(
+    nbox_string = nbxl.return_statement(get_code_portion(lines, **node.value.__dict__)),
+  )
+
 def def_func_or_class(node, lines):
-  out = {"name": node.name, "code": get_code_portion(lines, **node.__dict__), "type": "def-node"}
+  out = {
+    "name": node.name,
+    "code": get_code_portion(lines, **node.__dict__),
+    "type": "def-node"
+  }
   if isinstance(node, ast.FunctionDef):
     out.update({"func": True, "inputs": parse_args(node.args)})
   else:
@@ -344,6 +388,13 @@ type_wise_logic = {
   ast.Assign: node_assign_or_expr,
   ast.Expr: node_assign_or_expr,
   ast.If: node_if_expr,
+  ast.For: node_for_expr,
+
+  # Tuples ------
+  ast.Tuple: node_assign_or_expr,
+
+  # Return ------
+  ast.Return: node_return,
 
   # todos ------
   # ast.AsyncFunctionDef: async_func_def,
@@ -353,6 +404,12 @@ type_wise_logic = {
 # ==================
 
 def get_nbx_flow(forward):
+  """Get NBX flowchart. Read python grammar here:
+  https://docs.python.org/3/reference/grammar.html
+
+  Args:
+      forward (callable): the function whose flowchart is to be generated
+  """
   # get code string from operator
   code = inspect.getsource(forward).strip()
   code_lines = code.splitlines()
@@ -414,6 +471,30 @@ def get_nbx_flow(forward):
         name = f"if-{i}",
         type = "op-node",
         operator = "Conditional",
+        node_info = output,
+        nbox_string = output.nbox_string,
+        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
+      )
+      nodes.append(output)
+    elif isinstance(output, ForNodeInfo):
+      output = Node(
+        id = str(uuid4()),
+        execution_index = i,
+        name = f"for-{i}",
+        type = "op-node",
+        operator = "Loop",
+        node_info = output,
+        nbox_string = output.nbox_string,
+        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
+      )
+      nodes.append(output)
+    elif isinstance(output, ReturnNodeInfo):
+      output = Node(
+        id = str(uuid4()),
+        execution_index = i,
+        name = f"return",
+        type = "op-node",
+        operator = "Return",
         node_info = output,
         nbox_string = output.nbox_string,
         run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
