@@ -149,10 +149,7 @@ nbxl = NboxStrings()
 
 def write_program(nodes):
   for i, n in enumerate(nodes):
-    if n.get("nbox_string") == None:
-      logger.info(f"{i:03d}|{n.get('node_info').get('nbox_string')}")
-    else:
-      logger.info(f"{i:03d}|{n.get('nbox_string')}")
+    logger.info(f"{i:03d}|{n.get('nbox_string')}")
 
 
 # ==================
