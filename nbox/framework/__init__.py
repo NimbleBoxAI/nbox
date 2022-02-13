@@ -21,40 +21,25 @@ Documentation
 -------------
 """
 
-from .on_ml import NBXModel, TorchModel, SklearnModel, ONNXRtModel, IllegalFormatError
-from .on_operators import AirflowMixin
+from .on_ml import  *
+from .on_operators import *
 
-# this function is for getting the meta data and is framework agnostic, so adding this in the
-# __init__ of framework submodule
-def get_meta(input_names, input_shapes, args, output_names, output_shapes, outputs):
-  """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
-  # get the meta object
-  def __get_struct(names_, shapes_, tensors_):
-    return {
-      name: {
-        "dtype": str(tensor.dtype),
-        "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
-        "name": name,
-      }
-      for name, shapes, tensor in zip(names_, shapes_, tensors_)
-    }
 
-  meta = {"inputs": __get_struct(input_names, input_shapes, args), "outputs": __get_struct(output_names, output_shapes, outputs)}
-
-  return meta
-
-def get_model_mixin(i0, i1):
+def get_model_mixin(i0, i1 = None, deserialise = False):
   all_e = []
   for m in (
     NBXModel, TorchModel, SklearnModel, ONNXRtModel
   ):
     try:
       # if this is the correct method 
-      return m(i0, i1)
-    except IllegalFormatError as e:
+      if not deserialise:
+        return m(i0, i1)
+      else:
+        return m.deserialise(i0)
+    except InvalidProtocolError as e:
       all_e.append(f"--> ERROR: {type(m)}: {e}")
 
-  raise IllegalFormatError(
-    f"Unkown inputs: {type(i0)} {type(i1)}!" + \
+  raise InvalidProtocolError(
+    f"Unkown inputs [{deserialise}]: {type(i0)} {type(i1)}!" + \
     "\n".join(all_e)
   )

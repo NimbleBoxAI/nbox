@@ -6,7 +6,7 @@ import inspect
 from typing import Dict
 
 from .model import Model
-from .utils import _isthere, fetch
+from .utils import fetch, isthere
 
 import logging
 
@@ -41,120 +41,85 @@ def remove_kwargs(model_fn, kwargs):
 # Each model builder function looks as follows:
 # def model_builder() -> (model, model_kwargs)
 
+@isthere("efficientnet_pytorch", soft = False)
+def _efficientnet_pytorch_models(pretrained=False, **kwargs):
+  import efficientnet_pytorch
 
-def load_efficientnet_pytorch_models() -> Dict:
-  def model_builder(pretrained=False, **kwargs):
-    import efficientnet_pytorch
+  if pretrained:
+    model_fn = efficientnet_pytorch.EfficientNet.from_pretrained
+  else:
+    model_fn = efficientnet_pytorch.EfficientNet.from_name
 
-    if pretrained:
-      model_fn = efficientnet_pytorch.EfficientNet.from_pretrained
-    else:
-      model_fn = efficientnet_pytorch.EfficientNet.from_name
-
-    kwargs = remove_kwargs(model_fn, kwargs)
-    return model_fn(**kwargs), {}
-
-  return {"efficientnet_pytorch/efficientnet": (model_builder, "image")}
+  kwargs = remove_kwargs(model_fn, kwargs)
+  return model_fn(**kwargs)
 
 
-def load_torchvision_models() -> Dict:
-  def model_builder(model, pretrained=False, **kwargs):
-    # tv_mr = torchvision models registry
-    # this is a json object that maps all the models to their respective methods from torchvision
-    # the trick to loading is to eval the method string
-    tv_mr = json.loads(fetch("https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/pt_models.json").decode("utf-8"))
-    model_fn = tv_mr.get(model, None)
-    if model_fn == None:
-      raise IndexError(f"Model: {model} not found in torchvision")
+@isthere("torchvision", soft = False)
+def _torchvision_models(model, pretrained=False, **kwargs) -> Dict:
+  # tv_mr = torchvision models registry
+  # this is a json object that maps all the models to their respective methods from torchvision
+  # the trick to loading is to eval the method string
+  tv_mr = json.loads(fetch("https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/pt_models.json").decode("utf-8"))
+  model_fn = tv_mr.get(model, None)
+  if model_fn == None:
+    raise IndexError(f"Model: {model} not found in torchvision")
 
-    # torchvision is imported here, if it is imported in the outer method, eval fails
-    # reason: unknown
-    import torchvision
+  # torchvision is imported here, if it is imported in the outer method, eval fails
+  # reason: unknown
+  import torchvision
 
-    model_fn = eval(model_fn)
-    kwargs = remove_kwargs(model_fn, kwargs)
-    model = model_fn(pretrained=pretrained, **kwargs)
-    return model, {}
-
-  return {"torchvision": (model_builder, "image")}
+  model_fn = eval(model_fn)
+  kwargs = remove_kwargs(model_fn, kwargs)
+  model = model_fn(pretrained=pretrained, **kwargs)
+  return model
 
 
-def load_transformers_models() -> Dict:
-  def hf_model_builder(model, model_instr, **kwargs):
-    import transformers
+@isthere("transformers", soft = False)
+def _transformers_models(model, model_instr, **kwargs):
+  import transformers
 
-    _auto_loaders = {x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"}
+  _auto_loaders = {x: getattr(transformers, x) for x in dir(transformers) if x[:4] == "Auto" and x != "AutoConfig"}
 
-    model_instr = model_instr.split("::")
-    if len(model_instr) == 1:
-      auto_model_type = model_instr[0]
-    else:
-      # if the task is given, validate that as well
-      auto_model_type, task = model_instr
-      assert task in [
-        "generation",
-        "masked_lm",
-      ], "For now only the following are supported: `generation`, `masked_lm`"
+  model_instr = model_instr.split("::")
+  if len(model_instr) == 1:
+    auto_model_type = model_instr[0]
+  else:
+    # if the task is given, validate that as well
+    auto_model_type, task = model_instr
+    assert task in [
+      "generation",
+      "masked_lm",
+    ], "For now only the following are supported: `generation`, `masked_lm`"
 
-    # initliase the model and tokenizer object
-    tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
+  # initliase the model and tokenizer object
+  tokenizer = transformers.AutoTokenizer.from_pretrained(model, **kwargs)
 
-    # All the tokenizers must contain the pad_token, by default we set it to eos_token
-    if not tokenizer.pad_token:
-      tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
+  # All the tokenizers must contain the pad_token, by default we set it to eos_token
+  if not tokenizer.pad_token:
+    tokenizer.add_special_tokens({"pad_token": tokenizer.eos_token})
 
-    # tokenizer.pad_token = tokenizer.eos_token if not tokenizer.pad_token_id else tokenizer.pad_token
-    model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
+  # tokenizer.pad_token = tokenizer.eos_token if not tokenizer.pad_token_id else tokenizer.pad_token
+  model = _auto_loaders[auto_model_type].from_pretrained(model, **kwargs)
 
-    # return the model and tokenizer
-    return model, {"tokenizer": tokenizer}
-
-  return {"transformers": (hf_model_builder, "text")}
+  # return the model and tokenizer
+  return model, {"tokenizer": tokenizer}
 
 
 ### ----- pretrained models master index
 # add code based on conditionals, best way is to only include those that
 # have proper model building code like transformers, torchvision, etc.
 
-PRETRAINED_MODELS = {}
-all_repos = ["efficientnet_pytorch", "torchvision", "transformers"]
-
-logger.info(f"Loading plugins")
-for repo in all_repos:
-  if _isthere(repo):
-    PRETRAINED_MODELS.update(locals()[f"load_{repo}_models"]())
-
-# if there are no pretrained models available, then raise an error
-if not PRETRAINED_MODELS:
-  logging.warning("No pretrained models available")
-
-# ---- plug your own models and in extension the methods here
-
-
-def plug(src_name, builder_fn, cataegory):
-  """Plug your nbox_builder methods here. Once plugged in your codebase, you can use the
-  simplicity of nbox.loaders
-
-  Args:
-    src_name (str): name of the source
-    builder_fn (func): function to be called to build the model
-    cataegory (dict): input categories for the input
-d
-  Raises:
-    ValueError: if src_name is already in the index
-  """
-  # check if the source is already present
-  if src_name in PRETRAINED_MODELS:
-    logging.warning(f"Source: {src_name} already present in the pretrained models index")
-    return
-
-  PRETRAINED_MODELS[src_name] = (builder_fn, cataegory) # add the source
+PRETRAINED_MODELS = {
+  "efficientnet_pytorch": _efficientnet_pytorch_models,
+  "torchvision": _torchvision_models,
+  "transformers": _transformers_models,
+}
 
 
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model_key_or_url, verbose=False, **loader_kwargs):
+def load(model, pre_fn = None, verbose=False, **loader_kwargs) -> Model:
   """This function loads the nbox.Model object from the pretrained models index.
 
   Args:
@@ -177,28 +142,28 @@ def load(model_key_or_url, verbose=False, **loader_kwargs):
     IndexError: If `source` is found but `source/key` is not found
 
   Returns:
-    nbox.Model: when using local inference
-    nbox.NBXApi: when using cloud inference
+    nbox.Model
   """
   # the input key can also contain instructions on how to run a particular models and so
-  model_key_parts = re.findall(model_key_regex, model_key_or_url)
+  model_key_parts = re.findall(model_key_regex, model)
   if not model_key_parts:
-    raise ValueError(f"Key: {model_key_or_url} incorrect, please check!")
+    raise ValueError(f"Key: {model} incorrect, please check!")
 
   # this key is valid, now get it's components
   src, src_key, model_instr = model_key_parts[0]
   src_key = src_key.strip("/") # remove leading and trailing slashes
   model_instr = model_instr.replace(":", "") # remove the :
-  model_key = model_key_or_url
+  model_key = model
 
-  model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
-  if model_meta is None:
-    model_fn, model_meta = PRETRAINED_MODELS.get(src, (None, None))
-    if model_meta is None:
-      raise IndexError(f"Model: {src} not found")
+  model_fn = PRETRAINED_MODELS.get(src, None)
+  if model_fn is None:
+    raise IndexError(f"Model: {src} not found")
 
   # now just load the underlying graph and the model and off you go
-  model, model_kwargs = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
-  out = Model(model_or_model_url=model, category=model_meta, model_key=model_key, verbose=verbose, **model_kwargs)
-
+  model = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
+  out = Model(
+    m0 = model,
+    m1 = pre_fn,
+    verbose=verbose,
+  )
   return out

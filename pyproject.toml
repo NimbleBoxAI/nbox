@@ -15,6 +15,7 @@ requests = "^2.25.1"
 tabulate = "0.8.9"
 grpcio = "1.43.0"
 Jinja2 = "3.0.3"
+dill = "0.3.4"
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

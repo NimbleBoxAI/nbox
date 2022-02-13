@@ -29,7 +29,7 @@ class DBase:
         continue
       if isinstance(_obj, DBase):
         data[k] = _obj.get_dict()
-      elif _obj != None and isinstance(_obj, list) and len(_obj) and isinstance(_obj[0], DBase):
+      elif _obj != None and isinstance(_obj, (list, tuple)) and len(_obj) and isinstance(_obj[0], DBase):
         data[k] = [_obj.get_dict() for _obj in _obj]
       else:
         data[k] = _obj
@@ -137,7 +137,7 @@ class NboxStrings:
   def for_loop(self, iter, target):
     return self.OP_TO_STRING["for"].format(
       iter=iter,
-      target=target
+      target=", ".join(target)
     )
 
   def return_statement(self, value):
@@ -149,7 +149,7 @@ nbxl = NboxStrings()
 
 def write_program(nodes):
   for i, n in enumerate(nodes):
-    logger.info(f"{i:03d}|{n.get('nbox_string')}")
+    logger.info(f"{i:03d}|{n.get('nbox_string', n.get('node_info').get('nbox_string'))}")
 
 
 # ==================
@@ -208,10 +208,10 @@ def get_name(node):
 def parse_kwargs(node, lines):
   if isinstance(node, ast.Name):
     return node.id
-  if isinstance(node, ast.Constant):
+  elif isinstance(node, ast.Constant):
     val = node.value
     return val
-  if isinstance(node, ast.keyword):
+  elif isinstance(node, ast.keyword):
     arg = node.arg
     value = node.value
     if 'id' in value.__dict__:
@@ -229,11 +229,11 @@ def parse_kwargs(node, lines):
       #   ^^^   ^^^^^
       # kwarg   value
       return {"kwarg": arg, "value": get_code_portion(lines, b64 = False, **value.__dict__)}
-  if isinstance(node, ast.Call):
+  elif isinstance(node, ast.Call):
     return get_code_portion(lines, **node.func.__dict__)
 
 def node_assign_or_expr(node, lines) -> ExpressionNodeInfo:
-  # print(get_code_portion(lines, **node.__dict__))
+  # print(get_code_portion(lines, b64 = False, **node.__dict__))
   value = node.value
   try:
     name = get_name(value.func)
@@ -387,9 +387,6 @@ type_wise_logic = {
   ast.If: node_if_expr,
   ast.For: node_for_expr,
 
-  # Tuples ------
-  ast.Tuple: node_assign_or_expr,
-
   # Return ------
   ast.Return: node_return,
 
@@ -461,6 +458,7 @@ def get_nbx_flow(forward):
         run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(output)
+    
     elif isinstance(output, IfNodeInfo):
       output = Node(
         id = str(uuid4()),
@@ -473,6 +471,7 @@ def get_nbx_flow(forward):
         run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(output)
+    
     elif isinstance(output, ForNodeInfo):
       output = Node(
         id = str(uuid4()),
@@ -485,6 +484,7 @@ def get_nbx_flow(forward):
         run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(output)
+    
     elif isinstance(output, ReturnNodeInfo):
       output = Node(
         id = str(uuid4()),
@@ -497,6 +497,7 @@ def get_nbx_flow(forward):
         run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(output)
+    
     elif "def" in output["type"]:
       symbols_to_nodes[output['name']] = {
         "node_info": output,

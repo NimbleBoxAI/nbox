@@ -2,56 +2,24 @@
 
 import os
 import json
-import shutil
-import inspect
 import tarfile
 from glob import glob
+from copy import deepcopy
+from datetime import datetime
 from tempfile import gettempdir
 
 from . import utils
-from .framework import get_meta, get_model_mixin
+from .framework import get_model_mixin
 from .network import deploy_model
-from .framework.on_ml import ModelOutput
+from .framework.on_ml import ModelOutput, ModelSpec
 
 import logging
 logger = logging.getLogger()
 
-
-class GenericMixin:
-  def eval(self):
-    """if underlying model has eval method, call it"""
-    if hasattr(self.model_or_model_url, "eval"):
-      self.model_or_model_url.eval()
-
-  def train(self):
-    """if underlying model has train method, call it"""
-    if hasattr(self.model_or_model_url, "train"):
-      self.model_or_model_url.train()
-
-  def __repr__(self):
-    return f"<nbox.Model: {self.model_or_model_url} >"
-
-# utils/
-
-# /utils
-
 # model/
 
-class Model(GenericMixin):
-  def __init__(
-    self,
-    model,
-    model_support,
-    cache_dir = None,
-    verbose=False,
-
-    nbx_api_key=None,
-    category=None,
-    tokenizer=None,
-    model_key=None,
-    nbox_meta=None,
-    
-  ):
+class Model:
+  def __init__(self, m0, m1, verbose=False):
     """Top of the stack Model class.
 
     >> BREAKING <<
@@ -84,32 +52,34 @@ class Model(GenericMixin):
     YoCo. Since there is a decidate serialise function, we should have one for deserialisation as well. Use
     ``nbox.Model.desirialise`` to load a serialised model.
     """
-    
-    
-    self.user_model = model
-    self.model_support = model_support
-    self.cache_dir = cache_dir
-    self.verbose = verbose
 
+
+    self.user_model = m0
+    self.model_support = m1
+    self.verbose = verbose
     self.model = get_model_mixin(self.user_model, self.model_support)
 
-    # # values coming from the blocks above
-    # self.model_or_model_url = model_or_model_url
-    # self.__framework = __framework
-    # self.text_parser = text_parser
-    # self.image_parser = image_parser
-    # self.nbox_meta = nbox_meta
-    # self.nbx_api_key = nbx_api_key
-    # self.category = category
-    # self.tokenizer = tokenizer
-    # self.model_key = model_key
-    # self.verbose = verbose
-    # self.__device = "cpu"
-    # self.cache_dir = gettempdir() if cache_dir == None else cache_dir
+################################################################################
+# Functions here utility functions
+################################################################################
 
-    logger.info(f"Model loaded successfully")
-    # logger.info(f"Model framework: {self.__framework}")
-    # logger.info(f"Model category: {self.category}")
+  def __repr__(self):
+    return f"<nbox.Model: {self.model} >"
+
+  def eval(self):
+    """if underlying model has eval method, call it"""
+    if hasattr(self.model, "eval"):
+      self.model.eval()
+
+  def train(self):
+    """if underlying model has train method, call it"""
+    if hasattr(self.model, "train"):
+      self.model.train()
+
+################################################################################
+# Functions here are the services that NBX provides to the user and no longer
+# >0.8.7 the implementation of processing logic.
+################################################################################
 
   def __call__(self, input_object) -> ModelOutput:
     r"""Caller is the most important UI/UX. The ``input_object`` can be anything from
@@ -131,269 +101,66 @@ class Model(GenericMixin):
     Returns:
       Any: currently this is output from the model, so if it is tensors and return dicts.
     """
-
-    # the forward_pass is a method for the current model, this is responsible for parsing and
-    # processing the input object.
-    out = self.model.forward(input_object)
-
-    # add post here
- 
-    # # convert to dictionary if needed
-    # if return_dict:
-    #   output_names = list(self.nbox_meta["metadata"]["outputs"].keys())
-    #   if isinstance(out, (tuple, list)):
-    #     out = {k: v for k, v in zip(output_names, out)}
-    #   elif isinstance(out, dict):
-    #     pass
-    #   else:
-    #     try:
-    #       if isinstance(out, (torch.Tensor, np.ndarray)):
-    #         out = {k: v.tolist() for k, v in zip(output_names, [out])}
-    #     except NameError:
-    #       pass
-
-    #     raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
-
-    # if return_inputs:
-    #   return out, model_input
-    return out
-
-  def _handle_input_object(self, input_object):
-    """First level handling to convert the input object to a fixed object"""
-    # in case of scikit learn user must ensure that the input_object is model_input
-    if self.__framework == "sklearn":
-      return input_object
-
-    elif self.__framework in ["nbx", "onnx"]:
-      # the beauty is that the server is using the same code as this meaning that client
-      # can get away with really simple API calls
-      inputs_deploy = set(self.nbox_meta["metadata"]["inputs"].keys())
-      if isinstance(input_object, dict):
-        inputs_client = set(input_object.keys())
-        assert inputs_deploy == inputs_client, f"Inputs mismatch, deploy: {inputs_deploy}, client: {inputs_client}"
-        input_object = input_object
-      else:
-        if len(inputs_deploy) == 1:
-          input_object = {list(inputs_deploy)[0]: input_object}
-        else:
-          assert len(input_object) == len(inputs_deploy), f"Inputs mismatch, deploy: {inputs_deploy}, client: {len(input_object)}"
-          input_object = {k: v for k, v in zip(inputs_deploy, input_object)}
-
-    if isinstance(self.category, dict):
-      assert isinstance(input_object, dict), "If category is a dict then input must be a dict"
-      # check for same keys
-      assert set(input_object.keys()) == set(self.category.keys())
-      input_dict = {}
-      for k, v in input_object.items():
-        if k in self.category:
-          if self.category[k] == "image":
-            input_dict[k] = self.image_parser(v)
-          elif self.category[k] == "text":
-            input_dict[k] = self.text_parser(v)
-          elif self.category[k] == "tensor":
-            input_dict[k] = v
-          else:
-            raise ValueError(f"Unsupported category: {self.category[k]}")
-      return input_dict
-
-    elif self.category == "image":
-      input_obj = self.image_parser(input_object)
-      return input_obj
-
-    elif self.category == "text":
-      # perform parsing for text and pass to the model
-      input_dict = self.text_parser(input_object)
-      return input_dict
-
-    # Code below this part is super flaky and is useful for sklearn model,
-    # please improve this as more usecases come up
-    elif self.category == None:
-      if isinstance(input_object, dict):
-        return {k: v.tolist() for k, v in input_object.items()}
-      return input_object.tolist()
-
-    # when user gives a list as an input, it's better just to pass it as is
-    # but when the input becomes a dict, this might fail.
-    return input_object
-
-  def get_nbox_meta(self, input_object, return_kwargs = True):
-    """Get the nbox meta and trace args for the model with the given input object
-
-    Args:
-      input_object (Any): input to be processed
-    """
-    # this function gets the nbox metadata for the the current model, based on the input_object
-    if self.__framework == "nbx":
-      return self.nbox_meta
-
-    args = None
-    if self.__framework == "pytorch":
-      args = inspect.getfullargspec(self.model_or_model_url.forward).args
-      args.remove("self")
-
-    self.eval() # covert to eval mode
-    model_output, model_input = self(input_object, return_inputs=True)
-
-    # need to convert inputs and outputs to list / tuple
-    dynamic_axes_dict = {
-      0: "batch_size",
-    }
-    if self.category == "text":
-      dynamic_axes_dict[1] = "sequence_length"
-
-    # need to convert inputs and outputs to list / tuple
-    if isinstance(model_input, dict):
-      model_inputs = tuple(model_input.values())
-      input_names = tuple(model_input.keys())
-      input_shapes = tuple([tuple(v.shape) for k, v in model_input.items()])
-    elif isinstance(model_input, (torch.Tensor, np.ndarray)):
-      model_inputs = tuple([model_input])
-      input_names = tuple(["input_0"]) if args is None else tuple(args)
-      input_shapes = tuple([tuple(model_input.shape)])
-    dynamic_axes = {i: dynamic_axes_dict for i in input_names}
-
-    if isinstance(model_output, dict):
-      output_names = tuple(model_output.keys())
-      output_shapes = tuple([tuple(v.shape) for k, v in model_output.items()])
-      model_output = tuple(model_output.values())
-    elif isinstance(model_output, (list, tuple)):
-      mo = model_output[0]
-      if isinstance(mo, dict):
-        # cases like [{"output_0": tensor, "output_1": tensor}]
-        output_names = tuple(mo.keys())
-        output_shapes = tuple([tuple(v.shape) for k, v in mo.items()])
-      else:
-        output_names = tuple([f"output_{i}" for i, x in enumerate(model_output)])
-        output_shapes = tuple([tuple(v.shape) for v in model_output])
-    elif isinstance(model_output, (torch.Tensor, np.ndarray)):
-      output_names = tuple(["output_0"])
-      output_shapes = (tuple(model_output.shape),)
-
-    meta = get_meta(input_names, input_shapes, model_inputs, output_names, output_shapes, model_output)
-    out = {
-      "args": model_inputs,
-      "outputs": model_output,
-      "input_shapes": input_shapes,
-      "output_shapes": output_shapes,
-      "input_names": input_names,
-      "output_names": output_names,
-      "dynamic_axes": dynamic_axes,
-    }
-    if return_kwargs:
-      return meta, out
-    return meta
+    return self.model.forward(input_object)
 
   def serialise(
     self,
     input_object,
-    model_name=None,
+    model_name,
     export_type="onnx",
-    generate_ov_args = False,
-    return_meta = False
-  ):
-    """This creates a singular .nbox file that contains the model binary and config file in ``self.cache_dir``
+    return_meta = False,
+    *,
+    _unit_test = False,
+    **kwargs
+  ) -> str:
+    """This creates a singular .nbox file that contains the model binary and config file in ``self.cache_dir``:
 
-    Creates a folder at ``/tmp/{hash}`` and then adds three files to it:
-      - ``/tmp/{hash}/{model_name}.{export_type}``
-      - ``/tmp/{hash}/{model_name}.json``
-      - ``/tmp/{hash}/{model_name}.nbox``
-
-    and then later deletes the ``{model_name}.{export_type}`` and ``{model_name}.json`` and returns
-    ``{model_name}.nbox`` and if required the metadata
+    Creates a folder at ``/tmp/{model_name}`` and then let's the underlying framework to fill it with anything
+    that it wants. Once the entire creation of file is completed it will zip them all in ``/tmp/{model_name}.nbox``
+    in process deleting all the files.
 
     Args:
       input_object (Any): input to be processed
       model_name (str, optional): name of the model
       export_type (str, optional): [description]. Defaults to "onnx".
       generate_ov_args (bool, optional): Return the CLI args to be passed for Intel OpenVino
+
+    Returns:
+      path (str): path for the tar file
     """
 
-    # First Step: check the args and see if conditionals are correct or not
-    def __check_conditionals():
-      assert self.__framework != "nbx", "This model is already deployed on the cloud"
-      assert export_type in ["onnx", "torchscript", "pkl"], "Export type must be onnx, torchscript or pickle"
-      if self.__framework == "sklearn":
-        assert export_type in ["onnx", "pkl"], f"Export type must be onnx or pkl | got {export_type}"
-      if self.__framework == "pytorch":
-        assert export_type in ["onnx", "torchscript"], f"Export type must be onnx or torchscript | got {export_type}"
-
-    # perform sanity checks on the input values
-    __check_conditionals()
-
-    # get metadata and exporing values
-    nbox_meta, export_kwargs = self.get_nbox_meta(input_object, return_kwargs=True)
-    _m_hash = utils.hash_(self.model_key)
-    export_folder = utils.join(self.cache_dir, _m_hash)
-    logger.info(f"Exporting model to {export_folder}")
-    os.makedirs(export_folder, exist_ok=True)
-
-    # intialise the console logger
-    model_name = model_name if model_name is not None else f"{utils.get_random_name()}-{_m_hash[:4]}".replace("-", "_")
-    export_model_path = utils.join(export_folder, f"{model_name}.{export_type}")
-    logger.info("-" * 30 + f" Exporting {model_name}")
-
-    # convert the model -> create a the spec, get the actual method for conversion
-    logger.info(f"model_name: {model_name}")
-    logger.info(f"Export type: {export_type}")
+    # create the export folder
+    folder = utils.join(
+      utils.NBOX_HOME_DIR, f"{model_name}", datetime.now().utcnow().strftime("UTC_%Y-%m-%dT%H:%M:%S")
+    ) if not _unit_test else utils.join(
+      gettempdir(), f"{model_name}"
+    )
+    logger.info(f"Serialising '{model_name}' to '{export_type}' at '{folder}'")
+    os.makedirs(folder, exist_ok=True)
     
-    try:
-      export_fn = getattr(globals()[f"frm_{self.__framework}"], f"export_to_{export_type}", None)
-      if export_fn == None:
-        raise KeyError(f"Export type {export_type} not supported for {self.__framework}")
-    except KeyError:
-      raise ValueError(f"Framework {self.__framework} not supported (likely missing packages), check logs for more info")
+    # export the model
+    nbox_meta = self.model.export(
+      format = export_type,
+      input_object = input_object,
+      export_model_path = folder,
+      **kwargs
+    )
 
-    logger.info(f"Converting using: {export_fn}")
-    export_fn(model=self.model_or_model_url, export_model_path=export_model_path, **export_kwargs)
-    logger.info("Conversion Complete")
-
-    # construct the output
-    convert_args = None
-    if generate_ov_args:
-      # https://docs.openvinotoolkit.org/latest/openvino_docs_MO_DG_prepare_model_convert_model_Converting_Model_General.html
-      input_ = ",".join(export_kwargs["input_names"])
-      input_shape = ",".join([str(list(x.shape)).replace(" ", "") for x in export_kwargs["args"]])
-      convert_args = f"--data_type=FP32 --input_shape={input_shape} --input={input_} "
-
-      if self.category == "image":
-        # mean and scale have to be defined for every single input
-        # these values are calcaulted from uint8 -> [-1,1] -> ImageNet scaling -> uint8
-        mean_values = ",".join([f"{name}[182,178,172]" for name in export_kwargs["input_names"]])
-        scale_values = ",".join([f"{name}[28,27,27]" for name in export_kwargs["input_names"]])
-        convert_args += f"--mean_values={mean_values} --scale_values={scale_values}"
-      logger.info(convert_args)
-
-    # write the nbox meta in a file and tarball the model and meta
-    nbox_meta = {
-      "metadata": nbox_meta,
-      "spec": {
-        "category": self.category,
-        "model_key": self.model_key,
-        "model_name": model_name,
-        "src_framework": self.__framework,
-        "export_type": export_type,
-        "convert_args": convert_args
-      },
-    }
-    meta_path = utils.join(export_folder, f"{model_name}.json")
+    meta_path = utils.join(folder, f"nbox_config.json")
     with open(meta_path, "w") as f:
-      f.write(json.dumps(nbox_meta))
+      f.write(json.dumps(nbox_meta.get_dict()))
 
-    nbx_path = os.path.join(export_folder, f"{model_name}.nbox")
+    nbx_path = os.path.join(folder, f"{model_name}.nbox")
     with tarfile.open(nbx_path, "w|gz") as tar:
-      tar.add(export_model_path, arcname=os.path.basename(export_model_path))
-      tar.add(meta_path, arcname=os.path.basename(meta_path))
+      for path in glob(os.path.join(folder, "*")):
+        tar.add(path, arcname = os.path.basename(path))
+        # os.remove(path)
+        logger.info(f"Removed {path}")
 
-    # remove the files
-    os.remove(export_model_path)
-    os.remove(meta_path)
-
-    if return_meta:
-      return nbx_path, nbox_meta
-    return nbx_path
+    return nbx_path if not return_meta else (nbx_path, nbox_meta)
 
   @classmethod
-  def deserialise(cls, filepath, verbose=False):
+  def deserialise(cls, filepath, **init_kwargs):
     """This is the counterpart of ``serialise``, it deserialises the model from the .nbox file.
 
     Args:
@@ -403,59 +170,30 @@ class Model(GenericMixin):
       raise ValueError(f"{filepath} is not a valid .nbox file")
 
     with tarfile.open(filepath, "r:gz") as tar:
-      folder = utils.join(gettempdir(), os.path.split(filepath)[-1].split(".")[0])
+      folder = utils.join(gettempdir(), os.path.basename(filepath).replace(".nbox", ""))
+      logger.info(f"Extracted to folder: {folder}")
       tar.extractall(folder)
 
-    files = glob(utils.join(folder, "*"))
-    nbox_meta, nbox_meta_path, model_path = None, None, None
-    for f in files:
-      ext = f.split(".")[-1]
-      if ext == "json":
-        nbox_meta_path = f
-        with open(f, "r") as f:
-          nbox_meta = json.load(f)
-      elif ext in ["onnx", "pkl", "pt", "torchscript"]:
-        model_path = f
+    # go into the currect folder so it's much easier to load things
+    _pre_dir = deepcopy(os.getcwd())
+    os.chdir(folder)
 
-    logger.info(f"nbox_meta: {nbox_meta_path}")
-    logger.info(f"model_path: {model_path}")
-    if not (nbox_meta or model_path):
-      shutil.rmtree(folder)
-      raise ValueError(f"{filepath} is not a valid .nbox file")
-
-    export_type = nbox_meta["spec"]["export_type"]
-    src_framework = nbox_meta["spec"]["src_framework"]
-    category = nbox_meta["spec"]["category"]
-
-    try:
-      if export_type == "onnx":
-        import onnxruntime
-        model = onnxruntime.InferenceSession(model_path)
-      elif src_framework == "pt":
-        if export_type == "torchscript":
-          import torch
-          model = torch.jit.load(model_path, map_location="cpu")
-      elif src_framework == "sk":
-        if export_type == "pkl":
-          with open(model_path, "rb") as f:
-            import joblib
-            model = joblib.load(f)
-    except Exception as e:
-      raise ValueError(f"{export_type} not supported, are you missing packages? {e}")
-
-    model = cls(model_or_model_url=model, category=category, nbox_meta=nbox_meta, verbose=verbose)
-    shutil.rmtree(folder)
-    return model
+    with open("./nbox_config.json", "r") as f:
+      nbox_meta = json.load(f)
+    i0, i1 = get_model_mixin(ModelSpec(**nbox_meta), deserialise=True)
+    
+    os.chdir(_pre_dir) # shift path back to original
+    return cls(i0, i1, **init_kwargs)
 
   def deploy(
     self,
     input_object,
-    model_name=None,
+    model_name,
+    export_type="onnx",
     wait_for_deployment=False,
-    runtime="onnx",
-    deployment_type="nbox",
     deployment_id=None,
     deployment_name=None,
+    **ser_kwargs,
   ):
     """NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
 
@@ -467,42 +205,29 @@ class Model(GenericMixin):
     Args:
       input_object (Any): input to be processed
       model_name (str, optional): custom model name for this model
-      cache_dir (str, optional): custom caching directory
+      export_type (str, optional): Export type for the model, check documentation for more details
       wait_for_deployment (bool, optional): wait for deployment to complete
-      runtime (str, optional): runtime to use for deployment should be one of ``["onnx", "torchscript"]``, default is ``onnx``
-      deployment_type (str, optional): deployment type should be one of ``['ovms2', 'nbox']``, default is ``nbox``
       deployment_id (str, optional): ``deployment_id`` to put this model under, if you do not pass this
         it will automatically create a new deployment check `platform <https://nimblebox.ai/oneclick>`_
         for more info or check the logs.
       deployment_name (str, optional): if ``deployment_id`` is not given and you want to create a new
         deployment group (ie. webserver will create a new ``deployment_id``) you can tell what name you
         want, be default it will create a random name.
+      **ser_kwargs (Any, optional): keyword arguments to be passed to ``serialise`` function
     """
-    # First Step: check the args and see if conditionals are correct or not
-    def __check_conditionals():
-      assert self.__framework != "nbx", "This model is already deployed on the cloud"
-      assert deployment_type in ["ovms2", "nbox"], f"Only OpenVino and Nbox-Serving is supported got: {deployment_type}"
-      if self.__framework == "sklearn":
-        assert deployment_type == "nbox", "Only ONNX Runtime is supported for scikit-learn Framework"
-      if deployment_type == "ovms2":
-        assert runtime == "onnx", "Only ONNX Runtime is supported for OVMS2 Framework"
-      if deployment_id and deployment_name:
-        raise ValueError("deployment_id and deployment_name cannot be used together, pass only id")
-
-    # perform sanity checks on the input values
-    __check_conditionals()
 
     export_model_path, nbox_meta = self.serialise(
-      input_object,
+      input_object = input_object,
       model_name = model_name,
-      export_type = runtime,
-      generate_ov_args = deployment_type == "ovms2",
-      return_meta = True
+      export_type = export_type,
+      _unit_test = False,
+      return_meta = True,
+      **ser_kwargs
     )
 
-    nbox_meta["spec"]["deployment_type"] = deployment_type
-    nbox_meta["spec"]["deployment_id"] = deployment_id
-    nbox_meta["spec"]["deployment_name"] = deployment_name
+    nbox_meta["deployment_type"] = "nbox" # TODO: @yashbonde remove hardcode
+    nbox_meta["deployment_id"] = deployment_id
+    nbox_meta["deployment_name"] = deployment_name
 
     # OCD baby!
     return deploy_model(
