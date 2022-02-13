@@ -86,7 +86,7 @@ class FrameworkAgnosticProtocol(object):
     raise NotImplementedError()
 
   @staticmethod
-  def deserialise(self, model_meta: ModelSpec) -> None:
+  def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
     raise NotImplementedError()
 
 def io_dict(input_names, input_shapes, args, output_names, output_shapes, outputs):
@@ -294,7 +294,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     do_constant_folding=True,
     use_external_data_format=False,
     **kwargs
-  ):
+  ) -> ModelSpec:
     iod = self._get_io_dict(input_object)
 
     import torch
@@ -378,7 +378,7 @@ class TorchModel(FrameworkAgnosticProtocol):
         io_dict = iod,
       )
 
-  def export(self, format, input_object, export_model_path, **kwargs) -> callable:
+  def export(self, format, input_object, export_model_path, **kwargs) -> ModelSpec:
     logger.info(f"Exporting torch model to {format}")
 
     if format == "onnx":
@@ -578,3 +578,51 @@ class SklearnModel(FrameworkAgnosticProtocol):
   @staticmethod
   def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
     return None, None
+
+################################################################################
+# Tensorflow
+# ==========
+# Tensorflow is a high-level machine learning library built by Google. It is
+# part of a much larger ecosystem called tensorflow extended.
+################################################################################
+
+class TensorflowModel(FrameworkAgnosticProtocol):
+  @isthere("tensorflow", soft = False)
+  def __init__(self, m0, m1):
+    pass
+
+  def forward(self, input_object: Any) -> ModelOutput:
+    raise NotImplementedError()
+
+  def export_to_onnx(self):
+    pass
+
+  def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
+    raise NotImplementedError()
+
+  @staticmethod
+  def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
+    raise NotImplementedError()
+
+
+################################################################################
+# Jax
+# ===
+# Jax is built by Google for high performance ML research. Read more here:
+# https://jax.readthedocs.io/en/latest/notebooks/quickstart.html
+################################################################################
+
+class JaxModel(FrameworkAgnosticProtocol):
+  @isthere("jax", soft = False)
+  def __init__(self, m0, m1):
+    pass
+
+  def forward(self, input_object: Any) -> ModelOutput:
+    raise NotImplementedError()
+
+  def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
+    raise NotImplementedError()
+
+  @staticmethod
+  def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
+    raise NotImplementedError()
