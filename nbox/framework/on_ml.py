@@ -469,9 +469,6 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
       for node, meta in all_inputs.items():
         templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
 
-    image_parser = ImageParser(post_proc_fn=lambda x: x.astype(np.float32), templates = templates)
-    text_parser = TextParser(tokenizer=tokenizer, post_proc_fn=lambda x: x.astype(np.int32))
-
     self.session = ort_session
     self.input_names = [x.name for x in self.session.get_inputs()]
     self.output_names = [x.name for x in self.session.get_outputs()]
