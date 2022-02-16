@@ -688,13 +688,13 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
-  def export_to_onnx(self):
+  def export_to_onnx(self, model, export_model_path, opset_version=None, **kwargs):
     import tf2onnx
 
-    if "keras" in str(self._model.__class__):
-      model_proto,_ = tf2onnx.convert(self._model)
+    if "keras" in str(model.__class__):
+      model_proto,_ = tf2onnx.convert(self._model,opset=opset_version)
       with open(export_model_path, "wb") as f:
-        f.write(onx.SerializeToString())
+        f.write(model_proto.SerializeToString())
 
 
   def export_to_savemodel(
