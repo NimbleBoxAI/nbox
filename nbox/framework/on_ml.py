@@ -369,7 +369,6 @@ class TorchModel(FrameworkAgnosticProtocol):
         export_type = "torchscript",
         export_path = export_path,
         load_class = self.__class__.__name__,
-        load_method = "from_torchscript",
         load_kwargs = {
           "model": f"./{model_file_name}",
           "map_location": "cpu",
@@ -576,7 +575,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       raise InvalidProtocolError(f"Unsupported export format for torch Module: {format}")
 
   @staticmethod
-  def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
+  def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
     return None, None
 
 ################################################################################
@@ -589,21 +588,174 @@ class SklearnModel(FrameworkAgnosticProtocol):
 class TensorflowModel(FrameworkAgnosticProtocol):
   @isthere("tensorflow", soft = False)
   def __init__(self, m0, m1):
-    pass
+    import tensorflow as tf
+    if not (isinstance(m0, tf.keras.Model or isinstance(m0, tf.Module))):
+      raise InvalidProtocolError(f"First input must be a tensorflow module or Keras model, got: {type(m0)}")
+
+    if m1!= None and not callable(m1):
+      # this is the processing logic for the incoming data this has to be a some kind of callable,
+      # because user can define whatever they want and it removes any onus on NBX to ensure that
+      # processing works, halting problem is no joke!
+      raise ValueError(f"Second input for torch model must be a callable, got: {type(m1)}")
+    
+    self._model = m0
+    self._logic = m1 if m1 else lambda x: x
 
   def forward(self, input_object: Any) -> ModelOutput:
-    raise NotImplementedError()
+    model_inputs = self._logic(input_object)
+    if type(model_inputs) is dict:
+      out = self._model(**model_inputs)
+    else:
+      out = self._model(model_inputs)
+    return ModelOutput(inputs = input_object, outputs = out)
+
+  def _get_io_dict(self, input_object):
+    out = self.forward(input_object)
+    model_output = out.outputs
+    model_input = out.inputs
+
+    args = inspect.getfullargspec(self._model.call)
+    args.args.remove("self")
+
+    input_names = tuple(args.args)
+    input_shapes = tuple([tuple(model_input.shape)])
+    output_names = tuple(["output_0"])
+    output_shapes = (tuple(model_output.shape),)
+
+    io = io_dict(
+      input_names = input_names,
+      input_shapes = input_shapes,
+      args = model_input,
+      output_names = output_names,
+      output_shapes = output_shapes,
+      outputs = model_output
+    )
+    io["arg_spec"] = {
+      "args": args.args,
+      "varargs": args.varargs,
+      "varkw": args.varkw,
+      "defaults": args.defaults,
+      "kwonlyargs": args.kwonlyargs,
+      "kwonlydefaults": args.kwonlydefaults,
+    }
+
+    return io
+
+
+  def _serialise_logic(self, fpath):
+    logger.info(f"Saving logic to {fpath}")
+    with open(fpath, "wb") as f:
+      dill.dump(self._logic, f)
 
   def export_to_onnx(self):
-    pass
+    #third party
+    raise NotImplementedError
+
+  def export_to_savemodel(
+    self,
+    input_object,
+    export_model_path,    
+    logic_file_name = "logic.dill",
+    model_dir_name = "model",
+    include_optimizer = True,
+  ) -> ModelSpec:
+    import tensorflow as tf
+
+    self._serialise_logic(join(export_model_path, logic_file_name))
+
+    export_path = join(export_model_path, model_dir_name)
+
+    tf.keras.models.save_model(
+    self._model, export_path, signatures=None,
+     options=None, include_optimizer=include_optimizer, save_format = "tf"
+    )
+
+    iod = self._get_io_dict(input_object)
+
+    return ModelSpec(
+      src_framework = "tf",
+      src_framework_version = tf.__version__,
+      export_type = "SaveModel",
+      export_path = export_path,
+      load_class = self.__class__.__name__,
+      load_kwargs = {
+        "model": f"./{model_dir_name}",
+        "map_location": "cpu",
+        "logic_path": f"./{logic_file_name}"
+      },
+      io_dict = iod,
+    )
+
+  def export_to_h5(
+    self,
+    input_object,
+    export_model_path,    
+    logic_file_name = "logic.dill",
+    model_file_name = "model.h5py",
+    include_optimizer = True,
+  ) -> ModelSpec:
+
+    import tensorflow as tf
+
+    self._serialise_logic(join(export_model_path, logic_file_name))
+
+    export_path = join(export_model_path, model_file_name)
+
+    tf.keras.models.save_model(
+    self._model, export_path, signatures=None,
+     options=None, include_optimizer=include_optimizer, save_format = "h5"
+    )
+
+    iod = self._get_io_dict(input_object)
+
+    return ModelSpec(
+      src_framework = "tf",
+      src_framework_version = tf.__version__,
+      export_type = "h5",
+      export_path = export_path,
+      load_class = self.__class__.__name__,
+      load_method = "from_savemodel",
+      load_kwargs = {
+        "model": f"./{model_file_name}",
+        "map_location": "cpu",
+        "logic_path": f"./{logic_file_name}"
+      },
+      io_dict = iod,
+    )
+    
 
   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
-    raise NotImplementedError()
+    if format == "onnx":
+      return self.export_to_onnx(
+        input_object, export_model_path = export_model_path, **kwargs
+      )
+    if format == "SaveModel":
+      return self.export_to_savemodel(
+        input_object, export_model_path=export_model_path, **kwargs
+      )
+    if format == "h5":
+      return self.export_to_h5(
+        input_object, export_model_path=export_model_path, **kwargs
+      )
 
   @staticmethod
-  def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
-    raise NotImplementedError()
+  def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
 
+    logger.info(f"Deserialising Tensorflow model from {model_meta.export_path}")
+    kwargs = model_meta.load_kwargs
+
+    if model_meta.export_type in ["SaveModel", "h5"]:
+      lp = kwargs.pop("logic_path")
+      logger.info(f"Loading logic from {lp}")
+      with open(lp, "rb") as f:
+        logic = dill.load(f)
+      
+      import tensorflow as tf
+      model = tf.keras.models.load_model(model_meta.load_kwargs["model"])
+      return model, logic
+
+    else:
+      raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
 ################################################################################
 # Jax
