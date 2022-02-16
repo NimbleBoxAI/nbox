@@ -556,7 +556,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
 
   @isthere("skl2onnx", soft = False)
   def export_to_onnx(self, model, args, input_names, input_shapes, export_model_path, opset_version=None, **kwargs):
-    from skl2onnx import convert_sklearn
+    from skl2onnx import to_onnx
     import skl2onnx.common.data_types as dt
 
     __NP_DTYPE_TO_SKL_DTYPE = {
@@ -584,7 +584,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       shape[0] = None # batching requires the first dimension to be None
       initial_types.append((name, __NP_DTYPE_TO_SKL_DTYPE[str(tensor.dtype)](shape)))
 
-    onx = convert_sklearn(model, initial_types=initial_types, target_opset=opset_version)
+    onx = to_onnx(model, initial_types=initial_types, target_opset=opset_version)
 
     with open(export_model_path, "wb") as f:
       f.write(onx.SerializeToString())
@@ -689,8 +689,13 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       dill.dump(self._logic, f)
 
   def export_to_onnx(self):
-    #third party
-    raise NotImplementedError
+    import tf2onnx
+
+    if "keras" in str(self._model.__class__):
+      model_proto,_ = tf2onnx.convert(self._model)
+      with open(export_model_path, "wb") as f:
+        f.write(onx.SerializeToString())
+
 
   def export_to_savemodel(
     self,
