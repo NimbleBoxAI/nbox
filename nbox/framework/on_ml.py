@@ -589,7 +589,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
   @isthere("tensorflow", soft = False)
   def __init__(self, m0, m1):
     import tensorflow as tf
-    if not (isinstance(m0, tf.keras.Model or isinstance(m0, tf.Module))):
+    if not isinstance(m0, (tf.keras.Model, tf.Module)):
       raise InvalidProtocolError(f"First input must be a tensorflow module or Keras model, got: {type(m0)}")
 
     if m1!= None and not callable(m1):
@@ -729,14 +729,16 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       return self.export_to_onnx(
         input_object, export_model_path = export_model_path, **kwargs
       )
-    if format == "SaveModel":
+    elif format == "SaveModel":
       return self.export_to_savemodel(
         input_object, export_model_path=export_model_path, **kwargs
       )
-    if format == "h5":
+    elif format == "h5":
       return self.export_to_h5(
         input_object, export_model_path=export_model_path, **kwargs
       )
+    else:
+      raise  InvalidProtocolError(f"Unknown format: {format}")
 
   @staticmethod
   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
