@@ -317,12 +317,8 @@ class TorchModel(FrameworkAgnosticProtocol):
   # TODO:@yashbonde
   def export_to_onnx(
     self,
-    # args,
     input_object,
     export_model_path,
-    # input_names,
-    # dynamic_axes,
-    # output_names,
     export_params=True,
     verbose=False,
     opset_version=12,
@@ -336,16 +332,14 @@ class TorchModel(FrameworkAgnosticProtocol):
 
     torch.onnx.export(
       self._model,
-      args=args,
+      input_object,
       f=export_model_path,
       input_names=[x["name"] for x in iod["inputs"]],
       verbose=verbose,
-      output_names=output_names,
       use_external_data_format=use_external_data_format, # RuntimeError: Exporting model exceed maximum protobuf size of 2GB
       export_params=export_params, # store the trained parameter weights inside the model file
       opset_version=opset_version, # the ONNX version to export the model to
       do_constant_folding=do_constant_folding, # whether to execute constant folding for optimization
-      dynamic_axes=dynamic_axes,
     )
 
     return ModelSpec(
