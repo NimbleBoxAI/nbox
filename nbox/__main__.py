@@ -25,7 +25,7 @@ if __name__ == "__main__":
       "new": ij.new_job,          # nbox jobs new PROJECT_NAME
       "deploy": ij.deploy,        # nbox jobs deploy FOLDER
       "open": ij.open_jobs,       # nbox jobs open
-      "trigger": NotImplementedError()
+      # "trigger":                # trigger a job run from CLI
     },
     "status": Instance.print_status, # nbox status
     "tunnel": n.tunnel,

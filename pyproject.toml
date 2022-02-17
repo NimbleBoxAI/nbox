@@ -7,6 +7,11 @@ authors = [
   "Yash Bonde <bonde.yash97@gmail.com>",
   "Aakash Kaushik <kaushikaakash7539@gmail.com>"
 ]
+homepage = "https://github.com/NimbleBoxAI/nbox"
+repository = "https://github.com/NimbleBoxAI/nbox"
+documentation = "https://nimbleboxai.github.io/nbox/"
+license = "BSD-3-Clause"
+readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.6"

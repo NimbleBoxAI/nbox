@@ -1,3 +1,5 @@
+# this is the deprecated server since >v0.8.5
+
 # logger/
 
 # import json

@@ -22,8 +22,6 @@ class Model:
   def __init__(self, m0, m1, verbose=False):
     """Top of the stack Model class.
 
-    >> BREAKING <<
-
     Args:
       model_or_model_url (Any): Model to be wrapped or model url
       nbx_api_key (str, optional): API key for this deployed model
@@ -78,7 +76,7 @@ class Model:
 
 ################################################################################
 # Functions here are the services that NBX provides to the user and no longer
-# >0.8.7 the implementation of processing logic.
+# >v0.8.7 the implementation of processing logic.
 ################################################################################
 
   def __call__(self, input_object) -> ModelOutput:
@@ -180,10 +178,10 @@ class Model:
 
     with open("./nbox_config.json", "r") as f:
       nbox_meta = json.load(f)
-    i0, i1 = get_model_mixin(ModelSpec(**nbox_meta), deserialise=True)
+    m0, m1 = get_model_mixin(ModelSpec(**nbox_meta), deserialise=True)
     
     os.chdir(_pre_dir) # shift path back to original
-    return cls(i0, i1, **init_kwargs)
+    return cls(m0, m1, **init_kwargs)
 
   def deploy(
     self,

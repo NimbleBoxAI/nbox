@@ -79,6 +79,8 @@ class ModelSpec(DBase):
 
 class FrameworkAgnosticProtocol(object):
   """https://nimblebox.notion.site/nbox-FrameworkAgnosticProtocol-6b39249316b1497b8ad9ff8f02b227f0"""
+  # def __init__(self, i0: Any, i1: Any) -> None
+
   def forward(self, input_object: Any) -> ModelOutput:
     raise NotImplementedError()
 
@@ -524,6 +526,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       outputs = out,
     )
 
+  @isthere("skl2onnx", soft = False)
   def export_to_onnx(self, model, args, input_names, input_shapes, export_model_path, opset_version=None, **kwargs):
     from skl2onnx import convert_sklearn
     import skl2onnx.common.data_types as dt
@@ -594,7 +597,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
   def forward(self, input_object: Any) -> ModelOutput:
     raise NotImplementedError()
 
-  def export_to_onnx(self):
+  def export_to_onnx(self) -> ModelSpec:
     pass
 
   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
