@@ -555,7 +555,11 @@ class SklearnModel(FrameworkAgnosticProtocol):
       dill.dump(self._logic, f)
 
   @isthere("skl2onnx", soft = False)
-  def export_to_onnx(self, model, args, input_names, input_shapes, export_model_path, opset_version=None, **kwargs):
+  def export_to_onnx(self, input_object, export_model_path, logic_file_name="logic.dill",
+                           model_file_name="model.onnx",
+                           opset_version=None,
+                    ) -> ModelSpec:
+    import sklearn
     from skl2onnx import to_onnx
     import skl2onnx.common.data_types as dt
 
@@ -577,24 +581,45 @@ class SklearnModel(FrameworkAgnosticProtocol):
       "uint8": dt.UInt8TensorType,
     }
 
+    self._serialise_logic(join(export_model_path, logic_file_name))
+
+    export_path = join(export_model_path, model_file_name)
+    iod = self._get_io_dict(input_object)
+
     # the args need to be converted to proper formatted data types
     initial_types = []
-    for name, shape, tensor in zip(input_names, input_shapes, args):
+    input_names, input_shapes, input_dtypes = [],[],[]
+    for key in iod["inputs"]:
+        input_names.append(iod["inputs"][key]['name'])
+        input_shapes.append(iod["inputs"][key]['tensorShape']['dim'])
+        input_dtypes.append(iod["inputs"][key]['dtype'])
+    for name, shape, dtype in zip(input_names, input_shapes, input_dtypes):
       shape = list(shape)
       shape[0] = None # batching requires the first dimension to be None
-      initial_types.append((name, __NP_DTYPE_TO_SKL_DTYPE[str(tensor.dtype)](shape)))
+      initial_types.append((name, __NP_DTYPE_TO_SKL_DTYPE[str(dtype)](shape)))
 
-    onx = to_onnx(model, initial_types=initial_types, target_opset=opset_version)
+    onx = to_onnx(self._model, initial_types=initial_types, target_opset=opset_version)
 
     with open(export_model_path, "wb") as f:
       f.write(onx.SerializeToString())
 
-  def export_to_pkl(self,
-    input_object,
-    export_model_path,
-    method_file_name = "method.dill",
-    model_file_name = "model.pkl",
-  ):
+
+    return ModelSpec(
+    src_framework="sklearn",
+    src_framework_version=sklearn.__version__,
+    export_type="onnx",
+    export_path=export_path,
+    load_class=self.__class__.__name__,
+    load_method="from_to_onnx",
+    load_kwargs={
+        "model": f"./{model_file_name}",
+        "map_location": "cpu",
+        "logic_path": f"./{logic_file_name}",
+    },
+    io_dict=iod,
+    )
+
+  def export_to_pkl(self, input_object, export_model_path, method_file_name = "method.dill", model_file_name = "model.pkl"):
 
     import joblib
     import sklearn
@@ -705,7 +730,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
         export_path = join(export_model_path, model_file_name)
         iod = self._get_io_dict(input_object)
 
-        if "keras" in str(model.__class__):
+        if "keras" in str(self._model.__class__):
             model_proto, _ = tf2onnx.convert.from_keras(
                 self._model, opset=opset_version
             )
