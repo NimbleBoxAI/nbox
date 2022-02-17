@@ -766,17 +766,100 @@ class TensorflowModel(FrameworkAgnosticProtocol):
 # https://jax.readthedocs.io/en/latest/notebooks/quickstart.html
 ################################################################################
 
-class JaxModel(FrameworkAgnosticProtocol):
-  @isthere("jax", soft = False)
+""" We are not implementing Jax as of now"""
+
+# class JaxModel(FrameworkAgnosticProtocol):
+#   @isthere("jax", soft = False)
+#   def __init__(self, m0, m1):
+#     pass
+
+#   def forward(self, input_object: Any) -> ModelOutput:
+#     raise NotImplementedError()
+
+#   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
+#     raise NotImplementedError()
+
+#   @staticmethod
+#   def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
+#     raise NotImplementedError()
+
+
+################################################################################
+# Flax
+# ===
+# Flax is built by Google, it is a neural network library and ecosystem for JAX designed for flexibility. Read more here:
+# https://github.com/google/flax
+################################################################################
+
+class FlaxModel(FrameworkAgnosticProtocol):
+  @isthere("flax", soft = False)
   def __init__(self, m0, m1):
-    pass
+    import flax
+    from flax import linen as nn
+
+    if not isinstance(m0, nn.Module):
+      raise InvalidProtocolError(f"First input must be a Flax module, got: {type(m0)}")
+
+    if not isinstance(m1, flax.core.frozen_dict.FrozenDict):
+      # m1 should contain the model parameters
+      raise ValueError(f"Second input for flax model must be a\
+       FrozenDict containing model parameters, got: {type(m1)}")
+    
+    self._model = m0
+    self._params = m1
+
 
   def forward(self, input_object: Any) -> ModelOutput:
-    raise NotImplementedError()
+    model_inputs = input_object
+    if type(model_inputs) is dict:
+      out = self._model.apply(self._params, **model_inputs)
+    else:
+      out = self._model.apply(self._params, model_inputs)
+    
+    return ModelOutput(inputs=input_object, outputs=out)
+
+  def _get_io_dict(self, input_object):
+    out = self.forward(input_object)
+    model_output = out.outputs
+    model_input = out.inputs
+
+    args = inspect.getfullargspec(self._model.__call__)
+    args.args.remove("self")
+
+    input_names = tuple(args.args)
+    input_shapes = tuple([tuple(model_input.shape)])
+    output_names = tuple(["output_0"])
+    output_shapes = (tuple(model_output.shape),)
+
+    io = io_dict(
+      input_names = input_names,
+      input_shapes = input_shapes,
+      args = model_input,
+      output_names = output_names,
+      output_shapes = output_shapes,
+      outputs = model_output
+    )
+    io["arg_spec"] = {
+      "args": args.args,
+      "varargs": args.varargs,
+      "varkw": args.varkw,
+      "defaults": args.defaults,
+      "kwonlyargs": args.kwonlyargs,
+      "kwonlydefaults": args.kwonlydefaults,
+    }
+
+    return io
+
+
+  def _serialise_params(self, fpath):
+    logger.info(f"Saving parameters to {fpath}")
+    raise NotImplementedError
+
+
 
   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
-    raise NotImplementedError()
+   raise NotImplementedError
 
   @staticmethod
-  def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
-    raise NotImplementedError()
+  def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
+    raise NotImplementedError
