@@ -321,6 +321,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     export_model_path,
     export_params=True,
     verbose=False,
+    model_file_name="model.onnx",
     opset_version=12,
     do_constant_folding=True,
     use_external_data_format=False,
@@ -328,12 +329,14 @@ class TorchModel(FrameworkAgnosticProtocol):
   ) -> ModelSpec:
     iod = get_io_dict(input_object, self._model.forward, self.forward)
 
+    export_path = join(export_model_path, model_file_name)
+
     import torch
 
     torch.onnx.export(
       self._model,
       input_object,
-      f=export_model_path,
+      f=export_path,
       input_names=[x["name"] for x in iod["inputs"]],
       verbose=verbose,
       use_external_data_format=use_external_data_format, # RuntimeError: Exporting model exceed maximum protobuf size of 2GB
@@ -600,7 +603,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
 
     onx = to_onnx(self._model, initial_types=initial_types, target_opset=opset_version)
 
-    with open(export_model_path, "wb") as f:
+    with open(export_path, "wb") as f:
       f.write(onx.SerializeToString())
 
 
