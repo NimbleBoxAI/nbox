@@ -1,6 +1,6 @@
 ############################################################
 # This file is d0 meaning that this has no dependencies!
-# Do not import anything from rest of nbox here! 
+# Do not import anything from rest of nbox here!
 ############################################################
 
 # this file has bunch of functions that are used everywhere
@@ -220,13 +220,13 @@ class PoolBranch:
       # pooling is applying same functions on different inputs
       pool = PoolBranch("thread")
       out = pool(add_zero, *args)
-  
+
     When using ``mode = "process"`` write your code in a function and ensure that the
     function is called from ``__main__ == "__name__"``. From the documentation of ``concurrent.futures``:
 
       The __main__ module must be importable by worker subprocesses. This means that
       ``ProcessPoolExecutor`` will not work in the interactive interpreter.
-    
+
     - `StackOverflow <https://stackoverflow.com/questions/27932987/multiprocessing-package-in-interactive-python>`_
     - `Another <https://stackoverflow.com/questions/24466804/multiprocessing-breaks-in-interactive-mode>`_
 
@@ -273,14 +273,14 @@ class PoolBranch:
     pass to ``fn``. Result is returned in the **same order as the input**.
 
       ..code-block
-      
+
         if fn is callable:
           thread(fn, a) for a in args -> list of results
         elif fn is list and fn[0] is callable:
           thread(_fn, a) for _fn, a in (fn args) -> list of results
     """
     assert isinstance(args[0], (tuple, list))
-    
+
     futures = {}
     if isinstance(fn, (list, tuple)) and callable(fn[0]):
       assert len(fn) == len(args), f"Number of functions ({len(fn)}) and arguments ({len(args)}) must be same in branching"
@@ -303,7 +303,7 @@ class PoolBranch:
           raise e
 
       res = [results[x] for x in range(len(results))]
-    
+
     return res
 
 # /pool
@@ -322,47 +322,47 @@ class PoolBranch:
 #     rule="dark_cyan", # ruler at top and bottom
 #     spinner="weather", # status theme
 #   )
-# 
+#
 #   def __init__(self):
 #     self.c = richConsole()
 #     self._in_status = False
 #     self.__reset()
-# 
+#
 #   def rule(self, title: str):
 #     self.c.rule(f"[{self.T.nbx}]{title}[/{self.T.nbx}]", style=self.T.rule)
-# 
+#
 #   def __reset(self):
 #     self.st = time()
-# 
+#
 #   def __call__(self, x, *y):
 #     cont = " ".join([str(x)] + [str(_y) for _y in y])
 #     if not self._in_status:
 #       self._log(cont)
 #     else:
 #       self._update(cont)
-# 
+#
 #   def sleep(self, t: int):
 #     for i in range(t):
 #       self(f"Sleeping for {t-i}s ...")
 #       _sleep(1)
-# 
+#
 #   def _log(self, x, *y):
 #     cont = " ".join([str(x)] + [str(_y) for _y in y])
 #     t = str(timedelta(seconds=int(time() - self.st)))[2:]
 #     self.c.print(f"[[{self.T.clk}]{t}[/{self.T.clk}]] {cont}")
-# 
+#
 #   def start(self, x="", *y):
 #     self.__reset()
 #     cont = " ".join([str(x)] + [str(_y) for _y in y])
 #     self.status = self.c.status(f"[{self.T.st}]{cont}[/{self.T.st}]", spinner=self.T.spinner)
 #     self.status.start()
 #     self._in_status = True
-# 
+#
 #   def _update(self, x, *y):
 #     t = str(timedelta(seconds=int(time() - self.st)))[2:]
 #     cont = " ".join([str(x)] + [str(_y) for _y in y])
 #     self.status.update(f"[[{self.T.clk}]{t}[/{self.T.clk}]] [{self.T.st}]{cont}[/{self.T.st}]")
-# 
+#
 #   def stop(self, x):
 #     self.status.stop()
 #     del self.status

@@ -49,7 +49,7 @@ def deploy_model(
   deployment_id = nbox_meta["spec"]["deployment_id"]
   deployment_name = nbox_meta["spec"]["deployment_name"]
   model_name = nbox_meta["spec"]["model_name"]
-  
+
   logger.debug(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
 
   if not deployment_id and not deployment_name:
@@ -241,7 +241,7 @@ class Cron:
         minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
         days (list, optional): List of days (first three chars) of the week, if not passed it will run every day.
         months (list, optional): List of months (first three chars) of the year, if not passed it will run every month.
-        starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now. 
+        starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
         ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
     """
     self.hour = hour
@@ -372,7 +372,7 @@ def deploy_job(
   except Exception as e:
     logger.debug(f"Failed to deploy job: {e}")
     return
-  
+
   out = MessageToJson(job.code)
   s3_url = out["s3_url"]
   s3_meta = out["s3_meta"]

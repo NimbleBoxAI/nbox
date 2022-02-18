@@ -722,11 +722,9 @@ class TensorflowModel(FrameworkAgnosticProtocol):
         opset_version=None,
     ) -> ModelSpec:
         import tf2onnx
-
         import tensorflow as tf
 
         self._serialise_logic(join(export_model_path, logic_file_name))
-
         export_path = join(export_model_path, model_file_name)
         iod = self._get_io_dict(input_object)
 
@@ -734,8 +732,10 @@ class TensorflowModel(FrameworkAgnosticProtocol):
             model_proto, _ = tf2onnx.convert.from_keras(
                 self._model, opset=opset_version
             )
-            with open(export_model_path, "wb") as f:
-                f.write(model_proto.SerializeToString())
+
+            with open(export_path, "wb") as f:
+                  f.write(model_proto.SerializeToString())
+
 
             return ModelSpec(
                 src_framework="tf",
