@@ -25,6 +25,8 @@ Read the code for best understanding.
 
 import json
 import inspect
+from turtle import shape
+import joblib
 import requests
 from time import time
 from typing import Any, Tuple
@@ -494,7 +496,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       # processing works, halting problem is no joke!
       InvalidProtocolError(f"Second input must be a callable, got: {type(m2)}")
     
-    self._model = m1
+    self._model_or_model_url = m1
     self._logic = m2 # this is not used anywhere
 
   def forward(self, input_object: SklearnInput) -> ModelOutput:
@@ -502,18 +504,18 @@ class SklearnModel(FrameworkAgnosticProtocol):
     method = input_object.get("method", None)
     extra_args = input_object.get("kwargs", {})
 
-    if "sklearn.neighbors.NearestNeighbors" in str(type(self.model_or_model_url)):
-      method = getattr(self.model_or_model_url, "kneighbors") if method == None else getattr(self.model_or_model_url, method)
+    if "sklearn.neighbors.NearestNeighbors" in str(type(self._model_or_model_url)):
+      method = getattr(self._model_or_model_url, "kneighbors") if method == None else getattr(self._model_or_model_url, method)
       out = method(model_input, **extra_args)
-    elif "sklearn.cluster" in str(type(self.model_or_model_url)):
+    elif "sklearn.cluster" in str(type(self._model_or_model_url)):
       if any(
-        x in str(type(self.model_or_model_url)) for x in ["AgglomerativeClustering", "DBSCAN", "OPTICS", "SpectralClustering"]
+        x in str(type(self._model_or_model_url)) for x in ["AgglomerativeClustering", "DBSCAN", "OPTICS", "SpectralClustering"]
       ):
-        method = getattr(self.model_or_model_url, "fit_predict")
+        method = getattr(self._model_or_model_url, "fit_predict")
         out = method(model_input)
     else:
       try:
-        method = getattr(self.model_or_model_url, "predict") if method == None else getattr(self.model_or_model_url, method)
+        method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
         out = method(model_input)
       except Exception as e:
         logger.info(f"[ERROR] Model Prediction Function is not yet registered {e}")
@@ -522,6 +524,11 @@ class SklearnModel(FrameworkAgnosticProtocol):
       inputs = model_input,
       outputs = out,
     )
+
+  def _serialise_method(self, fpath):
+    logger.info(f"Saving logic to {fpath}")
+    with open(fpath, "wb") as f:
+      dill.dump(self._logic, f)
 
   def export_to_onnx(self, model, args, input_names, input_shapes, export_model_path, opset_version=None, **kwargs):
     from skl2onnx import convert_sklearn
@@ -557,26 +564,100 @@ class SklearnModel(FrameworkAgnosticProtocol):
     with open(export_model_path, "wb") as f:
       f.write(onx.SerializeToString())
 
-  def export_to_pkl(self, model, export_model_path, **kwargs):
-    import joblib
+  def _get_io_dict(self, input_object):
+    out = self.forward(input_object)
+    model_output = out.outputs
+    model_input = out.inputs
+    method = input_object.get("method", None) 
+    method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
+    
+    args = inspect.getfullargspec(method)
+    args.args.remove("self")
 
+    input_names = tuple(args.args)
+    input_shapes = tuple([tuple(model_input.shape)])
+    output_names = tuple(["output_0"])
+    output_shapes = (tuple(model_output.shape),)
+
+    io = io_dict(
+      input_names = input_names,
+      input_shapes = input_shapes,
+      args = model_input,
+      output_names = output_names,
+      output_shapes = output_shapes,
+      outputs = model_output
+    )
+
+    io["arg_spec"] = {
+      "args": args.args,
+      "varargs": args.varargs,
+      "varkw": args.varkw,
+      "defaults": args.defaults,
+      "kwonlyargs": args.kwonlyargs,
+      "kwonlydefaults": args.kwonlydefaults,
+    }
+
+    return io
+
+  def export_to_pkl(self,
+    input_object,
+    export_model_path,
+    method_file_name = "method.dill",
+    model_file_name = "model.pkl",
+    ):
+
+    import joblib
+    import sklearn
     # sklearn models are pure python methods (though underlying contains bindings to C++)
     # and so we can use joblib for this
     # we use the joblib instead of pickle
-    with open(export_model_path, "wb") as f:
-      joblib.dump(model, f)
+    self._serialise_method(join(export_model_path, method_file_name))
+    export_path = join(export_model_path, model_file_name)
+    with open(export_path, "wb") as f:
+      joblib.dump(self._model_or_model_url, f)
+
+    iod = self._get_io_dict(input_object)
+
+    return ModelSpec(
+      src_framework = "SkLearn",
+      src_framework_version = sklearn.__version__,
+      export_type = "pkl",
+      export_path = export_path,
+      load_class = self.__class__.__name__,
+      load_kwargs = {
+        "model": f"./{model_file_name}",
+        "map_location": "cpu",
+       "method_path": f"./{method_file_name}"
+      },
+      io_dict = iod,
+    )
 
   def export(self, format, input_object, export_model_path, **kwargs) -> ModelSpec:
     if format == "onnx":
       return self.export_to_onnx(**kwargs)
     elif format == "pkl":
-      return self.export_to_pkl(**kwargs)
+      return self.export_to_pkl(input_object, export_model_path=export_model_path, **kwargs)
     else:
       raise InvalidProtocolError(f"Unsupported export format for torch Module: {format}")
+  
+  
 
   @staticmethod
   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
-    return None, None
+    logger.info(f"Deserialising SkLearn model from {model_meta.export_path}")
+    kwargs = model_meta.load_kwargs
+
+    if model_meta.export_type == "pkl":
+      lp = kwargs.pop("method_path")
+      logger.info(f"Loading method from {lp}")
+      with open(lp, "rb") as f:
+        method = dill.load(f)
+        
+      model = joblib.load(model_meta.load_kwargs["model"])
+      return model, method
+
+    else:
+      raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
 ################################################################################
 # Tensorflow
@@ -610,25 +691,36 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     return ModelOutput(inputs = input_object, outputs = out)
 
   def _get_io_dict(self, input_object):
+
+    def _breakdown(X):
+      if isinstance(X, dict):
+        names = list(X.keys())
+        shapes = []
+        for key in X.keys():
+          if isinstance(X[key], tuple):
+            import numpy as np
+            shapes.append(tuple(np.array(X[key]).shape))
+          elif hasattr(X[key], "shape"):
+            shapes.append(tuple(X[key].shape))
+      return names, tuple(shapes)
+
     out = self.forward(input_object)
     model_output = out.outputs
     model_input = out.inputs
 
     args = inspect.getfullargspec(self._model.call)
     args.args.remove("self")
-
     input_names = tuple(args.args)
-    input_shapes = tuple([tuple(model_input.shape)])
-    output_names = tuple(["output_0"])
-    output_shapes = (tuple(model_output.shape),)
+    _, input_shapes = _breakdown(model_input)
+    output_names, output_shapes = _breakdown(model_output)
 
     io = io_dict(
       input_names = input_names,
       input_shapes = input_shapes,
-      args = model_input,
+      args = tuple(model_input.values()),
       output_names = output_names,
       output_shapes = output_shapes,
-      outputs = model_output
+      outputs = model_output.to_tuple()
     )
     io["arg_spec"] = {
       "args": args.args,
@@ -660,7 +752,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     include_optimizer = True,
   ) -> ModelSpec:
     import tensorflow as tf
-
+    input_object = self._logic(input_object)
     self._serialise_logic(join(export_model_path, logic_file_name))
 
     export_path = join(export_model_path, model_dir_name)
@@ -854,8 +946,6 @@ class FlaxModel(FrameworkAgnosticProtocol):
   def _serialise_params(self, fpath):
     logger.info(f"Saving parameters to {fpath}")
     raise NotImplementedError
-
-
 
   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
    raise NotImplementedError

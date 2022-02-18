@@ -28,7 +28,7 @@ from .on_operators import *
 def get_model_mixin(i0, i1 = None, deserialise = False):
   all_e = []
   for m in (
-    NBXModel, TensorflowModel, FlaxModel, TorchModel, SklearnModel, ONNXRtModel
+    NBXModel, TensorflowModel, SklearnModel, FlaxModel, TorchModel, ONNXRtModel
   ):
     try:
       # if this is the correct method 
