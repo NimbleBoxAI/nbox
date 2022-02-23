@@ -27,6 +27,7 @@ import json
 import inspect
 from turtle import shape
 import joblib
+from numpy import dtype
 import requests
 from time import time
 from typing import Any, Tuple
@@ -90,25 +91,79 @@ class FrameworkAgnosticProtocol(object):
   @staticmethod
   def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
     raise NotImplementedError()
-
-def io_dict(input_names, input_shapes, args, output_names, output_shapes, outputs):
-  """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
-  # get the meta object
-  def __get_struct(names_, shapes_, tensors_):
-    return {
-      name: {
-        "dtype": str(tensor.dtype),
-        "tensorShape": {"dim": [{"name": "", "size": x} for x in shapes], "unknownRank": False},
-        "name": name,
-      }
-      for name, shapes, tensor in zip(names_, shapes_, tensors_)
+  
+  def get_io_dict(self, input_object, call_fn):
+    out = self.forward(input_object)
+    args = inspect.getfullargspec(call_fn)
+    args.args.remove("self")
+  
+    io = io_dict(
+      input_object=out.inputs,
+      output_object=out.outputs
+    )
+    io["arg_spec"] = {
+      "args": args.args,
+      "varargs": args.varargs,
+      "varkw": args.varkw,
+      "defaults": args.defaults,
+      "kwonlyargs": args.kwonlyargs,
+      "kwonlydefaults": args.kwonlydefaults,
     }
+    return io
+
+def io_dict(input_object, output_object):
+  """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
+  # get the meta object 
+
+  def __get_struct(object):
+
+    def process_dict(x, curr_idx) -> dict:
+      #Process Dictionaries
+      results = {}
+      for key in x.keys():
+        parsed, curr_idx = parse(x[key], name=key, curr_idx=curr_idx)
+        results[key] = parsed
+      return results, curr_idx
+
+    def process_container(x, curr_idx) -> dict:
+      #Handles lists, sets and tuples
+      results = []
+      for element in x:
+        parsed, curr_idx = parse(element, None, curr_idx)
+        results.append(parsed)
+
+      return results, curr_idx
+
+    def parse(x, name=None, curr_idx=0) -> dict:
+      # Parses objects to generate iodict
+      dtype = None
+      if name is None:
+        name = f"tensor{curr_idx}"
+        curr_idx += 1
+
+      if hasattr(x, "dtype"):
+        dtype = str(x.dtype)
+
+      if isinstance(x, dict):
+        return process_dict(x, curr_idx)
+
+      elif isinstance(x, (list, set, tuple)):
+        return process_container(x, curr_idx)
+
+      elif hasattr(x, "shape"):
+        dim_names=[""]*len(x.shape)
+        if hasattr(x, "names"):
+          dim_names=x.names
+        return {"name": name, "dtype": dtype, "tensorShape": {"dim":[{'name':dim_names[y], "size":x.shape[y]} for y in range(len(x.shape))],"unknownRank":False}}, curr_idx
+      else:
+        return {"name": name, "dtype": dtype, "shape": None}, curr_idx
+    
+    return parse(object)[0]
 
   meta = {
-    "inputs": __get_struct(input_names, input_shapes, args),
-    "outputs": __get_struct(output_names, output_shapes, outputs)
+    "inputs": __get_struct(input_object),
+    "outputs": __get_struct(output_object)
   }
-
   return meta
 
 
@@ -249,38 +304,6 @@ class TorchModel(FrameworkAgnosticProtocol):
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
-  def _get_io_dict(self, input_object):
-    out = self.forward(input_object)
-    model_output = out.outputs
-    model_input = out.inputs
-
-    args = inspect.getfullargspec(self._model.forward)
-    args.args.remove("self")
-
-    input_names = tuple(args.args)
-    input_shapes = tuple([tuple(model_input.shape)])
-    output_names = tuple(["output_0"])
-    output_shapes = (tuple(model_output.shape),)
-
-    io = io_dict(
-      input_names = input_names,
-      input_shapes = input_shapes,
-      args = model_input,
-      output_names = output_names,
-      output_shapes = output_shapes,
-      outputs = model_output
-    )
-    io["arg_spec"] = {
-      "args": args.args,
-      "varargs": args.varargs,
-      "varkw": args.varkw,
-      "defaults": args.defaults,
-      "kwonlyargs": args.kwonlyargs,
-      "kwonlydefaults": args.kwonlydefaults,
-    }
-
-    return io
-
   # TODO:@yashbonde
   def export_to_onnx(
     self,
@@ -297,7 +320,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     use_external_data_format=False,
     **kwargs
   ) -> ModelSpec:
-    iod = self._get_io_dict(input_object)
+    iod = self.get_io_dict(input_object, self._model.forward)
 
     import torch
 
@@ -338,7 +361,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     logic_file_name = "logic.dill",
     model_file_name = "model.bin",
   ) -> ModelSpec:
-    iod = self._get_io_dict(input_object)
+    iod = self.get_io_dict(input_object, self._model.forward)
 
     self._serialise_logic(join(export_model_path, logic_file_name))
 
@@ -564,41 +587,6 @@ class SklearnModel(FrameworkAgnosticProtocol):
     with open(export_model_path, "wb") as f:
       f.write(onx.SerializeToString())
 
-  def _get_io_dict(self, input_object):
-    out = self.forward(input_object)
-    model_output = out.outputs
-    model_input = out.inputs
-    method = input_object.get("method", None) 
-    method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
-    
-    args = inspect.getfullargspec(method)
-    args.args.remove("self")
-
-    input_names = tuple(args.args)
-    input_shapes = tuple([tuple(model_input.shape)])
-    output_names = tuple(["output_0"])
-    output_shapes = (tuple(model_output.shape),)
-
-    io = io_dict(
-      input_names = input_names,
-      input_shapes = input_shapes,
-      args = model_input,
-      output_names = output_names,
-      output_shapes = output_shapes,
-      outputs = model_output
-    )
-
-    io["arg_spec"] = {
-      "args": args.args,
-      "varargs": args.varargs,
-      "varkw": args.varkw,
-      "defaults": args.defaults,
-      "kwonlyargs": args.kwonlyargs,
-      "kwonlydefaults": args.kwonlydefaults,
-    }
-
-    return io
-
   def export_to_pkl(self,
     input_object,
     export_model_path,
@@ -616,7 +604,9 @@ class SklearnModel(FrameworkAgnosticProtocol):
     with open(export_path, "wb") as f:
       joblib.dump(self._model_or_model_url, f)
 
-    iod = self._get_io_dict(input_object)
+    method = input_object.get("method", None) 
+    method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
+    iod = self.get_io_dict(input_object, method)
 
     return ModelSpec(
       src_framework = "SkLearn",
@@ -640,8 +630,6 @@ class SklearnModel(FrameworkAgnosticProtocol):
     else:
       raise InvalidProtocolError(f"Unsupported export format for torch Module: {format}")
   
-  
-
   @staticmethod
   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
     logger.info(f"Deserialising SkLearn model from {model_meta.export_path}")
@@ -690,50 +678,6 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       out = self._model(model_inputs)
     return ModelOutput(inputs = input_object, outputs = out)
 
-  def _get_io_dict(self, input_object):
-
-    def _breakdown(X):
-      if isinstance(X, dict):
-        names = list(X.keys())
-        shapes = []
-        for key in X.keys():
-          if isinstance(X[key], tuple):
-            import numpy as np
-            shapes.append(tuple(np.array(X[key]).shape))
-          elif hasattr(X[key], "shape"):
-            shapes.append(tuple(X[key].shape))
-      return names, tuple(shapes)
-
-    out = self.forward(input_object)
-    model_output = out.outputs
-    model_input = out.inputs
-
-    args = inspect.getfullargspec(self._model.call)
-    args.args.remove("self")
-    input_names = tuple(args.args)
-    _, input_shapes = _breakdown(model_input)
-    output_names, output_shapes = _breakdown(model_output)
-
-    io = io_dict(
-      input_names = input_names,
-      input_shapes = input_shapes,
-      args = tuple(model_input.values()),
-      output_names = output_names,
-      output_shapes = output_shapes,
-      outputs = model_output.to_tuple()
-    )
-    io["arg_spec"] = {
-      "args": args.args,
-      "varargs": args.varargs,
-      "varkw": args.varkw,
-      "defaults": args.defaults,
-      "kwonlyargs": args.kwonlyargs,
-      "kwonlydefaults": args.kwonlydefaults,
-    }
-
-    return io
-
-
   def _serialise_logic(self, fpath):
     logger.info(f"Saving logic to {fpath}")
     with open(fpath, "wb") as f:
@@ -762,7 +706,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
      options=None, include_optimizer=include_optimizer, save_format = "tf"
     )
 
-    iod = self._get_io_dict(input_object)
+    iod = self.get_io_dict(input_object, self._model.call)
 
     return ModelSpec(
       src_framework = "tf",
@@ -798,7 +742,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
      options=None, include_optimizer=include_optimizer, save_format = "h5"
     )
 
-    iod = self._get_io_dict(input_object)
+    iod = self.get_io_dict(input_object, self._model.call)
 
     return ModelSpec(
       src_framework = "tf",
@@ -909,39 +853,6 @@ class FlaxModel(FrameworkAgnosticProtocol):
       out = self._model.apply(self._params, model_inputs)
     
     return ModelOutput(inputs=input_object, outputs=out)
-
-  def _get_io_dict(self, input_object):
-    out = self.forward(input_object)
-    model_output = out.outputs
-    model_input = out.inputs
-
-    args = inspect.getfullargspec(self._model.__call__)
-    args.args.remove("self")
-
-    input_names = tuple(args.args)
-    input_shapes = tuple([tuple(model_input.shape)])
-    output_names = tuple(["output_0"])
-    output_shapes = (tuple(model_output.shape),)
-
-    io = io_dict(
-      input_names = input_names,
-      input_shapes = input_shapes,
-      args = model_input,
-      output_names = output_names,
-      output_shapes = output_shapes,
-      outputs = model_output
-    )
-    io["arg_spec"] = {
-      "args": args.args,
-      "varargs": args.varargs,
-      "varkw": args.varkw,
-      "defaults": args.defaults,
-      "kwonlyargs": args.kwonlyargs,
-      "kwonlydefaults": args.kwonlydefaults,
-    }
-
-    return io
-
 
   def _serialise_params(self, fpath):
     logger.info(f"Saving parameters to {fpath}")
