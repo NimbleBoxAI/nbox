@@ -7,10 +7,9 @@ from time import sleep
 from pprint import pprint as pp
 from datetime import datetime, timedelta
 
+from .utils import logger
 from . import utils
 
-import logging
-logger = logging.getLogger()
 
 class NBXAPIError(Exception):
   pass
@@ -44,23 +43,23 @@ def deploy_model(
   file_size = os.stat(export_model_path).st_size // (1024 ** 2) # in MBs
 
   # intialise the console logger
-  logger.info("-" * 30 + " NBX Deploy " + "-" * 30)
-  logger.info(f"Deploying on URL: {URL}")
+  logger.debug("-" * 30 + " NBX Deploy " + "-" * 30)
+  logger.debug(f"Deploying on URL: {URL}")
   deployment_type = nbox_meta["spec"]["deployment_type"]
   deployment_id = nbox_meta["spec"]["deployment_id"]
   deployment_name = nbox_meta["spec"]["deployment_name"]
   model_name = nbox_meta["spec"]["model_name"]
   
-  logger.info(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
+  logger.debug(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
 
   if not deployment_id and not deployment_name:
-    logger.info("Deployment ID not passed will create a new deployment with name >>")
+    logger.debug("Deployment ID not passed will create a new deployment with name >>")
     deployment_name = utils.get_random_name().replace("-", "_")
 
-  logger.info(
+  logger.debug(
     f"Deployment Name: '{deployment_name}', Model Name: '{model_name}', Model Path: '{export_model_path}', file_size: {file_size} MBs"
   )
-  logger.info("Getting bucket URL")
+  logger.debug("Getting bucket URL")
 
   # get bucket URL
   r = requests.get(
@@ -84,16 +83,16 @@ def deploy_model(
   out = r.json()
   model_id = out["fields"]["x-amz-meta-model_id"]
   deployment_id = out["fields"]["x-amz-meta-deployment_id"]
-  logger.info(f"model_id: {model_id}")
-  logger.info(f"deployment_id: {deployment_id}")
+  logger.debug(f"model_id: {model_id}")
+  logger.debug(f"deployment_id: {deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
-  logger.info("Uploading model to S3 ...")
+  logger.debug("Uploading model to S3 ...")
   r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(export_model_path, "rb"))})
 
   # checking if file is successfully uploaded on S3 and tell webserver
   # whether upload is completed or not because client tells
-  logger.info("Verifying upload ...")
+  logger.debug("Verifying upload ...")
   requests.post(
     url=f"{URL}/api/model/update_model_status",
     json={"upload": True if r.status_code == 204 else False, "model_id": model_id, "deployment_id": deployment_id},
@@ -105,24 +104,24 @@ def deploy_model(
   _stat_done = [] # status calls performed
   total_retries = 0 # number of hits it took
   access_key = None # this key is used for calling the model
-  logger.info(f"Check your deployment at {URL}/oneclick")
+  logger.debug(f"Check your deployment at {URL}/oneclick")
   if not wait_for_deployment:
-    logger.info("NBX Deploy")
+    logger.debug("NBX Deploy")
     return endpoint, access_key
 
-  logger.info("Start Polling ...")
+  logger.debug("Start Polling ...")
   while True:
     total_retries += 1
 
     # don't keep polling for very long, kill after sometime
     if total_retries > 50 and not wait_for_deployment:
-      logger.info(f"Stopping polling, please check status at: {URL}/oneclick")
+      logger.debug(f"Stopping polling, please check status at: {URL}/oneclick")
       break
 
     sleep(5)
 
     # get the status update
-    logger.info(f"Getting updates ...")
+    logger.debug(f"Getting updates ...")
     r = requests.get(
       url=f"{URL}/api/model/get_model_history",
       params={"model_id": model_id, "deployment_id": deployment_id},
@@ -145,7 +144,7 @@ def deploy_model(
       # col = {"failed": console.T.fail, "in-progress": console.T.inp, "success": console.T.st, "ready": console.T.st}[
       #   curr_st.split(".")[-1]
       # ]
-      logger.info(f"Status: {curr_st}")
+      logger.debug(f"Status: {curr_st}")
       _stat_done.append(curr_st)
 
     if curr_st == "deployment.success":
@@ -156,8 +155,8 @@ def deploy_model(
         if endpoint is None:
           if wait_for_deployment:
             continue
-          logger.info("Deployment in progress ...")
-          logger.info(f"Endpoint to be setup, please check status at: {URL}/oneclick")
+          logger.debug("Deployment in progress ...")
+          logger.debug(f"Endpoint to be setup, please check status at: {URL}/oneclick")
           break
 
     elif curr_st == "deployment.ready":
@@ -169,7 +168,7 @@ def deploy_model(
       try:
         r.raise_for_status()
         access_key = r.json()["access_key"]
-        logger.info(f"nbx-key: {access_key}")
+        logger.debug(f"nbx-key: {access_key}")
       except:
         pp(r.content.decode("utf-8"))
         raise ValueError(f"Failed to get access_key, please check status at: {URL}/oneclick")
@@ -177,7 +176,7 @@ def deploy_model(
       # keep hitting /metadata and see if model is ready or not
       r = requests.get(url=f"{endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})
       if r.status_code == 200:
-        logger.info(f"Model is ready")
+        logger.debug(f"Model is ready")
         break
 
     # actual break condition happens here: bug in webserver where it does not return ready
@@ -185,8 +184,8 @@ def deploy_model(
     if access_key != None or "failed" in curr_st:
       break
 
-  logger.info("Process Complete")
-  logger.info("NBX Deploy")
+  logger.debug("Process Complete")
+  logger.debug("NBX Deploy")
   return endpoint, access_key
 
 class Cron:
@@ -319,15 +318,15 @@ def deploy_job(
   Returns:
       [type]: [description]
   """
-  from nbox.auth import secret # it can refresh so add it in the method
+  from nbox.auth import secret, get_stub # it can refresh so add it in the method
 
   access_token = secret.get("access_token")
   URL = secret.get("nbx_url")
   file_size = os.stat(zip_path).st_size // (1024 ** 2) # in MBs
 
   # intialise the console logger
-  logger.info("-" * 30 + " NBX Jobs " + "-" * 30)
-  logger.info(f"Deploying on URL: {URL}")
+  logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
+  logger.debug(f"Deploying on URL: {URL}")
 
   # gRPC baby
   from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
@@ -338,7 +337,7 @@ def deploy_job(
   from google.protobuf.json_format import MessageToJson
 
   try:
-    job = utils.nbx_stub(
+    job = get_stub(
       UploadCodeRequest(
         job=Job(
           code=Job.Code(
@@ -371,7 +370,7 @@ def deploy_job(
       ]
     )
   except Exception as e:
-    logger.info(f"Failed to deploy job: {e}")
+    logger.debug(f"Failed to deploy job: {e}")
     return
   
   out = MessageToJson(job.code)
@@ -380,11 +379,11 @@ def deploy_job(
 
   job_id = s3_meta["x-amz-meta-job_id"]
   jobs_deployment_id = s3_meta["x-amz-meta-jobs_deployment_id"]
-  logger.info(f"job_id: {job_id}")
-  logger.info(f"jobs_deployment_id: {jobs_deployment_id}")
+  logger.debug(f"job_id: {job_id}")
+  logger.debug(f"jobs_deployment_id: {jobs_deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
-  logger.info("Uploading model to S3 ...")
+  logger.debug("Uploading model to S3 ...")
   r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
   try:
     r.raise_for_status()
@@ -393,7 +392,7 @@ def deploy_job(
     return
 
   # Once the file is loaded create a new job
-  logger.info("Creating new job ...")
+  logger.debug("Creating new job ...")
   try:
     job = utils.nbx_stub(
       CreateJobRequest(
@@ -401,7 +400,7 @@ def deploy_job(
       )
     )
   except Exception as e:
-    logger.info(f"Failed to create job: {e}")
+    logger.debug(f"Failed to create job: {e}")
     return
 
   return job

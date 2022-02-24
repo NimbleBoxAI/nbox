@@ -7,32 +7,37 @@
 
 import os
 import io
+import logging
 import hashlib
 import requests
 import tempfile
 import randomname
 from uuid import uuid4
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed, wait
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 
-# logging/
+def get_logger():
+  logger = logging.getLogger(__name__)
+  logger.setLevel(logging.DEBUG)
 
-import logging
-logger = logging.getLogger()
+  if os.environ.get("NBOX_JSON_LOG", False):
+    from pythonjsonlogger import jsonlogger
+    logHandler = logging.StreamHandler()
+    logHandler.setFormatter(jsonlogger.JsonFormatter())
+    logger.addHandler(logHandler)
+  else:
+    logHandler = logging.StreamHandler()
+    logHandler.setFormatter(logging.Formatter(
+      '[%(asctime)s] [%(levelname)s] %(message)s',
+      datefmt = "%Y-%m-%dT%H:%M:%S%z"
+    ))
+    logger.addHandler(logHandler)
 
-# /logging
 
-# common/
+  return logger
 
-nbox_session = requests.Session()
+logger = get_logger()
 
-import grpc
-from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
-
-channel = grpc.insecure_channel("[::]:50051")
-nbx_stub = WSJobServiceStub(channel)
-
-# /common
 
 # lazy_loading/
 
@@ -70,14 +75,20 @@ def _isthere(*packages):
 
 # /lazy_loading
 
-# file path/reading
+# path/
 
-def get_files_in_folder(folder, ext = [".txt"]):
+def get_files_in_folder(folder, ext = ["*"]):
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os
   all_paths = []
+  _all = "*" in ext # wildcard means everything so speed up
+
   for root,_,files in os.walk(folder):
+    if _all:
+      all_paths.extend([join(root, f) for f in files])
+      continue
+
     for f in files:
       for e in ext:
         if f.endswith(e):
@@ -104,6 +115,16 @@ def folder(x):
 def join(x, *args):
   """convienience function for os.path.join"""
   return os.path.join(x, *args)
+
+def to_pickle(obj, path):
+  import dill
+  with open(path, "wb") as f:
+    dill.dump(obj, f)
+
+def from_pickle(path):
+  import dill
+  with open(path, "rb") as f:
+    return dill.load(f)
 
 NBOX_HOME_DIR = join(os.path.expanduser("~"), ".nbx")
 
@@ -240,7 +261,7 @@ class PoolBranch:
     else:
       raise Exception(f"Only 'thread/process' modes are supported")
 
-    logger.info(f"Starting {mode.upper()}-PoolBranch ({self._name}) with {max_workers} workers")
+    logger.debug(f"Starting {mode.upper()}-PoolBranch ({self._name}) with {max_workers} workers")
 
   def __call__(self, fn, *args):
     """Run any function ``fn`` in parallel, where each argument is a list of arguments to

@@ -1,0 +1,17 @@
+# Code to run any instruction on the model
+
+from nbox import Model
+from nbox.utils import folder, from_pickle 
+import glob
+
+# load the models
+nbx_model = 
+
+train_instructions = from_pickle("./train_fn.dill")
+train_fn = train_instructions.train_fn
+other_args = train_instructions.args
+
+train_fn(
+  Model.deserialise(glob(folder(__file__), "*.nbox")[0]),
+  *other_args
+)

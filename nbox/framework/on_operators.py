@@ -15,7 +15,7 @@ Read the code for best understanding.
 import inspect # used for __doc__
 from functools import partial
 from datetime import timedelta
-from ..utils import isthere
+from ..utils import isthere, logger
 
 
 ################################################################################
@@ -172,4 +172,33 @@ class AirflowMixin:
     root._register_forward(forward)
 
     return root
+
+################################################################################
+# Prefect
+# =======
+# https://github.com/PrefectHQ/prefect
+################################################################################
+
+class PrefectMixin:
+  @classmethod
+  def from_prefect_flow(operator_cls, dag):
+    raise NotImplementedError
+  
+  def to_prefect_flow():
+    raise NotImplementedError
+
+  @classmethod
+  def from_prefect_flow(operator_cls, dag):
+    raise NotImplementedError
+
+  def to_prefect_task():
+    raise NotImplementedError
+
+
+################################################################################
+# Luigi
+# =====
+# 
+################################################################################
+
 

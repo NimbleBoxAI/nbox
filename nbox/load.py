@@ -6,11 +6,7 @@ import inspect
 from typing import Dict
 
 from .model import Model
-from .utils import fetch, isthere
-
-import logging
-
-logger = logging.getLogger()
+from .utils import fetch, isthere, logger
 
 model_key_regex = re.compile(r"^(\w+)(\/[\w\/-]+)?(:*[\w+:]+)?$")
 

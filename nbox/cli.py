@@ -5,7 +5,7 @@ from typing import List
 
 from .network import deploy_model
 from .auth import init_secret, secret
-from .utils import get_random_name, NBOX_HOME_DIR, join
+from .utils import get_random_name, NBOX_HOME_DIR, join, logger
 from .jobs import Instance
 
 import webbrowser
@@ -347,7 +347,7 @@ def deploy(
     # check if nbox_meta is correct
     if nbox_meta == None:
       nbox_meta = ".".join(model_path.split(".")[:-1]) + ".json"
-      logger.info("Trying to find nbox meta at path:", nbox_meta)
+      logger.debug("Trying to find nbox meta at path:", nbox_meta)
       assert os.path.exists(nbox_meta), "nbox_meta not provided"
     else:
       raise ValueError("nbox_meta is not supported yet")
@@ -376,5 +376,5 @@ def deploy(
 
     # print to logs if needed
     if wait_for_deployment and print_in_logs:
-      logger.info(" Endpoint:", endpoint)
-      logger.info("Model Key:", key)
+      logger.debug(" Endpoint:", endpoint)
+      logger.debug("Model Key:", key)

@@ -7,10 +7,8 @@ Jobs
 
 import requests
 
-from logging import getLogger
-logger = getLogger()
-
 from ..auth import secret
+from ..utils import logger
 
 
 class Job:

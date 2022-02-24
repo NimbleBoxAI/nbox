@@ -1,20 +1,22 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
+from multiprocessing.sharedctypes import Value
 import os
 import json
+from random import random
 import tarfile
 from glob import glob
 from copy import deepcopy
 from datetime import datetime
 from tempfile import gettempdir
+from time import sleep
 
 from . import utils
+from .utils import logger
 from .framework import get_model_mixin
 from .network import deploy_model
 from .framework.on_ml import ModelOutput, ModelSpec
-
-import logging
-logger = logging.getLogger()
+from .jobs import Instance
 
 # model/
 
@@ -92,9 +94,6 @@ class Model:
 
     Args:
       input_object (Any): input to be processed
-      return_inputs (bool, optional): whether to return the inputs or not. Defaults to False.
-      method(str, optional): specifically for sklearn models, this is the method to be called
-        if nothing is provided then we call ``.predict()`` method.
 
     Returns:
       Any: currently this is output from the model, so if it is tensors and return dicts.
@@ -108,6 +107,7 @@ class Model:
     export_type="onnx",
     return_meta = False,
     *,
+    _do_tar = True,
     _unit_test = False,
     **kwargs
   ) -> str:
@@ -133,7 +133,7 @@ class Model:
     ) if not _unit_test else utils.join(
       gettempdir(), f"{model_name}"
     )
-    logger.info(f"Serialising '{model_name}' to '{export_type}' at '{folder}'")
+    logger.debug(f"Serialising '{model_name}' to '{export_type}' at '{folder}'")
     os.makedirs(folder, exist_ok=True)
     
     # export the model
@@ -149,16 +149,21 @@ class Model:
       f.write(json.dumps(nbox_meta.get_dict()))
 
     nbx_path = os.path.join(folder, f"{model_name}.nbox")
+    all_files = utils.get_files_in_folder(folder)
+
+    if not _do_tar:
+      return (all_files, nbx_path)
+
     with tarfile.open(nbx_path, "w|gz") as tar:
-      for path in glob(os.path.join(folder, "*")):
+      for path in all_files:
         tar.add(path, arcname = os.path.basename(path))
         # os.remove(path)
-        logger.info(f"Removed {path}")
+        logger.debug(f"Removed {path}")
 
     return nbx_path if not return_meta else (nbx_path, nbox_meta)
 
   @classmethod
-  def deserialise(cls, filepath, **init_kwargs):
+  def deserialise(cls, filepath):
     """This is the counterpart of ``serialise``, it deserialises the model from the .nbox file.
 
     Args:
@@ -169,7 +174,7 @@ class Model:
 
     with tarfile.open(filepath, "r:gz") as tar:
       folder = utils.join(gettempdir(), os.path.basename(filepath).replace(".nbox", ""))
-      logger.info(f"Extracted to folder: {folder}")
+      logger.debug(f"Extracted to folder: {folder}")
       tar.extractall(folder)
 
     # go into the currect folder so it's much easier to load things
@@ -181,7 +186,66 @@ class Model:
     m0, m1 = get_model_mixin(ModelSpec(**nbox_meta), deserialise=True)
     
     os.chdir(_pre_dir) # shift path back to original
-    return cls(m0, m1, **init_kwargs)
+    return cls(m0, m1)
+
+  @staticmethod
+  def train_on_instance(
+    instance: Instance,
+    serialised_fn: callable,
+    train_fn: callable,
+    other_args: tuple = (), # any other arguments to be passed to the train_fn
+    target_folder: str = "/", # anything after /project folder
+    shutdown_once_done: bool = False,
+    *,
+    _unit_test = False,
+  ):
+    """Train this model on an NBX-Build Instance. Though this function is generic enough to execute
+    any arbitrary code, this is built primarily for internal use.
+
+    EXPERIMENTAL: FEATURES MIGHT BREAK
+
+    Args:
+      instance (Instance): Instance to train the model on
+      serialised_fn (callable): path to the serialised tar file
+      train_fn (callable): pure function that trains the model
+      other_args (Any, optional): any other arguments to be passed to the train_fn
+      target_folder (str, optional): folder on the ``instance`` to run this program in,
+        will run in folder ``/project/{target_folder}/``
+      shutdown_once_done (bool, optional): if true, shutdown the instance once training is done.
+    """
+
+    assert instance.status == "RUNNING", f"Instance {instance.id} is not running"
+    all_files, nbx_path = serialised_fn(_do_tar = False, _unit_test = _unit_test)
+
+    from types import SimpleNamespace
+    train_fn_path = utils.join(utils.folder(nbx_path), "train_fn.dill")
+    logger.debug(f"Train function saved at {train_fn_path}")
+    utils.to_pickle(SimpleNamespace(train_fn = train_fn, args = other_args), train_fn_path)
+    all_files.append(train_fn_path)
+
+    logger.debug(f"Creating nbox zip: {nbx_path}")
+    with tarfile.open(nbx_path, "w|gz") as tar:
+      for path in all_files:
+        tar.add(path, arcname = os.path.basename(path))
+        # os.remove(path)
+        logger.debug(f"Removed {path}")
+
+    run_folder = f"/project/{target_folder}/"
+
+    instance.mv(nbx_path, run_folder)
+
+    instance("cd {}; python3 -m nbox.train_fn".format(run_folder))
+
+    instance.mv(
+      utils.join(utils.folder(__file__), "assets", "train_fn.jina"),
+      utils.join(run_folder, "run.py")
+    )
+
+    pid = instance(utils.join(run_folder, "run.py"))
+    instance.stream_logs(pid)
+
+    if shutdown_once_done:
+      instance.stop()
 
   def deploy(
     self,

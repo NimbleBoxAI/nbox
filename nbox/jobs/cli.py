@@ -1,11 +1,10 @@
 from .utils import Subway
-from ..utils import nbox_session, folder, join
+from ..utils import folder, join, logger
+from ..init import nbox_session
 from ..auth import secret
 
 import jinja2
-import logging
 import webbrowser
-logger = logging.getLogger()
 web_server_subway = Subway("https://nimblebox.ai", nbox_session)
 
 ################################################################################
@@ -15,7 +14,7 @@ web_server_subway = Subway("https://nimblebox.ai", nbox_session)
 ################################################################################
 
 def new_job(project_name):
-  logger.info("-" * 69)
+  logger.debug("-" * 69)
   import os, re
   from datetime import datetime
   created_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -30,11 +29,11 @@ def new_job(project_name):
   # ask user requirements here for customisation
   scheduled = input("> Is this a recurring job (y/N)? ").lower() == "y"
   if scheduled:
-    logger.info("This job will be scheduled to run on a recurring basis")
+    logger.debug("This job will be scheduled to run on a recurring basis")
   else:
-    logger.info(f"This job will run only once")
+    logger.debug(f"This job will run only once")
   
-  logger.info(f"Creating a folder: {project_name}")
+  logger.debug(f"Creating a folder: {project_name}")
   os.mkdir(project_name)
   os.chdir(project_name)
 
@@ -59,8 +58,8 @@ def new_job(project_name):
 
   open("requirements.txt", "w").close() # ~ touch requirements.txt
 
-  logger.info("Completed")
-  logger.info("-" * 69)
+  logger.debug("Completed")
+  logger.debug("-" * 69)
 
 def deploy(folder):
   """Deploy a job on NimbleBox.ai's NBX-Jobs. This convinience function will
