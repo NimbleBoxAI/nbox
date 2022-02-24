@@ -654,9 +654,8 @@ class SklearnModel(FrameworkAgnosticProtocol):
       logger.info(f"Loading method from {lp}")
       with open(lp, "rb") as f:
         method = dill.load(f)        
-
-    model = joblib.load(model_meta.load_kwargs["model"])
-
+      model = joblib.load(model_meta.load_kwargs["model"])
+  
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 

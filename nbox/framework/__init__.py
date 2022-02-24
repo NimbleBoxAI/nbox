@@ -32,9 +32,6 @@ def register_new_on_ml_protocol(proto: FrameworkAgnosticProtocol):
 
 def get_model_mixin(i0, i1 = None, deserialise = False):
   all_e = []
-  for m in (
-    NBXModel, TensorflowModel, SklearnModel, FlaxModel, TorchModel, ONNXRtModel
-  ):
   for m in ALL_PROTOCOLS:
 
     try:
@@ -44,9 +41,9 @@ def get_model_mixin(i0, i1 = None, deserialise = False):
       else:
         return m.deserialise(i0)
     except InvalidProtocolError as e:
+      all_e.append(f"--> ERROR: {m.__class__.__name__}: {e}")
     except NotImplementedError:
       pass
-      all_e.append(f"--> ERROR: {m.__class__.__name__}: {e}")
 
   raise InvalidProtocolError(
     f"Unkown inputs [{deserialise}]: {type(i0)} {type(i1)}!" + \
