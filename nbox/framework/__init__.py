@@ -33,6 +33,7 @@ def register_new_on_ml_protocol(proto: FrameworkAgnosticProtocol):
 def get_model_mixin(i0, i1 = None, deserialise = False):
   all_e = []
   for m in ALL_PROTOCOLS:
+
     try:
       # if this is the correct method 
       if not deserialise:
@@ -41,6 +42,8 @@ def get_model_mixin(i0, i1 = None, deserialise = False):
         return m.deserialise(i0)
     except InvalidProtocolError as e:
       all_e.append(f"--> ERROR: {m.__class__.__name__}: {e}")
+    except NotImplementedError:
+      pass
 
   raise InvalidProtocolError(
     f"Unkown inputs [{deserialise}]: {type(i0)} {type(i1)}!" + \
