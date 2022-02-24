@@ -6,8 +6,8 @@ import ast
 import base64
 import inspect
 from uuid import uuid4
-from logging import getLogger
-logger = getLogger()
+
+from ..utils import logger
 
 # ==================
 
@@ -149,7 +149,7 @@ nbxl = NboxStrings()
 
 def write_program(nodes):
   for i, n in enumerate(nodes):
-    logger.info(f"{i:03d}|{n.get('nbox_string', n.get('node_info').get('nbox_string'))}")
+    logger.debug(f"{i:03d}|{n.get('nbox_string', n.get('node_info').get('nbox_string'))}")
 
 
 # ==================

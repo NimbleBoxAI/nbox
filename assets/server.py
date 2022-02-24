@@ -1,3 +1,5 @@
+# this is the deprecated server since >v0.8.5
+
 # logger/
 
 # import json
@@ -21,7 +23,7 @@
 #         return json.dumps(mydict)
 
 # logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger()
+# ()
 # logHandler = logging.StreamHandler()
 # logHandler.setFormatter(CustomJsonFormatter())
 # logger.addHandler(logHandler)
@@ -44,7 +46,7 @@ from nbox.model import Model
 from nbox.utils import convert_to_list
 
 import logging
-logger = logging.getLogger()
+()
 
 
 fpath = os.getenv("NBOX_MODEL_PATH", None)
@@ -98,7 +100,7 @@ def get_meta(r: Request, response: Response):
 
 @app.post("/predict", status_code=200, response_model=ModelOutput)
 def predict(r: Request, response: Response, item: ModelInput):
-    logger.info(str(item.inputs)[:100], extra = {"_time": int(time.time())})
+    logger.debug(str(item.inputs)[:100], extra = {"_time": int(time.time())})
 
     try:
         output = model(item.inputs, method = item.method, return_dict = True)

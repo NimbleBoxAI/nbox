@@ -7,7 +7,7 @@ setuptools.setup(
     name="nbox",
     version="0.8.7",
     author="NimbleBox.ai",
-    author_email="admin@nimblebox.ai",
+    author_email="research@nimblebox.ai",
     description="Make inference chill again!",
     long_description=long_description,
     long_description_content_type="text/markdown",

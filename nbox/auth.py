@@ -1,12 +1,9 @@
 import os
 import json
-import logging
 import requests
 from getpass import getpass
 
-from .utils import join, nbox_session, NBOX_HOME_DIR, isthere
-
-logger = logging.getLogger()
+from .utils import join, NBOX_HOME_DIR, isthere, logger
 
 # ------ AWS Auth ------ #
 
@@ -149,7 +146,7 @@ class NBXClient:
     elif r.status_code == 200:
       access_packet = r.json()
       access_token = access_packet.get("access_token", None)
-      logger.info("Access token obtained")
+      logger.debug("Access token obtained")
       return access_token
     else:
       logger.error(f"Unknown error: {r.content.decode()}")
@@ -188,11 +185,11 @@ class NBXClient:
       self.secrets["nbx_url"] = nbx_home_url
       with open(fp, "w") as f:
         f.write(self.__repr__())
-      logger.info("Successfully created secrets!")
+      logger.debug("Successfully created secrets!")
     else:
       with open(fp, "r") as f:
         self.secrets = json.load(f)
-      logger.info("Successfully loaded secrets!")
+      logger.debug("Successfully loaded secrets!")
 
   def __repr__(self):
     return json.dumps(self.secrets)
@@ -203,10 +200,7 @@ class NBXClient:
 # function for manual trigger
 
 def init_secret():
-  global secret
-  secret = NBXClient()
-  nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
+  return NBXClient()
 
-secret = None
-if not os.getenv("NBOX_NO_AUTH", False):
-  init_secret()
+secret = init_secret()
+

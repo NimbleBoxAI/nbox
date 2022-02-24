@@ -10,8 +10,7 @@ import re
 import string
 from functools import lru_cache
 
-from logging import getLogger
-logger = getLogger()
+from ..utils import logger
 
 TIMEOUT_CALLS = 60
 
@@ -32,10 +31,10 @@ class Subway():
     fn = getattr(self._session, method)
     url = f"{self._url}{trailing}"
     if _verbose:
-      logger.info(f"Calling {url}")
+      logger.debug(f"Calling {url}")
     r = fn(url, json = data)
     if _verbose:
-      logger.info(r.content.decode())
+      logger.debug(r.content.decode())
     r.raise_for_status() # good when server is good
     return r.json()
 
@@ -108,7 +107,7 @@ class Sub30:
       raise ValueError(f"No path found for '{self._prefix}'")
 
     # this is a match
-    logger.info("Matched path: " + path)
+    logger.debug("Matched path: " + path)
     p = paths[index]
     method = tuple(p.keys())[0] if len(p) == 1 else (
       _method if _method != None else "get"
@@ -135,7 +134,7 @@ class Sub30:
 
     # call and return
     path = re.sub(r"\/_", "/", self._url)
-    logger.info(method.upper() + " " + path)
+    logger.debug(method.upper() + " " + path)
     r = self._session.request(method, path, json = json, params = params)
     try:
       r.raise_for_status()
@@ -161,7 +160,7 @@ class SpecSubway():
 
   @classmethod
   def from_openapi(cls, openapi, _url, _session):
-    logger.info("Loading for OpenAPI version latest")
+    logger.debug("Loading for OpenAPI version latest")
     paths = openapi["paths"]
     spec = openapi["components"]["schemas"]
     
@@ -264,8 +263,8 @@ class SpecSubway():
     if self._caller and "/" in self._spec:
       url += "/"
     if _verbose:
-      logger.info(f"{spec['method'].upper()} {url}")
-      logger.info("-->>", data)
+      logger.debug(f"{spec['method'].upper()} {url}")
+      logger.debug("-->>", data)
     r = fn(url, json = data)
     if not r.status_code == 200:
       raise ValueError(r.content.decode())

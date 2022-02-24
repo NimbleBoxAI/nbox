@@ -1,13 +1,32 @@
-import os
-import logging
+import requests
+from .auth import secret
+from .utils import logger
 
-def reset_log():
-  JSON_LOG = os.environ.get("NBOX_JSON_LOG", False)
-  json_format = '{"time": "%(asctime)s", "level": "%(levelname)s", "message": "%(message)s"}'
-  normal_format = '[%(asctime)s] [%(levelname)s] %(message)s'
 
-  logging.basicConfig(
-    level = logging.INFO,
-    format = json_format if JSON_LOG else normal_format,
-    datefmt = "%Y-%m-%dT%H:%M:%S%z" # isoformat
+def get_stub():
+  try:
+    import grpc
+    from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
+  except ImportError as e:
+    logger.warn(f"Could not import gRPC commands, some functionality might not work")
+    return None
+
+  nbx_stub = WSJobServiceStub(
+    grpc.secure_channel(
+      "grpc.revamp-online.test-2.nimblebox.ai:443",
+      grpc.composite_channel_credentials(
+        grpc.ssl_channel_credentials(),
+        grpc.access_token_call_credentials(secret.get("access_token"))
+      )
+    )
   )
+  return nbx_stub
+
+
+# common networking items that will be used everywhere
+nbox_session = requests.Session()
+nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
+nbox_grpc_stub = get_stub()
+
+# add code here to warn user of nbox deprecation -> not sure how to implement this yet
+# raise_old_version_warning()

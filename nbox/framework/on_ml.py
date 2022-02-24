@@ -34,11 +34,8 @@ from typing import Any, Tuple
 
 import dill
 
-from logging import getLogger
-logger = getLogger()
-
 from .on_functions import DBase
-from ..utils import isthere, join
+from ..utils import isthere, join, logger
 from ..auth import secret
 
 
@@ -82,6 +79,8 @@ class ModelSpec(DBase):
 
 class FrameworkAgnosticProtocol(object):
   """https://nimblebox.notion.site/nbox-FrameworkAgnosticProtocol-6b39249316b1497b8ad9ff8f02b227f0"""
+  # def __init__(self, i0: Any, i1: Any) -> None
+
   def forward(self, input_object: Any) -> ModelOutput:
     raise NotImplementedError()
 
@@ -149,7 +148,7 @@ def io_dict(input_object, output_object):
   return meta
 
 def get_io_dict(input_object, call_fn, forward_fn):
-  """Generates and returns an io_dict
+  """Generates and returns an io_dict by performing forward pass through the model
 
   Args:
       input_object (Any): Input to a model
@@ -193,7 +192,7 @@ class NBXModel(FrameworkAgnosticProtocol):
     self.url = url
     self.key = key
 
-    logger.info(f"Trying to load as url")
+    logger.debug(f"Trying to load as url")
     if not isinstance(url, str):
       raise InvalidProtocolError(f"Model must be a string, got: {type(url)}")
     if not (url.startswith("https://") or url.startswith("http://")):
@@ -205,7 +204,7 @@ class NBXModel(FrameworkAgnosticProtocol):
 
     # fetch the metadata from the cloud
     model_url = url.rstrip("/")
-    logger.info("Getting model metadata")
+    logger.debug("Getting model metadata")
     URL = secret.get("nbx_url")
     r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={model_url}&key={key}")
     try:
@@ -221,7 +220,7 @@ class NBXModel(FrameworkAgnosticProtocol):
     templates = {}
     for node, meta in all_inputs.items():
       templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
-    logger.info("Cloud infer metadata obtained")
+    logger.debug("Cloud infer metadata obtained")
 
     category = nbox_meta["spec"]["category"]
 
@@ -241,7 +240,7 @@ class NBXModel(FrameworkAgnosticProtocol):
   def forward(self, model_input):
     import numpy as np
     
-    logger.info(f"Hitting API: {self.model_or_model_url}")
+    logger.debug(f"Hitting API: {self.model_or_model_url}")
     st = time()
     # OVMS has :predict endpoint and nbox has /predict
     _p = "/" if "export_type" in self.nbox_meta["spec"] else ":"
@@ -263,9 +262,9 @@ class NBXModel(FrameworkAgnosticProtocol):
         out = np.array(out["outputs"])
       else:
         raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
-      logger.info(f"Took {et:.3f} seconds!")
+      logger.debug(f"Took {et:.3f} seconds!")
     except Exception as e:
-      logger.info(f"Failed: {str(e)} | {r.content.decode()}")
+      logger.debug(f"Failed: {str(e)} | {r.content.decode()}")
 
   def export(*_, **__):
     raise InvalidProtocolError("NBX-Deploy does not support exporting")
@@ -314,7 +313,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     return ModelOutput(inputs = input_object, outputs = out)
 
   def _serialise_logic(self, fpath):
-    logger.info(f"Saving logic to {fpath}")
+    logger.debug(f"Saving logic to {fpath}")
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
@@ -397,7 +396,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     )
 
     export_path = join(export_model_path, model_file_name)
-    logger.info(f"Saving model to {export_path}")
+    logger.debug(f"Saving model to {export_path}")
 
     torch.jit.save(traced_model, export_path)
 
@@ -417,7 +416,7 @@ class TorchModel(FrameworkAgnosticProtocol):
       )
 
   def export(self, format, input_object, export_model_path, **kwargs) -> ModelSpec:
-    logger.info(f"Exporting torch model to {format}")
+    logger.debug(f"Exporting torch model to {format}")
 
     if format == "onnx":
       return self.export_to_onnx(
@@ -432,13 +431,13 @@ class TorchModel(FrameworkAgnosticProtocol):
 
   @staticmethod
   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
-    logger.info(f"Deserialising torch model from {model_meta.export_path}")
+    logger.debug(f"Deserialising torch model from {model_meta.export_path}")
 
     kwargs = model_meta.load_kwargs
 
     if model_meta.export_type == "torchscript":
       lp = kwargs.pop("logic_path")
-      logger.info(f"Loading logic from {lp}")
+      logger.debug(f"Loading logic from {lp}")
       with open(lp, "rb") as f:
         logic = dill.load(f)
       
@@ -469,7 +468,7 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
     if not isinstance(ort_session, onnxruntime.InferenceSession):
       raise InvalidProtocolError
 
-    logger.info(f"Trying to load from onnx model: {ort_session}")
+    logger.debug(f"Trying to load from onnx model: {ort_session}")
 
     # we have to create templates using the nbox_meta
     templates = None
@@ -486,8 +485,8 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
     self.input_names = [x.name for x in self.session.get_inputs()]
     self.output_names = [x.name for x in self.session.get_outputs()]
 
-    logger.info(f"Inputs: {self.input_names}")
-    logger.info(f"Outputs: {self.output_names}")
+    logger.debug(f"Inputs: {self.input_names}")
+    logger.debug(f"Outputs: {self.output_names}")
 
   def forward(self, input_object) -> ModelOutput:
     if set(input_object.keys()) != set(self.input_names):
@@ -555,7 +554,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
         method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
         out = method(model_input)
       except Exception as e:
-        logger.info(f"[ERROR] Model Prediction Function is not yet registered {e}")
+        logger.debug(f"[ERROR] Model Prediction Function is not yet registered {e}")
     
     return ModelOutput(
       inputs = model_input,
@@ -567,6 +566,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
+  @isthere("skl2onnx", soft = False)
   def export_to_onnx(self, model, args, input_names, input_shapes, export_model_path, opset_version=None, **kwargs):
     from skl2onnx import convert_sklearn
     import skl2onnx.common.data_types as dt
@@ -653,13 +653,14 @@ class SklearnModel(FrameworkAgnosticProtocol):
       lp = kwargs.pop("method_path")
       logger.info(f"Loading method from {lp}")
       with open(lp, "rb") as f:
-        method = dill.load(f)
-        
-      model = joblib.load(model_meta.load_kwargs["model"])
-      return model, method
+        method = dill.load(f)        
+
+    model = joblib.load(model_meta.load_kwargs["model"])
 
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
+
+    return model, method
 
 ################################################################################
 # Tensorflow
@@ -692,8 +693,12 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       out = self._model(model_inputs)
     return ModelOutput(inputs = input_object, outputs = out)
 
+
   def _serialise_logic(self, fpath):
     logger.info(f"Saving logic to {fpath}")
+
+  def _serialise_logic(self, fpath):
+    logger.debug(f"Saving logic to {fpath}")
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
@@ -710,6 +715,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     include_optimizer = True,
   ) -> ModelSpec:
     import tensorflow as tf
+
     input_object = self._logic(input_object)
     self._serialise_logic(join(export_model_path, logic_file_name))
 
@@ -803,6 +809,19 @@ class TensorflowModel(FrameworkAgnosticProtocol):
         logic = dill.load(f)
       
       import tensorflow as tf
+      model = tf.keras.models.load_model(model_meta.load_kwargs["model"])
+      return model, logic
+
+    logger.debug(f"Deserialising Tensorflow model from {model_meta.export_path}")
+    kwargs = model_meta.load_kwargs
+
+    if model_meta.export_type in ["SaveModel", "h5"]:
+      lp = kwargs.pop("logic_path")
+      logger.debug(f"Loading logic from {lp}")
+      with open(lp, "rb") as f:
+        logic = dill.load(f)
+      
+      import tensorflow as tf # pylint: disable=import-outside-toplevel
       model = tf.keras.models.load_model(model_meta.load_kwargs["model"])
       return model, logic
 

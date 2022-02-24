@@ -5,7 +5,7 @@
 # from .. import utils
 
 # import logging
-# logger = logging.getLogger()
+# ()
 
 
 # # ----- parsers
@@ -42,13 +42,13 @@
 
 #   def __call__(self, input_object):
 #     if isinstance(input_object, list):
-#       logger.info(f" - {self.__class__.__name__} - (A1)")
+#       logger.debug(f" - {self.__class__.__name__} - (A1)")
 #       out = self.process_list(input_object)
 #     elif isinstance(input_object, dict):
-#       logger.info(f" - {self.__class__.__name__} - (A2)")
+#       logger.debug(f" - {self.__class__.__name__} - (A2)")
 #       out = self.process_dict(input_object)
 #     else:
-#       logger.info(f" - {self.__class__.__name__} - (A3)")
+#       logger.debug(f" - {self.__class__.__name__} - (A3)")
 #       out = self.process_primitive(input_object)
 
 #     # apply self.post_proc_fn if it exists
@@ -101,18 +101,18 @@
 #   def process_primitive(self, x, target_shape=None):
 #     """primitive can be string, array, Image"""
 #     if isinstance(x, np.ndarray):
-#       logger.info(" - ImageParser - (C2) np.ndarray")
+#       logger.debug(" - ImageParser - (C2) np.ndarray")
 #       # if shape == 3, unsqueeze it, numpy arrays cannot be reshaped
 #       out = x[None, ...] if len(x.shape) == 3 else x
 #     elif isinstance(x, Image.Image):
-#       logger.info(" - ImageParser - (C1) Image.Image object")
+#       logger.debug(" - ImageParser - (C1) Image.Image object")
 #       img = x
 #     elif isinstance(x, str):
 #       if os.path.isfile(x):
-#         logger.info(" - ImageParser - (C3) string - file")
+#         logger.debug(" - ImageParser - (C3) string - file")
 #         img = Image.open(x)
 #       elif x.startswith("http"):
-#         logger.info(" - ImageParser - (C4) string - url")
+#         logger.debug(" - ImageParser - (C4) string - url")
 #         img = utils.get_image(x)
 #       else:
 #         try:
@@ -120,7 +120,7 @@
 #           from io import BytesIO
 #           import base64
 
-#           logger.info(" - ImageParser - (C5) string - base64")
+#           logger.debug(" - ImageParser - (C5) string - base64")
 #           img = Image.open(BytesIO(base64.b64decode(x)))
 #         except:
 #           raise Exception("Unable to parse string as Image")
@@ -189,11 +189,11 @@
 #       raise ValueError(f"Template has more than 1 input, please input a dict with keys: {tuple(self.templates.keys())}")
 
 #     if isinstance(input_object[0], (str, Image.Image)):
-#       logger.info(" - ImageParser - (B1) list - (str, Image.Image)")
+#       logger.debug(" - ImageParser - (B1) list - (str, Image.Image)")
 #       out = [self.process_primitive(x, target_shape) for x in input_object]
 #       return np.vstack(out)
 #     elif isinstance(input_object[0], dict):
-#       logger.info(" - ImageParser - (B2) list - (dict)")
+#       logger.debug(" - ImageParser - (B2) list - (dict)")
 #       assert all([set(input_object[0].keys()) == set(i.keys()) for i in input_object]), "All keys must be same in all dicts in list"
 #       out = [self.process_dict(x) for x in input_object]
 #       out = {k: np.vstack([x[k] for x in out]) for k in out[0].keys()}
@@ -201,14 +201,14 @@
 #     else:
 #       # check if this is a list of lists or np.ndarrays
 #       if isinstance(input_object[0], list):
-#         logger.info(" - ImageParser - (B3) list - (list)")
+#         logger.debug(" - ImageParser - (B3) list - (list)")
 #         # convert input_object to a np.array and check shapes - used in nbox-dply
 #         out = np.array(input_object)
 #         if len(out.shape) == 3:
 #           out = out[None, ...]
 #         return out
 #       else:
-#         logger.info(" - ImageParser - (B4) list - (primitive)")
+#         logger.debug(" - ImageParser - (B4) list - (primitive)")
 #         out = [self.process_primitive(x, target_shape) for x in input_object]
 #         return np.vstack(out)
 
@@ -231,7 +231,7 @@
 #   def process_primitive(self, x):
 #     # in case of text this is quite simple because only primitive is strings
 #     if isinstance(x, str):
-#       logger.info(" - TextParser - (C1) string")
+#       logger.debug(" - TextParser - (C1) string")
 #       return {
 #         k: np.array(v)[None, ...]
 #         for k, v in self.tokenizer(
@@ -242,7 +242,7 @@
 #         ).items()
 #       }
 #     elif isinstance(x, np.ndarray):
-#       logger.info(" - TextParser - (C2) ndarray")
+#       logger.debug(" - TextParser - (C2) ndarray")
 #       return x
 #     else:
 #       raise ValueError(f"Unsupported type for TextParser: {type(x)}")

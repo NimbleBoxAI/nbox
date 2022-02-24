@@ -10,11 +10,8 @@ from tempfile import gettempdir
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
-from logging import getLogger
-logger = getLogger()
-
 from ..network import deploy_job, Cron
-from ..utils import join
+from ..utils import join, logger
 from ..framework import AirflowMixin
 from ..framework.on_functions import get_nbx_flow, DBase
 
@@ -124,10 +121,16 @@ class Tracer:
       # when job is running on NBX, gRPC stubs are used
       import nbox_js_stub
       self.l = nbox_js_stub.Trace()
+
+      self.l.Register(
+        "dag",
+        
+      )
+
       self._trace_obj = "stub"
     except ImportError:
       def _trace(x, fn):
-        logger.info(x, extra={"fn": fn})
+        logger.debug(x, extra={"fn": fn})
 
       self.l = _trace
       self._trace_obj = "logger"
@@ -406,7 +409,7 @@ class Operator(AirflowMixin):
     job_id = None,
     job_name = None,
   ):
-    logger.info(f"Deploying {self.__class__.__name__} -> '{job_id}/{job_name}'")
+    logger.debug(f"Deploying {self.__class__.__name__} -> '{job_id}/{job_name}'")
 
     # check if this is a valid folder or not
     if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
@@ -425,7 +428,7 @@ class Operator(AirflowMixin):
       dumps(dag)
     except:
       logger.error("Cannot perform pre-building, only live updates will be available!")
-      logger.info("Please raise an issue on chat to get this fixed")
+      logger.debug("Please raise an issue on chat to get this fixed")
       dag = {"flowchart": None, "symbols": None}
 
     for n in dag["flowchart"]["nodes"]:
@@ -438,7 +441,7 @@ class Operator(AirflowMixin):
         operator_name = cls_item.__class__.__name__
       n["operator_name"] = operator_name
 
-    logger.info(f"Schedule: {schedule.get_dict}")
+    logger.debug(f"Schedule: {schedule.get_dict}")
 
     data = {
       "dag": dag,
@@ -459,7 +462,7 @@ class Operator(AirflowMixin):
     
     import zipfile
     zip_path = join(cache_dir if cache_dir else gettempdir(), "project.zip")
-    logger.info(f"Zipping project to '{zip_path}'")
+    logger.debug(f"Zipping project to '{zip_path}'")
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
       for f in all_f:
         zip_file.write(f)

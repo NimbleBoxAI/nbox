@@ -19,11 +19,9 @@ from tabulate import tabulate
 from requests.sessions import Session
 
 from .utils import SpecSubway, Subway, TIMEOUT_CALLS
-from ..utils import nbox_session, NBOX_HOME_DIR, join
+from ..utils import NBOX_HOME_DIR, join, logger
+from ..init import nbox_session
 from ..auth import secret
-
-from logging import getLogger
-logger = getLogger()
 
 
 ################################################################################
@@ -69,14 +67,14 @@ class Instance():
     self.session = Session()
     self.session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
     self.web_server = Subway(f"{self.url}/api/instance", self.session)
-    logger.info(f"WS: {self.web_server}")
+    logger.debug(f"WS: {self.web_server}")
 
     self.instance_id = None
     self.__opened = False
     self.running_scripts = []
 
     self.refresh(i)
-    logger.info(f"Instance added: {self.name} ({self.instance_id})")
+    logger.debug(f"Instance added: {self.name} ({self.instance_id})")
 
     if self.state == "RUNNING":
       self.start()
@@ -94,6 +92,8 @@ class Instance():
     )
     r.raise_for_status() # if its not 200, it's an error
     return cls(name, url)
+
+  mv = None # atleast registered
 
   def refresh(self, id_or_name = None):
     id_or_name = id_or_name or self.instance_id
@@ -124,11 +124,11 @@ class Instance():
   def start(self, cpu_only = True, cpu_count = 2, gpu = "p100", gpu_count = 1, region = "asia-south-1"):
     """``cpu_count`` should be one of [2, 4, 8]"""
     if self.__opened:
-      logger.info(f"Instance {self.name} ({self.instance_id}) is already opened")
+      logger.debug(f"Instance {self.name} ({self.instance_id}) is already opened")
       return
 
     if not self.state == "RUNNING":
-      logger.info(f"Starting instance {self.name} ({self.instance_id})")
+      logger.debug(f"Starting instance {self.name} ({self.instance_id})")
       message = self.web_server.start_instance(
         "post",
         data = {
@@ -145,7 +145,7 @@ class Instance():
       if not message == "success":
         raise ValueError(message)
 
-      logger.info(f"Waiting for instance {self.name} ({self.instance_id}) to start")
+      logger.debug(f"Waiting for instance {self.name} ({self.instance_id}) to start")
       _i = 0
       while self.state != "RUNNING":
         time.sleep(5)
@@ -153,13 +153,13 @@ class Instance():
         _i += 1
         if _i > TIMEOUT_CALLS:
           raise TimeoutError("Instance did not start within timeout, please check dashboard")
-      logger.info(f"Instance {self.name} ({self.instance_id}) started")
+      logger.debug(f"Instance {self.name} ({self.instance_id}) started")
     else:
-      logger.info(f"Instance {self.name} ({self.instance_id}) is already running")
+      logger.debug(f"Instance {self.name} ({self.instance_id}) is already running")
 
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
-    logger.info(f"Opening instance {self.name} ({self.instance_id})")
+    logger.debug(f"Opening instance {self.name} ({self.instance_id})")
     self.open_data = self.web_server.open_instance(
       "post", data = {"instance_id":self.instance_id}
     )
@@ -177,10 +177,10 @@ class Instance():
     r = self.session.get(f"{self.cs_url}/openapi.json"); r.raise_for_status()
     self.cs_spec = r.json()
     self.compute_server = SpecSubway.from_openapi(self.cs_spec, self.cs_url, self.session)
-    logger.info(f"CS: {self.compute_server}")
+    logger.debug(f"CS: {self.compute_server}")
 
     # now load all the functions from methods.py
-    logger.info(f"Testing instance {self.name} ({self.instance_id})")
+    logger.debug(f"Testing instance {self.name} ({self.instance_id})")
     out = self.compute_server.test()
     with open(join(NBOX_HOME_DIR, "methods.py"), "w") as f:
       f.write(out["data"])
@@ -218,15 +218,15 @@ class Instance():
 
   def stop(self):
     if self.state == "STOPPED":
-      logger.info(f"Instance {self.name} ({self.instance_id}) is already stopped")
+      logger.debug(f"Instance {self.name} ({self.instance_id}) is already stopped")
       return
 
-    logger.info(f"Stopping instance {self.name} ({self.instance_id})")
+    logger.debug(f"Stopping instance {self.name} ({self.instance_id})")
     message = self.web_server.stop_instance("post", data = {"instance_id":self.instance_id})["msg"]
     if not message == "success":
       raise ValueError(message)
 
-    logger.info(f"Waiting for instance {self.name} ({self.instance_id}) to stop")
+    logger.debug(f"Waiting for instance {self.name} ({self.instance_id}) to stop")
     _i = 0 # timeout call counter
     while self.state != "STOPPED":
       time.sleep(5)
@@ -234,14 +234,14 @@ class Instance():
       _i += 1
       if _i > TIMEOUT_CALLS:
         raise TimeoutError("Instance did not stop within timeout, please check dashboard")
-    logger.info(f"Instance {self.name} ({self.instance_id}) stopped")
+    logger.debug(f"Instance {self.name} ({self.instance_id}) stopped")
 
     self.__opened = False
 
   def delete(self, force = False):
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
-    logger.info(f"Deleting instance {self.name} ({self.instance_id})")
+    logger.debug(f"Deleting instance {self.name} ({self.instance_id})")
     message = self.web_server.delete_instance("post", data = {"instance_id":self.instance_id})["msg"]
     if not message == "success":
       raise ValueError(message)
@@ -276,13 +276,13 @@ class Instance():
       return self.compute_server.rpc.start(fpath)["uid"]
 
     if re.match(r"[a-z]+-[a-z]+", x) is not None:
-      logger.info(f"Getting status of Job '{x}' on instance {self.name} ({self.instance_id})")
+      logger.debug(f"Getting status of Job '{x}' on instance {self.name} ({self.instance_id})")
       data = self.compute_server.rpc.status(x)
       if not data["msg"] == "success":
         raise ValueError(data["msg"])
       else:
         status = data["status"]
-        logger.info(f"Script {x} on instance {self.name} ({self.instance_id}) is {status}")
+        logger.debug(f"Script {x} on instance {self.name} ({self.instance_id}) is {status}")
 
       # if stopped then get the logs and run
       if status == "stopped":
@@ -299,7 +299,7 @@ class Instance():
       self.running_scripts.append(uid)
       return uid
     elif x.startswith("nbx://"):
-      logger.info("Running file on cloud")
+      logger.debug("Running file on cloud")
       uid = _run_cloud(x)
       self.running_scripts.append(uid)
       return uid
