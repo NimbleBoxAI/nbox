@@ -38,6 +38,8 @@ def get_model_mixin(i0, i1 = None, deserialise = False):
         return m.deserialise(i0)
     except InvalidProtocolError as e:
       all_e.append(f"--> ERROR: {type(m)}: {e}")
+    except NotImplementedError:
+      pass
 
   raise InvalidProtocolError(
     f"Unkown inputs [{deserialise}]: {type(i0)} {type(i1)}!" + \

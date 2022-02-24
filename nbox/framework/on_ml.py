@@ -92,24 +92,6 @@ class FrameworkAgnosticProtocol(object):
   def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
     raise NotImplementedError()
   
-  def get_io_dict(self, input_object, call_fn):
-    out = self.forward(input_object)
-    args = inspect.getfullargspec(call_fn)
-    args.args.remove("self")
-  
-    io = io_dict(
-      input_object=out.inputs,
-      output_object=out.outputs
-    )
-    io["arg_spec"] = {
-      "args": args.args,
-      "varargs": args.varargs,
-      "varkw": args.varkw,
-      "defaults": args.defaults,
-      "kwonlyargs": args.kwonlyargs,
-      "kwonlydefaults": args.kwonlydefaults,
-    }
-    return io
 
 def io_dict(input_object, output_object):
   """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
@@ -165,6 +147,35 @@ def io_dict(input_object, output_object):
     "outputs": __get_struct(output_object)
   }
   return meta
+
+def get_io_dict(input_object, call_fn, forward_fn):
+  """Generates and returns an io_dict
+
+  Args:
+      input_object (Any): Input to a model
+      call_fn (Callable): function that Model.model employs to do a forward pass.
+      forward_fn (Callable): forward() function of the Model
+
+  Returns:
+      io : io_dict
+  """
+  out = forward_fn(input_object)
+  args = inspect.getfullargspec(call_fn)
+  args.args.remove("self")
+
+  io = io_dict(
+    input_object=out.inputs,
+    output_object=out.outputs
+  )
+  io["arg_spec"] = {
+    "args": args.args,
+    "varargs": args.varargs,
+    "varkw": args.varkw,
+    "defaults": args.defaults,
+    "kwonlyargs": args.kwonlyargs,
+    "kwonlydefaults": args.kwonlydefaults,
+  }
+  return io
 
 
 ################################################################################
@@ -295,8 +306,11 @@ class TorchModel(FrameworkAgnosticProtocol):
     self._model.eval()
 
   def forward(self, input_object) -> ModelOutput:
-    model_inputs = self._logic(input_object) if self._logic != None else input_object
-    out = self._model(**model_inputs)
+    model_inputs = self._logic(input_object)
+    if isinstance(model_inputs, dict):
+      out = self._model(**model_inputs)
+    else:
+      out = self._model(model_inputs)
     return ModelOutput(inputs = input_object, outputs = out)
 
   def _serialise_logic(self, fpath):
@@ -320,7 +334,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     use_external_data_format=False,
     **kwargs
   ) -> ModelSpec:
-    iod = self.get_io_dict(input_object, self._model.forward)
+    iod = get_io_dict(input_object, self._model.forward, self.forward)
 
     import torch
 
@@ -361,7 +375,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     logic_file_name = "logic.dill",
     model_file_name = "model.bin",
   ) -> ModelSpec:
-    iod = self.get_io_dict(input_object, self._model.forward)
+    iod = get_io_dict(input_object, self._model.forward, self.forward)
 
     self._serialise_logic(join(export_model_path, logic_file_name))
 
@@ -606,7 +620,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
 
     method = input_object.get("method", None) 
     method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
-    iod = self.get_io_dict(input_object, method)
+    iod = get_io_dict(input_object, method, self.forward)
 
     return ModelSpec(
       src_framework = "SkLearn",
@@ -672,7 +686,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
 
   def forward(self, input_object: Any) -> ModelOutput:
     model_inputs = self._logic(input_object)
-    if type(model_inputs) is dict:
+    if isinstance(model_inputs, dict):
       out = self._model(**model_inputs)
     else:
       out = self._model(model_inputs)
@@ -706,7 +720,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
      options=None, include_optimizer=include_optimizer, save_format = "tf"
     )
 
-    iod = self.get_io_dict(input_object, self._model.call)
+    iod = get_io_dict(input_object, self._model.call, self.forward)
 
     return ModelSpec(
       src_framework = "tf",
@@ -742,7 +756,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
      options=None, include_optimizer=include_optimizer, save_format = "h5"
     )
 
-    iod = self.get_io_dict(input_object, self._model.call)
+    iod = get_io_dict(input_object, self._model.call, self.forward)
 
     return ModelSpec(
       src_framework = "tf",
