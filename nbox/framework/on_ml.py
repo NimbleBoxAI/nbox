@@ -25,13 +25,10 @@ Read the code for best understanding.
 
 import json
 import inspect
-from turtle import shape
 import joblib
-from numpy import dtype
 import requests
 from time import time
 from typing import Any, Tuple
-
 import dill
 
 from .on_functions import DBase
@@ -64,11 +61,11 @@ class ModelSpec(DBase):
     "src_framework", # :str: name of the source framework
     "src_framework_version", # :str
     'export_path', # str: there is no reason for the Pod to know anything about the user
-    
+
     # where to
     "export_type", # :str
     "exported_time", # :str: UTC time when the model was exported
-    
+
     # how to
     "load_method", # :str: The classmethod to call to load this model
     "load_kwargs", # :dict: kwargs to pass to the load method
@@ -90,11 +87,11 @@ class FrameworkAgnosticProtocol(object):
   @staticmethod
   def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
     raise NotImplementedError()
-  
+
 
 def io_dict(input_object, output_object):
   """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
-  # get the meta object 
+  # get the meta object
 
   def __get_struct(object):
 
@@ -138,7 +135,7 @@ def io_dict(input_object, output_object):
         return {"name": name, "dtype": dtype, "tensorShape": {"dim":[{'name':dim_names[y], "size":x.shape[y]} for y in range(len(x.shape))],"unknownRank":False}}, curr_idx
       else:
         return {"name": name, "dtype": dtype, "shape": None}, curr_idx
-    
+
     return parse(object)[0]
 
   meta = {
@@ -239,7 +236,7 @@ class NBXModel(FrameworkAgnosticProtocol):
 
   def forward(self, model_input):
     import numpy as np
-    
+
     logger.debug(f"Hitting API: {self.model_or_model_url}")
     st = time()
     # OVMS has :predict endpoint and nbox has /predict
@@ -294,7 +291,7 @@ class TorchModel(FrameworkAgnosticProtocol):
       # because user can define whatever they want and it removes any onus on NBX to ensure that
       # processing works, halting problem is no joke!
       raise ValueError(f"Second input for torch model must be a callable, got: {type(m2)}")
-    
+
     self._model = m1
     self._logic = m2 if m2 else lambda x: x # Identity function
 
@@ -305,7 +302,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     self._model.eval()
 
   def forward(self, input_object) -> ModelOutput:
-    model_inputs = self._logic(input_object)
+    model_inputs = self._logic(input_object) # TODO: @yashbonde enforce logic to return dict
     if isinstance(model_inputs, dict):
       out = self._model(**model_inputs)
     else:
@@ -370,7 +367,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     check_trace = True,
     check_inputs = None,
     strict = True,
-    
+
     logic_file_name = "logic.dill",
     model_file_name = "model.bin",
   ) -> ModelSpec:
@@ -400,7 +397,7 @@ class TorchModel(FrameworkAgnosticProtocol):
 
     torch.jit.save(traced_model, export_path)
 
-    # return as 
+    # return as
     return ModelSpec(
         src_framework = "torch",
         src_framework_version = torch.__version__,
@@ -440,7 +437,7 @@ class TorchModel(FrameworkAgnosticProtocol):
       logger.debug(f"Loading logic from {lp}")
       with open(lp, "rb") as f:
         logic = dill.load(f)
-      
+
       import torch
 
       model = torch.jit.load(model_meta.load_kwargs["model"], map_location=kwargs["map_location"])
@@ -464,7 +461,7 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
   @isthere("onnxruntime", soft = False)
   def __init__(self, ort_session, nbox_meta):
     import onnxruntime
-    
+
     if not isinstance(ort_session, onnxruntime.InferenceSession):
       raise InvalidProtocolError
 
@@ -520,7 +517,7 @@ class SklearnInput(DBase):
     "method", # :str
     "kwargs", # :Dict
   ]
-  
+
 class SklearnModel(FrameworkAgnosticProtocol):
   @isthere("sklearn", "numpy", soft = False)
   def __init__(self, m1, m2):
@@ -531,8 +528,8 @@ class SklearnModel(FrameworkAgnosticProtocol):
       # because user can define whatever they want and it removes any onus on NBX to ensure that
       # processing works, halting problem is no joke!
       InvalidProtocolError(f"Second input must be a callable, got: {type(m2)}")
-    
-    self._model_or_model_url = m1
+
+    self._model = m1
     self._logic = m2 # this is not used anywhere
 
   def forward(self, input_object: SklearnInput) -> ModelOutput:
@@ -540,22 +537,22 @@ class SklearnModel(FrameworkAgnosticProtocol):
     method = input_object.get("method", None)
     extra_args = input_object.get("kwargs", {})
 
-    if "sklearn.neighbors.NearestNeighbors" in str(type(self._model_or_model_url)):
-      method = getattr(self._model_or_model_url, "kneighbors") if method == None else getattr(self._model_or_model_url, method)
+    if "sklearn.neighbors.NearestNeighbors" in str(type(self._model)):
+      method = getattr(self._model, "kneighbors") if method == None else getattr(self._model, method)
       out = method(model_input, **extra_args)
-    elif "sklearn.cluster" in str(type(self._model_or_model_url)):
+    elif "sklearn.cluster" in str(type(self._model)):
       if any(
-        x in str(type(self._model_or_model_url)) for x in ["AgglomerativeClustering", "DBSCAN", "OPTICS", "SpectralClustering"]
+        x in str(type(self._model)) for x in ["AgglomerativeClustering", "DBSCAN", "OPTICS", "SpectralClustering"]
       ):
-        method = getattr(self._model_or_model_url, "fit_predict")
+        method = getattr(self._model, "fit_predict")
         out = method(model_input)
     else:
       try:
-        method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
+        method = getattr(self._model, "predict") if method == None else getattr(self._model, method)
         out = method(model_input)
       except Exception as e:
         logger.debug(f"[ERROR] Model Prediction Function is not yet registered {e}")
-    
+
     return ModelOutput(
       inputs = model_input,
       outputs = out,
@@ -606,7 +603,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
     export_model_path,
     method_file_name = "method.dill",
     model_file_name = "model.pkl",
-    ):
+  ):
 
     import joblib
     import sklearn
@@ -616,10 +613,10 @@ class SklearnModel(FrameworkAgnosticProtocol):
     self._serialise_method(join(export_model_path, method_file_name))
     export_path = join(export_model_path, model_file_name)
     with open(export_path, "wb") as f:
-      joblib.dump(self._model_or_model_url, f)
+      joblib.dump(self._model, f)
 
-    method = input_object.get("method", None) 
-    method = getattr(self._model_or_model_url, "predict") if method == None else getattr(self._model_or_model_url, method)
+    method = input_object.get("method", None)
+    method = getattr(self._model, "predict") if method == None else getattr(self._model, method)
     iod = get_io_dict(input_object, method, self.forward)
 
     return ModelSpec(
@@ -643,19 +640,18 @@ class SklearnModel(FrameworkAgnosticProtocol):
       return self.export_to_pkl(input_object, export_model_path=export_model_path, **kwargs)
     else:
       raise InvalidProtocolError(f"Unsupported export format for torch Module: {format}")
-  
+
   @staticmethod
   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
     logger.info(f"Deserialising SkLearn model from {model_meta.export_path}")
     kwargs = model_meta.load_kwargs
-
     if model_meta.export_type == "pkl":
       lp = kwargs.pop("method_path")
       logger.info(f"Loading method from {lp}")
       with open(lp, "rb") as f:
-        method = dill.load(f)        
+        method = dill.load(f)
       model = joblib.load(model_meta.load_kwargs["model"])
-  
+
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
@@ -680,7 +676,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       # because user can define whatever they want and it removes any onus on NBX to ensure that
       # processing works, halting problem is no joke!
       raise ValueError(f"Second input for torch model must be a callable, got: {type(m1)}")
-    
+
     self._model = m0
     self._logic = m1 if m1 else lambda x: x
 
@@ -708,7 +704,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
   def export_to_savemodel(
     self,
     input_object,
-    export_model_path,    
+    export_model_path,
     logic_file_name = "logic.dill",
     model_dir_name = "model",
     include_optimizer = True,
@@ -744,7 +740,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
   def export_to_h5(
     self,
     input_object,
-    export_model_path,    
+    export_model_path,
     logic_file_name = "logic.dill",
     model_file_name = "model.h5py",
     include_optimizer = True,
@@ -777,7 +773,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       },
       io_dict = iod,
     )
-    
+
 
   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
     if format == "onnx":
@@ -806,7 +802,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       logger.info(f"Loading logic from {lp}")
       with open(lp, "rb") as f:
         logic = dill.load(f)
-      
+
       import tensorflow as tf
       model = tf.keras.models.load_model(model_meta.load_kwargs["model"])
       return model, logic
@@ -819,7 +815,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       logger.debug(f"Loading logic from {lp}")
       with open(lp, "rb") as f:
         logic = dill.load(f)
-      
+
       import tensorflow as tf # pylint: disable=import-outside-toplevel
       model = tf.keras.models.load_model(model_meta.load_kwargs["model"])
       return model, logic
@@ -872,7 +868,7 @@ class FlaxModel(FrameworkAgnosticProtocol):
       # m1 should contain the model parameters
       raise ValueError(f"Second input for flax model must be a\
        FrozenDict containing model parameters, got: {type(m1)}")
-    
+
     self._model = m0
     self._params = m1
 
@@ -883,7 +879,7 @@ class FlaxModel(FrameworkAgnosticProtocol):
       out = self._model.apply(self._params, **model_inputs)
     else:
       out = self._model.apply(self._params, model_inputs)
-    
+
     return ModelOutput(inputs=input_object, outputs=out)
 
   def _serialise_params(self, fpath):
