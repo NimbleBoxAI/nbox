@@ -733,6 +733,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
+  @isthere("tf2onnx", soft = False)
   def export_to_onnx(
         self,
         input_object,
