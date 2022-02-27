@@ -16,11 +16,11 @@ import fire
 from . import cli as n # nbox-cli
 from .jobs import cli as ij # jobx-cli
 from .jobs import Instance
+from .sub_utils import ssh
 
 if __name__ == "__main__":
   fire.Fire({
     "instance": Instance,         # nbox jobs instance
-    "deploy": n.deploy,           # nbox deploy
     "jobs": {
       "new": ij.new_job,          # nbox jobs new PROJECT_NAME
       "deploy": ij.deploy,        # nbox jobs deploy FOLDER
@@ -28,6 +28,6 @@ if __name__ == "__main__":
       # "trigger":                # trigger a job run from CLI
     },
     "status": Instance.print_status, # nbox status
-    "tunnel": n.tunnel,
+    "tunnel": ssh.tunnel,
     "open": n.open_home,
   })
