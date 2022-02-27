@@ -492,8 +492,25 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
   def export(*_, **__):
     raise InvalidProtocolError("ONNXRtModel cannot be exported")
 
-  def deserialise(*_, **__):
-    raise InvalidProtocolError("NBX-Deploy cannot be loaded by deserialisation, use __init__")
+  @staticmethod
+  def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
+    logger.debug(f"Deserialising ONNX model from {model_meta.export_path}")
+
+    kwargs = model_meta.load_kwargs
+
+    if model_meta.export_type == "onnx":
+      lp = kwargs.pop("logic_path")
+      logger.debug(f"Loading logic from {lp}")
+      with open(lp, "rb") as f:
+        logic = dill.load(f)
+
+      import onnx
+
+      model = onnx.load(model_meta.load_kwargs["model"])
+      return model, logic
+
+    else:
+      raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
 
 ################################################################################
