@@ -149,7 +149,6 @@ def load(model, pre_fn = None, verbose=False, **loader_kwargs) -> Model:
   src, src_key, model_instr = model_key_parts[0]
   src_key = src_key.strip("/") # remove leading and trailing slashes
   model_instr = model_instr.replace(":", "") # remove the :
-  model_key = model
 
   model_fn = PRETRAINED_MODELS.get(src, None)
   if model_fn is None:

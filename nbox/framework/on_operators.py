@@ -188,7 +188,7 @@ class PrefectMixin:
     raise NotImplementedError
 
   @classmethod
-  def from_prefect_flow(operator_cls, dag):
+  def from_prefect_task(operator_cls, dag):
     raise NotImplementedError
 
   def to_prefect_task():
@@ -198,7 +198,8 @@ class PrefectMixin:
 ################################################################################
 # Luigi
 # =====
-# 
+# Built to solve Spotify's problems, luigi is a python library for building
+# pipelines of tasks.
 ################################################################################
 
 

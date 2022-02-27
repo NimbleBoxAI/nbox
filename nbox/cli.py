@@ -28,14 +28,9 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
   """
 
   import socket
-  import logging
-
   import ssl
   import threading
   import certifi
-
-  log_ = open(join(NBOX_HOME_DIR, "tunnel.log"), "w")
-  logger = lambda x: log_.write(x + "\n")
 
   class RSockClient:
     """
@@ -90,28 +85,24 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
       self.client_thread_running = False
 
 
-      self.log('Starting client')
+      logger.info('Starting client')
       self.connect_to_rsock_server()
-      self.log('Connected to RSockServer')
+      logger.info('Connected to RSockServer')
       self.authenticate()
-      self.log('Authenticated client')
+      logger.info('Authenticated client')
       self.set_config()
-      self.log('Client init complete')
-    
-    def log(self, message, level=logging.INFO):
-      logger(f"[Client_ID: {self.connection_id}] {message}")
-      # print(f"[Client_ID: {self.connection_id}] {message}")
-    
+      logger.info('Client init complete')
+
     def connect_to_rsock_server(self):
       """
       Connects to RSockServer.
       """
-      self.log('Connecting to RSockServer', logging.DEBUG)
+      logger.debug('Connecting to RSockServer')
       rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
       rsock_socket.connect(('rsocks.nimblebox.ai', 886))
 
       if self.secure:
-        self.log('Starting SSL')
+        logger.info('Starting SSL')
         self.rsock_socket = ssl.wrap_socket(rsock_socket, ca_certs=certifi.where(), cert_reqs=ssl.CERT_REQUIRED)
       else:
         self.rsock_socket = rsock_socket
@@ -121,14 +112,14 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
       Authenticates the client.
       Sends `"AUTH~{AUTH_TOKEN}"` to RSockServer.
       """
-      self.log('Authenticating client')
+      logger.info('Authenticating client')
       self.rsock_socket.sendall(bytes('AUTH~{}'.format(self.auth), 'utf-8'))
       auth = self.rsock_socket.recv(1024)
       auth = auth.decode('utf-8')
       if auth == 'OK':
-        self.log('Client authenticated')
+        logger.info('Client authenticated')
       else:
-        self.log('Client authentication failed', logging.ERROR)
+        logger.erro('Client authentication failed')
         self.client_auth = False
         exit(1)
     
@@ -137,15 +128,15 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
       Sets the config of the client.
       Sends `"SET_CONFIG~{instance}~{instance_port}"` to RSockServer.
       """
-      self.log('Setting config')
+      logger.info('Setting config')
       self.rsock_socket.sendall(bytes(f'SET_CLIENT~{self.instance}~{self.instance_port}', 'utf-8'))
       config = self.rsock_socket.recv(1024)
       config = config.decode('utf-8')
-      self.log('Config set to {}'.format(config))
+      logger.info('Config set to {}'.format(config))
       if config == 'OK':
-        self.log('Config set')
+        logger.info('Config set')
       else:
-        self.log('Config set failed', logging.ERROR)
+        logger.error('Config set failed')
         exit(1)
 
     def connect(self):
@@ -153,7 +144,7 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
       Connects the client to RSockServer.
       Sends `"CONNECT"` to RSockServer.
       """
-      self.log('Starting the io_copy loop')
+      logger.info('Starting the io_copy loop')
       self.rsock_socket.sendall(bytes('CONNECT', 'utf-8'))
       
       # start the io_copy loop
@@ -170,7 +161,7 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
       """
       This is the main loop that handles the data transfer between client and server.
       """
-      self.log('Starting {} io_copy'.format(direction))
+      logger.info('Starting {} io_copy'.format(direction))
 
       if direction == 'client':
         client_socket = self.client_socket
@@ -184,15 +175,15 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
         try:
           data = client_socket.recv(1024)
           if data:
-            # self.log('{} data: {}'.format(direction, data))
+            # logger.info('{} data: {}'.format(direction, data))
             server_socket.sendall(data)
           else:
-            self.log('{} connection closed'.format(direction))
+            logger.info('{} connection closed'.format(direction))
             break
         except Exception as e:
-          self.log('Error in {} io_copy: {}'.format(direction, e), logging.ERROR)
+          logger.error('Error in {} io_copy: {}'.format(direction, e))
           break
-      self.log('Stopping {} io_copy'.format(direction))
+      logger.info('Stopping {} io_copy'.format(direction))
 
 
   def create_connection(local_port, instance_id, instance_port, listen = 1):
@@ -203,12 +194,12 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
     connection_id = 0
 
     while True:
-      logger('Waiting for client')
+      logger.info('Waiting for client')
       client_socket, _ = listen_socket.accept()
-      logger('Client connected')
+      logger.info('Client connected')
 
       connection_id += 1
-      logger('Total clients connected -> '.format(connection_id))
+      logger.info('Total clients connected -> '.format(connection_id))
       # create the client
       pwd = secret.get("access_token")
 
@@ -254,12 +245,12 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
   instance = Instance(i)
   if not instance.state == "RUNNING":
     raise ValueError("Instance is not running")
-  logging.info(f"password: {instance.open_data['ssh_pass']}")
+  logger.info(f"password: {instance.open_data['ssh_pass']}")
 
   # create the connection
   threads = []
   for local_port, cloud_port in apps.items():
-    logging.info(f"Creating connection from {cloud_port} -> {local_port}")
+    logger.info(f"Creating connection from {cloud_port} -> {local_port}")
     t = threading.Thread(target=create_connection, args=(local_port, instance.instance_id, cloud_port, 1))
     t.start()
     threads.append(t)
@@ -267,10 +258,10 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
   try:
     # start the ssh connection on terminal
     import subprocess
-    logging.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
+    logger.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
     subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
   except KeyboardInterrupt:
-    logging.info("KeyboardInterrupt, closing connections")
+    logger.info("KeyboardInterrupt, closing connections")
     for t in threads:
       t.join()
 

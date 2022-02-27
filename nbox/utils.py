@@ -8,36 +8,13 @@
 import os
 import io
 import logging
+import logging.config
 import hashlib
 import requests
 import tempfile
 import randomname
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
-
-
-def get_logger():
-  logger = logging.getLogger(__name__)
-  logger.setLevel(logging.DEBUG)
-
-  if os.environ.get("NBOX_JSON_LOG", False):
-    from pythonjsonlogger import jsonlogger
-    logHandler = logging.StreamHandler()
-    logHandler.setFormatter(jsonlogger.JsonFormatter())
-    logger.addHandler(logHandler)
-  else:
-    logHandler = logging.StreamHandler()
-    logHandler.setFormatter(logging.Formatter(
-      '[%(asctime)s] [%(levelname)s] %(message)s',
-      datefmt = "%Y-%m-%dT%H:%M:%S%z"
-    ))
-    logger.addHandler(logHandler)
-
-
-  return logger
-
-logger = get_logger()
-
 
 # lazy_loading/
 
@@ -143,6 +120,34 @@ def hash_(item, fn="md5"):
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
 # /misc
+
+def get_logger():
+  from pythonjsonlogger import jsonlogger
+  logger = logging.getLogger(__name__)
+  logger.setLevel(logging.DEBUG)
+
+  if os.environ.get("NBOX_JSON_LOG", False):
+    logHandler = logging.StreamHandler()
+    logHandler.setFormatter(jsonlogger.JsonFormatter(
+      '%(timestamp)s %(levelname)s %(message)s ',
+      timestamp=True
+    ))
+    logger.addHandler(logHandler)
+  else:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    logHandler = logging.StreamHandler()
+    logHandler.setFormatter(logging.Formatter(
+      '[%(asctime)s] [%(levelname)s] %(message)s',
+      datefmt = "%Y-%m-%dT%H:%M:%S%z"
+    ))
+    logger.addHandler(logHandler)
+
+
+  return logger
+
+logger = get_logger()
 
 # model/
 
