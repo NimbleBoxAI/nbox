@@ -735,43 +735,45 @@ class TensorflowModel(FrameworkAgnosticProtocol):
 
   @isthere("tf2onnx", soft = False)
   def export_to_onnx(
-        self,
-        input_object,
-        export_model_path,
-        logic_file_name="logic.dill",
-        model_file_name="model.onnx",
-        opset_version=None,
-    ) -> ModelSpec:
-        import tf2onnx
-        import tensorflow as tf
+    self,
+    input_object,
+    export_model_path,
+    logic_file_name="logic.dill",
+    model_file_name="model.onnx",
+    opset_version=None,
+) -> ModelSpec:
+    import tf2onnx
+    import tensorflow as tf
 
-        self._serialise_logic(join(export_model_path, logic_file_name))
-        export_path = join(export_model_path, model_file_name)
-        iod = self._get_io_dict(input_object)
+    input_object = self._logic(input_object)
 
-        if "keras" in str(self._model.__class__):
-            model_proto, _ = tf2onnx.convert.from_keras(
-                self._model, opset=opset_version
-            )
+    self._serialise_logic(join(export_model_path, logic_file_name))
+    export_path = join(export_model_path, model_file_name)
+    iod = get_io_dict(input_object, self._model.call, self.forward)
 
-            with open(export_path, "wb") as f:
-                  f.write(model_proto.SerializeToString())
+    if "keras" in str(self._model.__class__):
+        model_proto, _ = tf2onnx.convert.from_keras(
+            self._model, opset=opset_version
+        )
+
+        with open(export_path, "wb") as f:
+              f.write(model_proto.SerializeToString())
 
 
-            return ModelSpec(
-                src_framework="tf",
-                src_framework_version=tf.__version__,
-                export_type="onnx",
-                export_path=export_path,
-                load_class=self.__class__.__name__,
-                load_method="from_convert_from_keras",
-                load_kwargs={
-                    "model": f"./{model_file_name}",
-                    "map_location": "cpu",
-                    "logic_path": f"./{logic_file_name}",
-                },
-                io_dict=iod,
-            )
+        return ModelSpec(
+            src_framework="tf",
+            src_framework_version=tf.__version__,
+            export_type="onnx",
+            export_path=export_path,
+            load_class=self.__class__.__name__,
+            load_method="from_convert_from_keras",
+            load_kwargs={
+                "model": f"./{model_file_name}",
+                "map_location": "cpu",
+                "logic_path": f"./{logic_file_name}",
+            },
+            io_dict=iod,
+        )
 
 
   def export_to_savemodel(

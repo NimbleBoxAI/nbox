@@ -24,8 +24,8 @@ def test_feedforward():
 
   x = np.random.uniform(size = (10, 224))
   inputs = SklearnInput(
-      inputs = x, 
-      method = "predict", 
+      inputs = x,
+      method = "predict",
       kwargs = None,
   )
   model = Model(mlp, None)
@@ -44,7 +44,7 @@ def test_feedforward():
   return second_out
 
 
-def test_random_forest():
+def test_random_forest_pkl():
   def get_model():
       iris = load_iris()
       X, y = iris.data, iris.target
@@ -57,8 +57,8 @@ def test_random_forest():
   model = nbox.Model(_m, None)
 
   inputs = SklearnInput(
-      inputs = _x, 
-      method = "predict_proba", 
+      inputs = _x,
+      method = "predict_proba",
       kwargs = None,
 
   )
@@ -76,11 +76,48 @@ def test_random_forest():
   assert np.array_equal(first_out, second_out)
   return second_out[:5]
 
-#Test Feedforward
-br()
-print(test_feedforward())
+def test_random_forest_onnx():
+  def get_model():
+      iris = load_iris()
+      X, y = iris.data, iris.target
+      X_train, X_test, y_train, y_test = train_test_split(X, y)
+      clr = RandomForestClassifier()
+      clr.fit(X_train, y_train)
+      return clr, X_test, y_test
 
-#Test Random Forest
-br()
-print(test_random_forest())
+  _m, _x, _y = get_model()
+  model = nbox.Model(_m, None)
 
+  inputs = SklearnInput(
+      inputs = _x,
+      method = "predict_proba",
+      kwargs = None,
+
+  )
+  first_out = model(inputs).outputs
+
+  new_model = nbox.Model.deserialise(
+    model.serialise(
+      input_object = inputs,
+      model_name = "test69",
+      export_type = "onnx",
+      _unit_test = True
+    )
+  )
+  second_out = new_model(inputs).outputs
+  assert np.array_equal(first_out, second_out)
+  return second_out[:5]
+
+
+# #Test Feedforward
+# br()
+# print(test_feedforward())
+
+# #Test Random Forest through Pickle
+# br()
+# print(test_random_forest_pkl())
+
+
+#Test Random Forest through onnx
+br()
+print(test_random_forest_onnx())
