@@ -53,7 +53,7 @@ def test_feedforward():
 
 
 
-def test_resnet():
+def test_resnet_torchscript():
     x = randn(1, 3, 44, 44)
     # load resnet model with preprocessing function
     resnet = load(
@@ -79,14 +79,48 @@ def test_resnet():
     assert torch.equal(first_out, second_out)
     return second_out.topk(10)
 
+def test_resnet_onnx():
+    x = randn(1, 3, 44, 44)
+    # load resnet model with preprocessing function
+    resnet = load(
+    "torchvision/resnet18",
+    pre_fn,
+    )
+    #Model(i0: Tensorflow.Object, i1: )
+    resnet.eval()
+    first_out = resnet(x).outputs
+
+    # serialise then deserialise
+    new_resnet = Model.deserialise(
+    resnet.serialise(
+        input_object = x,
+        model_name = "test69",
+        export_type = "onnx",
+        _unit_test = False
+        )
+    )
+
+    # now pass data through the new model
+    second_out = new_resnet(x).outputs[0][0]
+    first_out = first_out.squeeze().cpu().detach().numpy()
+    print("second out",second_out)
+    print("first out",first_out)
+    assert np.array_equal(first_out, second_out)
+    return second_out.topk(10)
+
+
 def br():
     print("\n")
     print("#"*50, "\n")
 
-#Test Feedforward - 
+#Test Feedforward -
 br()
 print("FeedForward: \n", test_feedforward())
 
-#Test Resnet -
+#Test Resnet from Torchscript-
 br()
-print("Resnet: \n", test_resnet())
+print("Resnet from Torchscript: \n", test_resnet_torchscript())
+
+#Test Resnet from ONNX-
+br()
+print("Resnet from ONNX: \n", test_resnet_onnx())

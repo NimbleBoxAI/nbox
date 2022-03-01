@@ -321,6 +321,7 @@ class TorchModel(FrameworkAgnosticProtocol):
     export_model_path,
     export_params=True,
     verbose=False,
+    logic_file_name = "logic.dill",
     model_file_name="model.onnx",
     opset_version=12,
     do_constant_folding=True,
@@ -328,16 +329,15 @@ class TorchModel(FrameworkAgnosticProtocol):
     **kwargs
   ) -> ModelSpec:
     iod = get_io_dict(input_object, self._model.forward, self.forward)
+    self._serialise_logic(join(export_model_path, logic_file_name))
 
     export_path = join(export_model_path, model_file_name)
 
     import torch
-
     torch.onnx.export(
       self._model,
       input_object,
       f=export_path,
-      input_names=[x["name"] for x in iod["inputs"]],
       verbose=verbose,
       use_external_data_format=use_external_data_format, # RuntimeError: Exporting model exceed maximum protobuf size of 2GB
       export_params=export_params, # store the trained parameter weights inside the model file
@@ -346,14 +346,18 @@ class TorchModel(FrameworkAgnosticProtocol):
     )
 
     return ModelSpec(
-      src_framework = "torch",
-      src_framework_version = torch.__version__,
-      export_type = "onnx",
-      export_path = export_model_path,
-      load_method = None, # onnx cannot be loaded as pytorch model
-      load_kwargs = None, # no method, no kwargs
-      io_dict = iod
-    )
+        src_framework = "torch",
+        src_framework_version = torch.__version__,
+        export_type = "onnx",
+        export_path = export_model_path,
+        load_class = self.__class__.__name__,
+        load_kwargs = {
+          "model": f"./{model_file_name}",
+          "map_location": "cpu",
+          "logic_path": f"./{logic_file_name}"
+        },
+        io_dict = iod,
+        )
 
   def export_to_torchscript(
     self,
@@ -456,38 +460,56 @@ class TorchModel(FrameworkAgnosticProtocol):
 # TODO:@yashbonde
 class ONNXRtModel(FrameworkAgnosticProtocol):
   @isthere("onnxruntime", soft = False)
-  def __init__(self, ort_session, nbox_meta):
-    import onnxruntime
+  def __init__(self, m0, m1):
+    import onnx
+    import onnxruntime as ort
+    if not isinstance(m0, onnx.onnx_ml_pb2.ModelProto):
+      raise InvalidProtocolError(f"First input must be a ONNX model, got: {type(m0)}")
 
-    if not isinstance(ort_session, onnxruntime.InferenceSession):
-      raise InvalidProtocolError
+    if m1!= None and not callable(m1):
+      # this is the processing logic for the incoming data this has to be a some kind of callable,
+      # because user can define whatever they want and it removes any onus on NBX to ensure that
+      # processing works, halting problem is no joke!
+      raise ValueError(f"Second input for torch model must be a callable, got: {type(m1)}")
 
-    logger.debug(f"Trying to load from onnx model: {ort_session}")
+    self._model = m0
+    self._logic = m1 if m1 else lambda x: x
+    self._sess = ort.InferenceSession(self._model.SerializeToString())
 
-    # we have to create templates using the nbox_meta
-    templates = None
-    if nbox_meta is not None:
-      all_inputs = nbox_meta["metadata"]["inputs"]
-      templates = {}
-      for node, meta in all_inputs.items():
-        templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
-
-    self.session = ort_session
-    self.input_names = [x.name for x in self.session.get_inputs()]
-    self.output_names = [x.name for x in self.session.get_outputs()]
-
-    logger.debug(f"Inputs: {self.input_names}")
-    logger.debug(f"Outputs: {self.output_names}")
 
   def forward(self, input_object) -> ModelOutput:
-    if set(input_object.keys()) != set(self.input_names):
-      diff = set(input_object.keys()) - set(self.input_names)
-      return f"model_input keys do not match input_name: {diff}"
-    out = self.session.run(self.output_names, input_object)
+    import torch
+    import tensorflow as tf
+    import numpy as np
+    model_inputs = self._logic(input_object)
+    names = [i.name for i in self._sess.get_inputs()]
+    output_names = [o.name for o in self._sess.get_outputs()]
+    if isinstance(model_inputs,dict):
+      if isinstance(list(model_inputs.values())[0],torch.Tensor):
+        model_inputs = {names[i]:model_inputs[list(model_inputs.keys())[i]].cpu().detach().numpy() for i in range(len(names))}
+      elif isinstance(list(model_inputs.values())[0],tf.Tensor):
+        model_inputs = {names[i]:model_inputs[list(model_inputs.keys())[i]].numpy() for i in range(len(names))}
+      elif isinstance(list(model_inputs.values())[0],SklearnInput):
+        model_inputs = {names[i]:model_inputs[list(model_inputs.keys())[i]].inputs.astype(np.float) for i in range(len(names))}
+    else:
+      if isinstance(model_inputs, torch.Tensor):
+        model_inputs = {names[0]:model_inputs.cpu().detach().numpy()}
+      elif isinstance(model_inputs,tf.Tensor):
+        model_inputs = {names[0]:model_inputs.numpy()}
+      elif isinstance(model_inputs, SklearnInput):
+        model_inputs = {names[0]:model_inputs.inputs.astype(np.float)}
+
+
+    res = self._sess.run(output_names=output_names, input_feed=model_inputs)
     return ModelOutput(
       inputs = input_object,
-      outputs = out,
+      outputs = res,
     )
+
+  def _serialise_logic(self, fpath):
+    logger.debug(f"Saving logic to {fpath}")
+    with open(fpath, "wb") as f:
+      dill.dump(self._logic, f)
 
   def export(*_, **__):
     raise InvalidProtocolError("ONNXRtModel cannot be exported")
@@ -499,13 +521,15 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
     kwargs = model_meta.load_kwargs
 
     if model_meta.export_type == "onnx":
-      lp = kwargs.pop("logic_path")
+      if "logic_path" in kwargs:
+        lp = kwargs.pop("logic_path")
+      else:
+        lp = kwargs.pop("method_path")
       logger.debug(f"Loading logic from {lp}")
       with open(lp, "rb") as f:
         logic = dill.load(f)
 
       import onnx
-
       model = onnx.load(model_meta.load_kwargs["model"])
       return model, logic
 
@@ -575,7 +599,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       dill.dump(self._logic, f)
 
   @isthere("skl2onnx", soft = False)
-  def export_to_onnx(self, input_object, export_model_path, logic_file_name="logic.dill",
+  def export_to_onnx(self, input_object, export_model_path, method_file_name="logic.dill",
                            model_file_name="model.onnx",
                            opset_version=None,
                     ) -> ModelSpec:
@@ -601,23 +625,39 @@ class SklearnModel(FrameworkAgnosticProtocol):
       "uint8": dt.UInt8TensorType,
     }
 
-    self._serialise_logic(join(export_model_path, logic_file_name))
+    self._serialise_method(join(export_model_path, method_file_name))
 
     export_path = join(export_model_path, model_file_name)
-    iod = self._get_io_dict(input_object)
+    method = input_object.get("method", None)
+    method = getattr(self._model, "predict") if method == None else getattr(self._model, method)
+    iod = get_io_dict(input_object, method, self.forward)
 
     # the args need to be converted to proper formatted data types
     initial_types = []
     input_names, input_shapes, input_dtypes = [],[],[]
-    for key in iod["inputs"]:
-        input_names.append(iod["inputs"][key]['name'])
-        input_shapes.append(iod["inputs"][key]['tensorShape']['dim'])
-        input_dtypes.append(iod["inputs"][key]['dtype'])
+
+    # Case for input object with single tensor
+    inputs=iod["inputs"]
+    if type(inputs['name'])==str:
+      input_names.append(inputs["name"])
+      input_dtypes.append(inputs["dtype"])
+      tensorShape = list()
+      for i in inputs["tensorShape"]["dim"]:
+        tensorShape.append(i["size"])
+      input_shapes.append(tensorShape)
+
+    else:
+      for key in inputs:
+          input_names.append(inputs[key]['name'])
+          input_dtypes.append(inputs[key]['dtype'][key])
+          tensorShape = list()
+          for i in inputs[key]["tensorShape"]["dim"]:
+            tensorShape.append(i["size"])
+          input_shapes.append(tensorShape)
+
     for name, shape, dtype in zip(input_names, input_shapes, input_dtypes):
-      shape = list(shape)
       shape[0] = None # batching requires the first dimension to be None
       initial_types.append((name, __NP_DTYPE_TO_SKL_DTYPE[str(dtype)](shape)))
-
     onx = to_onnx(self._model, initial_types=initial_types, target_opset=opset_version)
 
     with open(export_path, "wb") as f:
@@ -634,7 +674,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
     load_kwargs={
         "model": f"./{model_file_name}",
         "map_location": "cpu",
-        "logic_path": f"./{logic_file_name}",
+        "method_path": f"./{method_file_name}",
     },
     io_dict=iod,
     )
@@ -671,7 +711,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
 
   def export(self, format, input_object, export_model_path, **kwargs) -> ModelSpec:
     if format == "onnx":
-      return self.export_to_onnx(**kwargs)
+      return self.export_to_onnx(input_object, export_model_path=export_model_path,**kwargs)
     elif format == "pkl":
       return self.export_to_pkl(input_object, export_model_path=export_model_path, **kwargs)
     else:

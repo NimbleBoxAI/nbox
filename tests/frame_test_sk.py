@@ -86,7 +86,7 @@ def test_random_forest_onnx():
       return clr, X_test, y_test
 
   _m, _x, _y = get_model()
-  model = nbox.Model(_m, None)
+  model = Model(_m, None)
 
   inputs = SklearnInput(
       inputs = _x,
@@ -96,7 +96,7 @@ def test_random_forest_onnx():
   )
   first_out = model(inputs).outputs
 
-  new_model = nbox.Model.deserialise(
+  new_model = Model.deserialise(
     model.serialise(
       input_object = inputs,
       model_name = "test69",
@@ -110,12 +110,12 @@ def test_random_forest_onnx():
 
 
 # #Test Feedforward
-# br()
-# print(test_feedforward())
+br()
+print(test_feedforward())
 
-# #Test Random Forest through Pickle
-# br()
-# print(test_random_forest_pkl())
+#Test Random Forest through Pickle
+br()
+print(test_random_forest_pkl())
 
 
 #Test Random Forest through onnx

@@ -140,8 +140,11 @@ def test_tiny_gpt_ONNX():
       _unit_test = True
     )
   )
-  second_out =  new_res(x).outputs
-  assert first_out == second_out
+  second_out =  new_res(x).outputs[0][0]
+  comparison = first_out.numpy() == second_out
+  print("first_out", first_out.numpy())
+  print("second out", second_out)
+  assert comparison.all() == True
   return second_out
 
 
@@ -149,15 +152,15 @@ def test_tiny_gpt_ONNX():
 
 br()
 #Test FeedForward
-# print("Output for Feed Forward Network:- \n", feed_forward())
-# br()
+print("Output for Feed Forward Network:- \n", feed_forward())
+br()
 
-# print("Output for tiny GPT-2 through SaveModel: \n", test_tiny_gpt_SaveModel())
-# br()
+print("Output for tiny GPT-2 through SaveModel: \n", test_tiny_gpt_SaveModel())
+br()
 
 print("Output for tiny GPT-2 through ONNX : \n", test_tiny_gpt_ONNX())
 br()
 
 #Test Resnet
-# br()
-# print("Output for Resnet50 : \n", test_resnet())
+br()
+print("Output for Resnet50 : \n", test_resnet())
