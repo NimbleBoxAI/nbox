@@ -103,10 +103,11 @@ def test_resnet_onnx():
     # now pass data through the new model
     second_out = new_resnet(x).outputs[0][0]
     first_out = first_out.squeeze().cpu().detach().numpy()
-    print("second out",second_out)
-    print("first out",first_out)
-    assert np.array_equal(first_out, second_out)
-    return second_out.topk(10)
+    print("second out",second_out.shape)
+    print("first out",first_out.shape)
+    print("difference", np.subtract(first_out,second_out))
+    assert np.allclose(first_out, second_out, atol=1E-5)
+    return torch.tensor(second_out).topk(10)
 
 
 def br():
@@ -114,12 +115,12 @@ def br():
     print("#"*50, "\n")
 
 #Test Feedforward -
-br()
-print("FeedForward: \n", test_feedforward())
+# br()
+# print("FeedForward: \n", test_feedforward())
 
-#Test Resnet from Torchscript-
-br()
-print("Resnet from Torchscript: \n", test_resnet_torchscript())
+# #Test Resnet from Torchscript-
+# br()
+# print("Resnet from Torchscript: \n", test_resnet_torchscript())
 
 #Test Resnet from ONNX-
 br()
