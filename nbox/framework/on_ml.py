@@ -478,27 +478,27 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
 
 
   def forward(self, input_object) -> ModelOutput:
-    import torch
-    import tensorflow as tf
     import numpy as np
     model_inputs = self._logic(input_object)
-    names = [i.name for i in self._sess.get_inputs()]
+    input_names = [i.name for i in self._sess.get_inputs()]
     output_names = [o.name for o in self._sess.get_outputs()]
     if isinstance(model_inputs,dict):
-      if isinstance(list(model_inputs.values())[0],torch.Tensor):
-        model_inputs = {names[i]:model_inputs[list(model_inputs.keys())[i]].cpu().detach().numpy() for i in range(len(names))}
-      elif isinstance(list(model_inputs.values())[0],tf.Tensor):
-        model_inputs = {names[i]:model_inputs[list(model_inputs.keys())[i]].numpy() for i in range(len(names))}
-      elif isinstance(list(model_inputs.values())[0],SklearnInput):
-        model_inputs = {names[i]:model_inputs[list(model_inputs.keys())[i]].inputs.astype(np.float) for i in range(len(names))}
+      tensor_dict = model_inputs
+      if isinstance(list(model_inputs.values())[0],SklearnInput):
+        tensor_dict = {list(model_inputs.keys())[0]:list(model_inputs.values())[0].inputs}
+      model_inputs = {name: tensor for name, tensor in zip(input_names, tuple(tensor_dict.values()))}
     else:
-      if isinstance(model_inputs, torch.Tensor):
-        model_inputs = {names[0]:model_inputs.cpu().detach().numpy()}
-      elif isinstance(model_inputs,tf.Tensor):
-        model_inputs = {names[0]:model_inputs.numpy()}
-      elif isinstance(model_inputs, SklearnInput):
-        model_inputs = {names[0]:model_inputs.inputs.astype(np.float)}
+      raise ValueError("Your Logic needs to return dictionary")
 
+    # conversion to proper arrays -> if can be numpy-ed and float32
+    for key, value in model_inputs.items():
+      if hasattr(value, "numpy"):
+        value = value.numpy()
+      if value.dtype in (np.float64, np.float32, np.float16):
+        value = value.astype(np.float32)
+      elif value.dtype in (np.int64, np.int32, np.int16, np.int8, np.int64):
+        value = value.astype(np.int32)
+      model_inputs[key] = value
 
     res = self._sess.run(output_names=output_names, input_feed=model_inputs)
     return ModelOutput(

@@ -115,10 +115,8 @@ def test_tiny_gpt_ONNX():
   import tensorflow as tf
 
   def fn(x):
-     import tensorflow as tf
-     if not isinstance(x, tf.Tensor):
-         x = tf.convert_to_tensor(x, dtype=tf.float32)
-     return x*2
+    print("x tensor",x)
+    return {"x":x}
 
   model = tf.keras.applications.ResNet50(
      include_top=True,
@@ -127,7 +125,7 @@ def test_tiny_gpt_ONNX():
   )
 
   x = tf.random.uniform([1, 224, 224, 3])
-  res = Model(model, None)
+  res = Model(model, fn)
   res.eval()
   first_out = res(x).outputs
 
@@ -152,15 +150,15 @@ def test_tiny_gpt_ONNX():
 
 br()
 #Test FeedForward
-print("Output for Feed Forward Network:- \n", feed_forward())
-br()
+# print("Output for Feed Forward Network:- \n", feed_forward())
+# br()
 
-print("Output for tiny GPT-2 through SaveModel: \n", test_tiny_gpt_SaveModel())
-br()
+# print("Output for tiny GPT-2 through SaveModel: \n", test_tiny_gpt_SaveModel())
+# br()
 
 print("Output for tiny GPT-2 through ONNX : \n", test_tiny_gpt_ONNX())
 br()
 
-#Test Resnet
-br()
-print("Output for Resnet50 : \n", test_resnet())
+# #Test Resnet
+# br()
+# print("Output for Resnet50 : \n", test_resnet())

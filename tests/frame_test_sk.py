@@ -77,6 +77,8 @@ def test_random_forest_pkl():
   return second_out[:5]
 
 def test_random_forest_onnx():
+  def fn(x):
+    return {"x":x}
   def get_model():
       iris = load_iris()
       X, y = iris.data, iris.target
@@ -86,7 +88,7 @@ def test_random_forest_onnx():
       return clr, X_test, y_test
 
   _m, _x, _y = get_model()
-  model = Model(_m, None)
+  model = Model(_m, fn)
 
   inputs = SklearnInput(
       inputs = _x,
@@ -104,8 +106,11 @@ def test_random_forest_onnx():
       _unit_test = True
     )
   )
-  second_out = new_model(inputs).outputs
-  assert np.array_equal(first_out, second_out)
+  second_out = new_model(inputs).outputs[1]
+  second_out = np.array([list(y.values()) for y in second_out])
+  print("first out", first_out)
+  print("second out", second_out)
+  assert np.allclose(first_out, second_out)
   return second_out[:5]
 
 
