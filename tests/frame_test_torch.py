@@ -84,7 +84,7 @@ def test_resnet_onnx():
     # load resnet model with preprocessing function
     resnet = load(
     "torchvision/resnet18",
-    pre_fn,
+    None,
     )
     #Model(i0: Tensorflow.Object, i1: )
     resnet.eval()
@@ -114,7 +114,7 @@ def br():
     print("\n")
     print("#"*50, "\n")
 
-#Test Feedforward -
+# #Test Feedforward -
 # br()
 # print("FeedForward: \n", test_feedforward())
 
