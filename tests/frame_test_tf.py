@@ -13,9 +13,9 @@ import numpy as np
 def br():
   print("*"*50, "\n")
 
-  def fn(x):
-    input_object = {'x':x}
-    return input_object
+def fn(x):
+  input_object = {'x':x}
+  return input_object
 
 def test_resnet_SaveModel():
   resnet_model = tf.keras.applications.ResNet50(

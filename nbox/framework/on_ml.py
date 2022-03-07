@@ -665,9 +665,9 @@ class SklearnModel(FrameworkAgnosticProtocol):
       load_class=self.__class__.__name__,
       load_method="from_to_onnx",
       load_kwargs={
-          "model": f"./{model_file_name}",
-          "map_location": "cpu",
-          "method_path": f"./{method_file_name}",
+        "model": f"./{model_file_name}",
+        "map_location": "cpu",
+        "method_path": f"./{method_file_name}",
       },
       io_dict=iod,
     )
@@ -692,7 +692,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       load_kwargs = {
         "model": f"./{model_file_name}",
         "map_location": "cpu",
-       "method_path": f"./{method_file_name}"
+        "method_path": f"./{method_file_name}"
       },
       io_dict = iod,
     )
@@ -710,16 +710,17 @@ class SklearnModel(FrameworkAgnosticProtocol):
     logger.info(f"Deserialising SkLearn model from {model_meta.export_path}")
     kwargs = model_meta.load_kwargs
     if model_meta.export_type == "pkl":
-      lp = kwargs.pop("method_path")
+      lp = kwargs["method_path"]
       logger.info(f"Loading method from {lp}")
       with open(lp, "rb") as f:
-        method = dill.load(f)
-      model = dill.load(model_meta.load_kwargs["model"])
+        logic = dill.load(f)
+      with open(kwargs["model"], "rb") as f:
+        model = dill.load(f)
 
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
-    return model, method
+    return model, logic
 
 ################################################################################
 # Tensorflow
