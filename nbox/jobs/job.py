@@ -7,12 +7,17 @@ Jobs
 
 import sys
 
+from nbox.hyperloop.job_pb2 import NBXAuthInfo
+
 from ..utils import logger
 from ..init import nbox_grpc_stub
 from ..network import Cron
 
 class Job:
-  def __init__(self, id):
+  def __init__(self, id, workspace_id =None):
+    self.id = id
+    self.workspace_id = workspace_id
+    self.auth_info = NBXAuthInfo(workspace_id=self.workspace_id)
     self.update()
 
   def change_schedule(self, new_schedule: Cron):
@@ -39,27 +44,27 @@ class Job:
   def delete(self):
     import grpc
     from ..hyperloop.nbox_ws_pb2 import JobInfo
-    
     try:
-      nbox_grpc_stub.DeleteJob(JobInfo(job = self._this_job))
+      nbox_grpc_stub.DeleteJob(JobInfo(job = self._this_job,))
     except grpc.RpcError as e:
       logger.error(f"Could not delete job {self.id}")
       raise e
 
   def update(self):
     import grpc
-    from ..hyperloop.job_pb2 import Job
+    from ..hyperloop.nbox_ws_pb2 import JobInfo
+    from ..hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
     logger.info("Updating job info")
 
     try:
-      job: Job = nbox_grpc_stub.GetJob(Job(id=id))
+      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info=self.auth_info)))
     except grpc.RpcError as e:
       logger.error(f"Could not get job {id}")
       raise e
-
     for descriptor, value in job.ListFields():
       setattr(self, descriptor.name, value)
     self._this_job = job
+    self._this_job.auth_info.CopyFrom(self.auth_info)
 
   def trigger(self):
     import grpc
@@ -67,7 +72,8 @@ class Job:
     logger.info(f"Triggering job {self.id}")
     
     try:
-      nbox_grpc_stub.TriggerJob(JobInfo(job = self._this_job))
+      
+      nbox_grpc_stub.TriggerJob(JobInfo(job=self._this_job))
     except grpc.RpcError as e:
       logger.error(f"Could not trigger job {self.id}")
       raise e
