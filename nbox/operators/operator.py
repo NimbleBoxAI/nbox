@@ -30,7 +30,7 @@ class StateDictModel(DBase):
 
 
 class Tracer:
-  def __init__(self, tracer = "stub"):
+  def __init__(self, tracer = None):
     self.tracer = tracer
     if tracer == "stub":
       # when job is running on NBX, gRPC stubs are used
@@ -58,6 +58,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
+    self._trace_object = Tracer()
 
   # mixin/
 
@@ -219,7 +220,6 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     # convienience method to register a forward method
     self.forward = python_callable
 
-  _trace_object = Tracer()
   node_info = None
   source_edges = None
 
