@@ -25,7 +25,6 @@ Read the code for best understanding.
 
 import json
 import inspect
-import joblib
 import requests
 from time import time
 from typing import Any, Tuple
@@ -305,8 +304,6 @@ class TorchModel(FrameworkAgnosticProtocol):
     model_inputs = self._logic(input_object) # TODO: @yashbonde enforce logic to return dict
     if isinstance(model_inputs, dict):
       out = self._model(**model_inputs)
-    else:
-      out = self._model(model_inputs)
     return ModelOutput(inputs = input_object, outputs = out)
 
   def _serialise_logic(self, fpath):
@@ -314,7 +311,6 @@ class TorchModel(FrameworkAgnosticProtocol):
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
-  # TODO:@yashbonde
   def export_to_onnx(
     self,
     input_object,
@@ -357,7 +353,7 @@ class TorchModel(FrameworkAgnosticProtocol):
           "logic_path": f"./{logic_file_name}"
         },
         io_dict = iod,
-        )
+      )
 
   def export_to_torchscript(
     self,
@@ -368,7 +364,6 @@ class TorchModel(FrameworkAgnosticProtocol):
     check_trace = True,
     check_inputs = None,
     strict = True,
-
     logic_file_name = "logic.dill",
     model_file_name = "model.bin",
   ) -> ModelSpec:
@@ -429,6 +424,7 @@ class TorchModel(FrameworkAgnosticProtocol):
 
   @staticmethod
   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
+    import torch
     logger.debug(f"Deserialising torch model from {model_meta.export_path}")
 
     kwargs = model_meta.load_kwargs
@@ -438,12 +434,8 @@ class TorchModel(FrameworkAgnosticProtocol):
       logger.debug(f"Loading logic from {lp}")
       with open(lp, "rb") as f:
         logic = dill.load(f)
-
-      import torch
-
       model = torch.jit.load(model_meta.load_kwargs["model"], map_location=kwargs["map_location"])
       return model, logic
-
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
@@ -459,7 +451,7 @@ class TorchModel(FrameworkAgnosticProtocol):
 
 # TODO:@yashbonde
 class ONNXRtModel(FrameworkAgnosticProtocol):
-  @isthere("onnxruntime", soft = False)
+  @isthere("onnxruntime", "numpy", soft = False)
   def __init__(self, m0, m1):
     import onnx
     import onnxruntime as ort
@@ -475,7 +467,6 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
     self._model = m0
     self._logic = m1 if m1 else lambda x: x
     self._sess = ort.InferenceSession(self._model.SerializeToString())
-
 
   def forward(self, input_object) -> ModelOutput:
     import numpy as np
@@ -532,7 +523,6 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
       import onnx
       model = onnx.load(model_meta.load_kwargs["model"])
       return model, logic
-
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
@@ -599,10 +589,14 @@ class SklearnModel(FrameworkAgnosticProtocol):
       dill.dump(self._logic, f)
 
   @isthere("skl2onnx", soft = False)
-  def export_to_onnx(self, input_object, export_model_path, method_file_name="logic.dill",
-                           model_file_name="model.onnx",
-                           opset_version=None,
-                    ) -> ModelSpec:
+  def export_to_onnx(
+    self,
+    input_object,
+    export_model_path,
+    method_file_name="logic.dill",
+    model_file_name="model.onnx",
+    opset_version=None,
+  ) -> ModelSpec:
     import sklearn
     from skl2onnx import to_onnx
     import skl2onnx.common.data_types as dt
@@ -648,12 +642,12 @@ class SklearnModel(FrameworkAgnosticProtocol):
 
     else:
       for key in inputs:
-          input_names.append(inputs[key]['name'])
-          input_dtypes.append(inputs[key]['dtype'][key])
-          tensorShape = list()
-          for i in inputs[key]["tensorShape"]["dim"]:
-            tensorShape.append(i["size"])
-          input_shapes.append(tensorShape)
+        input_names.append(inputs[key]['name'])
+        input_dtypes.append(inputs[key]['dtype'][key])
+        tensorShape = list()
+        for i in inputs[key]["tensorShape"]["dim"]:
+          tensorShape.append(i["size"])
+        input_shapes.append(tensorShape)
 
     for name, shape, dtype in zip(input_names, input_shapes, input_dtypes):
       shape[0] = None # batching requires the first dimension to be None
@@ -663,33 +657,27 @@ class SklearnModel(FrameworkAgnosticProtocol):
     with open(export_path, "wb") as f:
       f.write(onx.SerializeToString())
 
-
     return ModelSpec(
-    src_framework="sklearn",
-    src_framework_version=sklearn.__version__,
-    export_type="onnx",
-    export_path=export_path,
-    load_class=self.__class__.__name__,
-    load_method="from_to_onnx",
-    load_kwargs={
-        "model": f"./{model_file_name}",
-        "map_location": "cpu",
-        "method_path": f"./{method_file_name}",
-    },
-    io_dict=iod,
+      src_framework="sklearn",
+      src_framework_version=sklearn.__version__,
+      export_type="onnx",
+      export_path=export_path,
+      load_class=self.__class__.__name__,
+      load_method="from_to_onnx",
+      load_kwargs={
+          "model": f"./{model_file_name}",
+          "map_location": "cpu",
+          "method_path": f"./{method_file_name}",
+      },
+      io_dict=iod,
     )
 
   def export_to_pkl(self, input_object, export_model_path, method_file_name = "method.dill", model_file_name = "model.pkl"):
-
-    import joblib
     import sklearn
-    # sklearn models are pure python methods (though underlying contains bindings to C++)
-    # and so we can use joblib for this
-    # we use the joblib instead of pickle
     self._serialise_method(join(export_model_path, method_file_name))
     export_path = join(export_model_path, model_file_name)
     with open(export_path, "wb") as f:
-      joblib.dump(self._model, f)
+      dill.dump(self._model, f)
 
     method = input_object.get("method", None)
     method = getattr(self._model, "predict") if method == None else getattr(self._model, method)
@@ -726,7 +714,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       logger.info(f"Loading method from {lp}")
       with open(lp, "rb") as f:
         method = dill.load(f)
-      model = joblib.load(model_meta.load_kwargs["model"])
+      model = dill.load(model_meta.load_kwargs["model"])
 
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
@@ -764,10 +752,6 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       out = self._model(model_inputs)
     return ModelOutput(inputs = input_object, outputs = out)
 
-
-  def _serialise_logic(self, fpath):
-    logger.info(f"Saving logic to {fpath}")
-
   def _serialise_logic(self, fpath):
     logger.debug(f"Saving logic to {fpath}")
     with open(fpath, "wb") as f:
@@ -792,29 +776,26 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     iod = get_io_dict(input_object, self._model.call, self.forward)
 
     if "keras" in str(self._model.__class__):
-        model_proto, _ = tf2onnx.convert.from_keras(
-            self._model, opset=opset_version
-        )
+      model_proto, _ = tf2onnx.convert.from_keras(self._model, opset=opset_version)
+      with open(export_path, "wb") as f:
+        f.write(model_proto.SerializeToString())
 
-        with open(export_path, "wb") as f:
-              f.write(model_proto.SerializeToString())
-
-
-        return ModelSpec(
-            src_framework="tf",
-            src_framework_version=tf.__version__,
-            export_type="onnx",
-            export_path=export_path,
-            load_class=self.__class__.__name__,
-            load_method="from_convert_from_keras",
-            load_kwargs={
-                "model": f"./{model_file_name}",
-                "map_location": "cpu",
-                "logic_path": f"./{logic_file_name}",
-            },
-            io_dict=iod,
-        )
-
+      return ModelSpec(
+        src_framework="tf",
+        src_framework_version=tf.__version__,
+        export_type="onnx",
+        export_path=export_path,
+        load_class=self.__class__.__name__,
+        load_method="from_convert_from_keras",
+        load_kwargs={
+          "model": f"./{model_file_name}",
+          "map_location": "cpu",
+          "logic_path": f"./{logic_file_name}",
+        },
+        io_dict=iod,
+      )
+    else:
+      raise InvalidProtocolError(f"Unsupported ONNX export for tensorflow model: {type(self._model)}")
 
   def export_to_savemodel(
     self,
@@ -830,27 +811,33 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     self._serialise_logic(join(export_model_path, logic_file_name))
 
     export_path = join(export_model_path, model_dir_name)
-
-    tf.keras.models.save_model(
-    self._model, export_path, signatures=None,
-     options=None, include_optimizer=include_optimizer, save_format = "tf"
-    )
-
     iod = get_io_dict(input_object, self._model.call, self.forward)
 
-    return ModelSpec(
-      src_framework = "tf",
-      src_framework_version = tf.__version__,
-      export_type = "SaveModel",
-      export_path = export_path,
-      load_class = self.__class__.__name__,
-      load_kwargs = {
-        "model": f"./{model_dir_name}",
-        "map_location": "cpu",
-        "logic_path": f"./{logic_file_name}"
-      },
-      io_dict = iod,
-    )
+    if "keras" in str(self._model.__class__):
+      tf.keras.models.save_model(
+        self._model,
+        export_path,
+        signatures = None,
+        options = None,
+        include_optimizer = include_optimizer,
+        save_format = "tf"
+      )
+
+      return ModelSpec(
+        src_framework = "tf",
+        src_framework_version = tf.__version__,
+        export_type = "SaveModel",
+        export_path = export_path,
+        load_class = self.__class__.__name__,
+        load_kwargs = {
+          "model": f"./{model_dir_name}",
+          "map_location": "cpu",
+          "logic_path": f"./{logic_file_name}"
+        },
+        io_dict = iod,
+      )
+    else:
+      raise InvalidProtocolError(f"Unsupported SaveModel export for tensorflow model: {type(self._model)}")
 
   def export_to_h5(
     self,
@@ -864,30 +851,36 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     import tensorflow as tf
 
     self._serialise_logic(join(export_model_path, logic_file_name))
+    iod = get_io_dict(input_object, self._model.call, self.forward)
 
     export_path = join(export_model_path, model_file_name)
 
-    tf.keras.models.save_model(
-    self._model, export_path, signatures=None,
-     options=None, include_optimizer=include_optimizer, save_format = "h5"
-    )
+    if "keras" in str(self._model.__class__):
+      tf.keras.models.save_model(
+        self._model,
+        export_path,
+        signatures=None,
+        options=None,
+        include_optimizer=include_optimizer,
+        save_format = "h5"
+      )
 
-    iod = get_io_dict(input_object, self._model.call, self.forward)
-
-    return ModelSpec(
-      src_framework = "tf",
-      src_framework_version = tf.__version__,
-      export_type = "h5",
-      export_path = export_path,
-      load_class = self.__class__.__name__,
-      load_method = "from_savemodel",
-      load_kwargs = {
-        "model": f"./{model_file_name}",
-        "map_location": "cpu",
-        "logic_path": f"./{logic_file_name}"
-      },
-      io_dict = iod,
-    )
+      return ModelSpec(
+        src_framework = "tf",
+        src_framework_version = tf.__version__,
+        export_type = "h5",
+        export_path = export_path,
+        load_class = self.__class__.__name__,
+        load_method = "from_savemodel",
+        load_kwargs = {
+          "model": f"./{model_file_name}",
+          "map_location": "cpu",
+          "logic_path": f"./{logic_file_name}"
+        },
+        io_dict = iod,
+      )
+    else:
+      raise InvalidProtocolError(f"Unsupported h5 export for tensorflow model: {type(self._model)}")
 
 
   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
@@ -921,20 +914,6 @@ class TensorflowModel(FrameworkAgnosticProtocol):
       import tensorflow as tf
       model = tf.keras.models.load_model(model_meta.load_kwargs["model"])
       return model, logic
-
-    logger.debug(f"Deserialising Tensorflow model from {model_meta.export_path}")
-    kwargs = model_meta.load_kwargs
-
-    if model_meta.export_type in ["SaveModel", "h5"]:
-      lp = kwargs.pop("logic_path")
-      logger.debug(f"Loading logic from {lp}")
-      with open(lp, "rb") as f:
-        logic = dill.load(f)
-
-      import tensorflow as tf # pylint: disable=import-outside-toplevel
-      model = tf.keras.models.load_model(model_meta.load_kwargs["model"])
-      return model, logic
-
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
@@ -946,21 +925,6 @@ class TensorflowModel(FrameworkAgnosticProtocol):
 ################################################################################
 
 """ We are not implementing Jax as of now"""
-
-# class JaxModel(FrameworkAgnosticProtocol):
-#   @isthere("jax", soft = False)
-#   def __init__(self, m0, m1):
-#     pass
-
-#   def forward(self, input_object: Any) -> ModelOutput:
-#     raise NotImplementedError()
-
-#   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
-#     raise NotImplementedError()
-
-#   @staticmethod
-#   def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
-#     raise NotImplementedError()
 
 
 ################################################################################
