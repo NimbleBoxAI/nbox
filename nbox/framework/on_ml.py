@@ -304,6 +304,8 @@ class TorchModel(FrameworkAgnosticProtocol):
     model_inputs = self._logic(input_object) # TODO: @yashbonde enforce logic to return dict
     if isinstance(model_inputs, dict):
       out = self._model(**model_inputs)
+    else:
+      out = self._model(model_inputs)
     return ModelOutput(inputs = input_object, outputs = out)
 
   def _serialise_logic(self, fpath):
@@ -748,7 +750,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
   def forward(self, input_object: Any) -> ModelOutput:
     model_inputs = self._logic(input_object)
     if isinstance(model_inputs, dict):
-      out = self._model(**model_inputs)
+      out = self._model(list(model_inputs.values()))
     else:
       out = self._model(model_inputs)
     return ModelOutput(inputs = input_object, outputs = out)
