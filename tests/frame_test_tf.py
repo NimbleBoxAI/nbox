@@ -95,7 +95,7 @@ def feed_forward():
       _unit_test = True
     )
   )
-  second_out = m2(x).outputs[0]
+  second_out = m2(x).outputs
   assert np.all(second_out == first_out)
   return second_out.shape
 
@@ -147,8 +147,9 @@ br()
 print("Output for Feed Forward Network:- \n", feed_forward())
 br()
 
-print("Output for tiny GPT-2 through SaveModel: \n", test_tiny_gpt_SaveModel())
-br()
+# Currently sub-classed models are not supported
+# print("Output for tiny GPT-2 through SaveModel: \n", test_tiny_gpt_SaveModel())
+# br()
 
 print("Output for tiny Resnet through ONNX : \n", test_resnet_onnx())
 br()

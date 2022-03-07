@@ -33,10 +33,10 @@ def test_feedforward():
             output = self.sigmoid(output)
             return output
 
-    x = np.random.uniform(size=(1, 224))
+    x = np.random.uniform(size=(1, 3, 1, 224))
     x = torch.tensor(x).float()
     model = Feedforward(224, 2)
-    model = Model(model, None)
+    model = Model(model, pre_fn)
     model.eval()
     first_out = model(x).outputs
     new_model = Model.deserialise(
@@ -84,7 +84,7 @@ def test_resnet_onnx():
     # load resnet model with preprocessing function
     resnet = load(
     "torchvision/resnet18",
-    None,
+    pre_fn,
     )
     #Model(i0: Tensorflow.Object, i1: )
     resnet.eval()
@@ -115,13 +115,13 @@ def br():
     print("#"*50, "\n")
 
 # #Test Feedforward -
-# br()
-# print("FeedForward: \n", test_feedforward())
+br()
+print("FeedForward: \n", test_feedforward())
 
 # #Test Resnet from Torchscript-
 # br()
 # print("Resnet from Torchscript: \n", test_resnet_torchscript())
 
 #Test Resnet from ONNX-
-br()
-print("Resnet from ONNX: \n", test_resnet_onnx())
+# br()
+# print("Resnet from ONNX: \n", test_resnet_onnx())
