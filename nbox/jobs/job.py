@@ -7,14 +7,14 @@ Jobs
 
 import sys
 
-from nbox.hyperloop.job_pb2 import NBXAuthInfo
-
 from ..utils import logger
 from ..init import nbox_grpc_stub
 from ..network import Cron
 
 class Job:
   def __init__(self, id, workspace_id =None):
+    from ..hyperloop.job_pb2 import NBXAuthInfo
+
     self.id = id
     self.workspace_id = workspace_id
     self.auth_info = NBXAuthInfo(workspace_id=self.workspace_id)
@@ -53,11 +53,11 @@ class Job:
   def update(self):
     import grpc
     from ..hyperloop.nbox_ws_pb2 import JobInfo
-    from ..hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
+    from ..hyperloop.job_pb2 import Job as JobProto
     logger.info("Updating job info")
 
     try:
-      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info=self.auth_info)))
+      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info = self.auth_info)))
     except grpc.RpcError as e:
       logger.error(f"Could not get job {id}")
       raise e
