@@ -32,10 +32,10 @@ from ..auth import secret
 # make the entire process functional.
 ################################################################################
 
-def print_status(session = nbox_session):
+def print_status():
   # TODO: @yashbonde replace current urls with Sub30 class
   url = secret.get("nbx_url")
-  r = session.get(f"{url}/api/instance/get_user_instances")
+  r = nbox_session.get(f"{url}/api/instance/get_user_instances")
   r.raise_for_status()
   message = r.json()["msg"]
   if message != "success":

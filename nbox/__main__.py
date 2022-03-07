@@ -7,27 +7,22 @@ The commands are broken down according to the products they are related to.
 
 .. code-block::
 
-  nbox deploy [OPTIONS]
-  nbox instance [OPTIONS-1] [create/start/stop] [OPTIONS-2]
-  nbox jobs [init/]
+  nbox instance [nbox.Instance] **init_kwargs [actions] **acton_kwargs
+  nbox jobs [new/deploy/open]
 """
 
 import fire
 from . import cli as n # nbox-cli
-from .jobs import cli as ij # jobx-cli
-from .jobs import Instance
+from .jobs import Instance, Job
 from .sub_utils import ssh
 
+NBX = dict(
+  instance = Instance            , # nbox instance
+  jobs = Job                     , # nbox jobs
+  status = Instance.print_status , # nbox status
+  tunnel = ssh.tunnel            , # nbox tunnel
+  home = n.open_home             , # nbox home
+)
+
 if __name__ == "__main__":
-  fire.Fire({
-    "instance": Instance,         # nbox jobs instance
-    "jobs": {
-      "new": ij.new_job,          # nbox jobs new PROJECT_NAME
-      "deploy": ij.deploy,        # nbox jobs deploy FOLDER
-      "open": ij.open_jobs,       # nbox jobs open
-      # "trigger":                # trigger a job run from CLI
-    },
-    "status": Instance.print_status, # nbox status
-    "tunnel": ssh.tunnel,
-    "open": n.open_home,
-  })
+  fire.Fire(NBX)
