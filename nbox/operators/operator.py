@@ -303,7 +303,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     """
     logger.info(f"Deploying {self.__class__.__name__} -> '{job}'")
     
-    # TODO: @yashbonde add this support after revamp
+    # TODO: @yashbonde add job -> job id/name resolver support after revamp
+    # TODO: @yashbonde add workspace -> workspace id/name resolver support after revamp
     # data = nbox_webserver_subway.workspace.u(workspace).jobs() # get all the jobs for this user
     # data = list(filter(lambda x: x["id"] == job or x["name"] == job, data)) # filter by name
     # if not len(data):

@@ -325,9 +325,7 @@ def deploy_job(
   # updateDag(stub)
   # create_job(stub)
   # getJob(stub)
-  updateRun(stub)
-
-
+  # updateRun(stub)
 
   from nbox.auth import secret, get_stub # it can refresh so add it in the method
 
@@ -340,61 +338,55 @@ def deploy_job(
   logger.debug(f"Deploying on URL: {URL}")
 
   # gRPC baby
+  from grpc import RpcError
   from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
-  from .hyperloop.job_pb2 import Job, NBXAuthInfo
+  from .hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
   from .hyperloop.dag_pb2 import DAG
+  from google.protobuf.timestamp_pb2 import Timestamp
 
   from .init import nbox_grpc_stub
 
-  from google.protobuf.timestamp_pb2 import Timestamp
-  from google.protobuf.json_format import MessageToJson
 
   try:
-    # upload_job(stub)
-    job = nbox_grpc_stub(
-      UploadCodeRequest(
-        job=Job(
-          code=Job.Code(
-            size=file_size,
-            type=Job.Code.Type.NBOX
-          ),
-          name="test_job",
-          dag=DAG(
-            flowchart=data["dag"],
-          ),
-          schedule = Job.Schedule(
-            start = Timestamp(
-              seconds = int(schedule.starts.timestamp()),
-              nanos = 0
-            ),
-            end = Timestamp(
-              seconds = int(schedule.ends.timestamp()),
-              nanos = 0
-            ),
-            cron = schedule.cron
-          ),
-        ),
-        auth = NBXAuthInfo(
-          username=secret.get("username"),
-          workspace=workspace
-        ),
+    job = JobProto(
+      code = JobProto.Code(
+        size = file_size,
+        type = JobProto.Code.Type.NBOX
       ),
-      metadata = [
-        ("authorization", f"{access_token}"),
-      ]
+      dag = DAG(
+        flowchart=data["dag"],
+      ),
+      schedule = JobProto.Schedule(
+        start = Timestamp(
+          seconds = int(schedule.starts.timestamp()),
+          nanos = 0
+        ),
+        end = Timestamp(
+          seconds = int(schedule.ends.timestamp()),
+          nanos = 0
+        ),
+        cron = schedule.cron
+      ),
     )
-  except Exception as e:
-    logger.debug(f"Failed to deploy job: {e}")
-    return
 
-  out = MessageToJson(job.code)
-  s3_url = out["s3_url"]
-  s3_meta = out["s3_meta"]
+    if data["job_id"] != None:
+      job.id = data["job_id"]
+    else:
+      job.name = data["job_name"]
 
-  job_id = s3_meta["x-amz-meta-job_id"]
-  jobs_deployment_id = s3_meta["x-amz-meta-jobs_deployment_id"]
+    job: JobProto = nbox_grpc_stub.UploadJobCode(
+      UploadCodeRequest(job = job),
+      auth = NBXAuthInfo(username = secret.get("username"), workspace_id = workspace)
+    )
+
+  except RpcError as e:
+    logger.error(f"Failed to deploy job: {e.details()}")
+    raise e
+
+  s3_url = job.code["s3Url"]
+  s3_meta = job.code["s3Meta"]
+  job_id = job.id
   logger.debug(f"job_id: {job_id}")
-  logger.debug(f"jobs_deployment_id: {jobs_deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
   logger.debug("Uploading model to S3 ...")
@@ -405,31 +397,17 @@ def deploy_job(
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
 
-  # Once the file is loaded create a new job
+  if data["job_id"] != None:
+    # if this jobs is already present, there is no need to create another entry
+    # simply return this job and any changes to this should be done via Job
+    return job
+
+  # Otherwise we are creating a new job
   logger.debug("Creating new job ...")
   
-  # create_job(stub)
   try:
-    job = data = open("./flowchart.json").readlines()
-    flowchart = Parse("\n".join(data), Flowchart(), ignore_unknown_fields=True)
-    try:
-      job = stub.CreateJob(
-          CreateJobRequest(
-              job=Job(
-                  id="jt3earah",
-                  dag=DAG(flowchart=flowchart),
-                  schedule=Job.Schedule(cron="*/1 * * * *"),
-                  auth_info=NBXAuthInfo(workspace_id="zcxdpqlk"),
-              )
-          )
-      )
-    except grpc.RpcError as e:
-        print("ERROR:", e.details())
-    else:
-        # print(MessageToJson(response, indent=2, preserving_proto_field_name=True))
-        pass
-  except Exception as e:
-    logger.debug(f"Failed to create job: {e}")
-    return
-
+    job = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job))
+  except RpcError as e:
+    logger.error(f"Failed to create job: {e.details()}")
+  
   return job
