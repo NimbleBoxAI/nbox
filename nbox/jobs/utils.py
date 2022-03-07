@@ -85,6 +85,9 @@ class Sub30:
   def __getattr__(self, attr):
     return Sub30(f"{self._url}/{attr}", self._api, self._session, prefix=f"{self._prefix}/{attr}")
 
+  def u(self, attr):
+    return self.__getattr__(attr)
+
   def __call__(self, _method: str = None, **kwargs):
     r"""
     Args:

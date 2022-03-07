@@ -9,6 +9,7 @@ is typical for any powerful tool: magic or a headache depending on the day and t
 import requests
 from .auth import secret
 from .utils import logger
+from .jobs.utils import Sub30
 
 
 def get_stub():
@@ -31,10 +32,22 @@ def get_stub():
   return nbx_stub
 
 
+def create_webserver_subway(version = "v1"):
+  r = nbox_session.get(secret.get("nbx_url") + f"/api/{version}/openapi.json")
+  try:
+    r.raise_for_status()
+  except Exception as e:
+    logger.error(f"Could not connect to webserver at {secret.get('nbx_url')}, {e}")
+    return None
+
+  return Sub30(secret.get("nbx_url"), r.json(), nbox_session)
+
+
 # common networking items that will be used everywhere
 nbox_session = requests.Session()
 nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 nbox_grpc_stub = get_stub()
+nbox_webserver_subway = create_webserver_subway()
 
 # add code here to warn user of nbox deprecation -> not sure how to implement this yet
 # raise_old_version_warning()

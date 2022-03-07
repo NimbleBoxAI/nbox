@@ -3,17 +3,21 @@
 # due to requirements of stability, some type enforcing is performed
 
 import os
-import requests
-from typing import Callable
+import json
+import zipfile
+from typing import Callable, Union
 from functools import partial
-from tempfile import gettempdir
+from tempfile import gettempdir, mkdtemp
 from collections import OrderedDict
 from datetime import datetime, timedelta
 
 from ..network import deploy_job, Cron
-from ..utils import join, logger
-from ..framework import AirflowMixin
+from ..utils import logger
+from .. import utils as U
+from ..framework import AirflowMixin, PrefectMixin, LuigiMixin
 from ..framework.on_functions import get_nbx_flow, DBase
+from ..init import nbox_grpc_stub, nbox_webserver_subway
+from ..jobs.job import Job
 
 
 class StateDictModel(DBase):
@@ -25,151 +29,35 @@ class StateDictModel(DBase):
   ]
 
 
-# class TraceObject:
-#   def __init__(self, root):
-#     self.root = root
-#     self.flow = OrderedDict()
-#
-#   def pre(self, inputs, cls):
-#     _id = id(cls)
-#     self.flow[_id] = {
-#       "id": _id,
-#       "class_name": cls.__class__.__name__,
-#       "inputs": {k: type(v) for k, v in inputs.items()},
-#       "outputs": {},
-#       "start": datetime.now(),
-#       "end": None,
-#     }
-#
-#   def post(self, out, cls):
-#     _id = id(cls)
-#     if _id not in self.flow:
-#       raise ValueError(f"{_id} not found in flow")
-#
-#     outputs = {}
-#     if out == None:
-#       outputs = {"out_0": type(None)}
-#     elif isinstance(out, dict):
-#       outputs = {k: type(v) for k, v in out.items()}
-#     elif isinstance(out, (list, tuple)):
-#       outputs = {f"out_{i}": type(v) for i, v in enumerate(out)}
-#     else:
-#       outputs = {"out_0": type(out)}
-#
-#     self.flow[_id].update({
-#       "outputs": outputs,
-#       "end": datetime.now(),
-#     })
-#     self.flow[_id]["duration"] = self.flow[_id]["end"] - self.flow[_id]["start"]
-#
-#     # convert datetime to string objects for serialization
-#     self.flow[_id]["start"] = self.flow[_id]["start"].isoformat()
-#     self.flow[_id]["end"] = self.flow[_id]["end"].isoformat()
-#     self.flow[_id]["duration"] = str(self.flow[_id]["duration"].total_seconds())
-#
-#   def to_dict(self):
-#     return {
-#       "root": self.root.__class__.__name__,
-#       "root_id": id(self.root),
-#       "flow": self.flow,
-#     }
-#
-#   def dag(self, depth = 1, root_ = None):
-#     if depth != 1:
-#       raise ValueError("depth of 1 supported only")
-#
-#     if depth < 0:
-#       return []
-#
-#     dag = []
-#     # create nodes
-#     root_ = root_ if root_ != None else self.root
-#     for _name, c in root_._operators.items():
-#       _id = id(c)
-#       name = c.__class__.__name__
-#       _trace = self.flow[_id]
-#       _trace["code_name"] = _name
-#
-#       # if there is some depth left, recurse
-#       if depth > 1:
-#         children_dag = self.dag(depth - 1, c)
-#         _trace["children"] = children_dag
-#
-#       dag.append({
-#         "id": _id,
-#         "type": "input" if len(dag) == 0 else None,
-#         "data": {
-#           "label": f"{_name} | {name}"
-#         },
-#         # "meta": _trace
-#       })
-#     dag[-1]["type"] = "output"
-#
-#     # create edges
-#     for src, trg in zip(dag[:-1], dag[1:]):
-#       dag.append({
-#         "id": f"edge-{src['id']}-{trg['id']}",
-#         "source": src["id"],
-#         "target": trg["id"]
-#       })
-#   
-#     return dag
-
 class Tracer:
-  def __init__(self):
-    try:
+  def __init__(self, tracer = "stub"):
+    self.tracer = tracer
+    if tracer == "stub":
       # when job is running on NBX, gRPC stubs are used
-      import nbox_js_stub
-      self.l = nbox_js_stub.Trace()
-
-      self.l.Register(
-        "dag",
-        
-      )
-
-      self._trace_obj = "stub"
-    except ImportError:
-      def _trace(x, fn):
-        logger.debug(x, extra={"fn": fn})
-
-      self.l = _trace
-      self._trace_obj = "logger"
-
-  def __getattr__(self, __name):
-    item = getattr(self.l, __name, None)
-    if self._trace_obj == "logger":
-      return partial(self.l, fn=__name)
-    elif self._trace_obj == "stub" and item:
-      return item
-    raise AttributeError(f"Service: '{__name}' not found")
+      if nbox_grpc_stub == None:
+        raise RuntimeError("nbox_grpc_stub is not initialized")
+      self.stub = nbox_grpc_stub
 
   def __call__(self, dag_update):
-    # import requests
-    r = requests.post(
-      url = "127.0.0.1:8000/log",
-      json = dag_update,
-    )
-    print(r.content)
-    # print(dag_update)
+    if self._trace_obj == "stub":
+      try:
+        response = self.stub.UpdateRun(
+          UpdateRunRequest(job=Job(id="jt3earah", dag=None, status="COMPLETED", auth_info=NBXAuthInfo(workspace_id="zcxdpqlk")))
+        )
+      except grpc.RpcError as e:
+        print("ERROR:", e.details())
+      else:
+        print(MessageToJson(response))
+    else:
+      logger.info(dag_update)
 
 
-class Operator(AirflowMixin):
+class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   _version: int = 1 # always try to keep this an i32
 
   def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
-
-  # classmethods/
-
-  def serialise(self):
-    pass
-
-  @classmethod
-  def deserialise(cls, state_dict):
-    pass
-
-  # /classmethods
 
   # mixin/
 
@@ -177,9 +65,22 @@ class Operator(AirflowMixin):
   # --------------------
   # AirflowMixin.to_airflow_operator(self, timeout, **operator_kwargs):
   # AirflowMixin.to_airflow_dag(self, dag_kwargs, operator_kwargs)
-  # 
   # AirflowMixin.from_airflow_operator(cls, air_operator)
   # AirflowMixin.from_airflow_dag(cls, dag)
+
+  # PrefectMixin methods
+  # --------------------
+  # PrefectMixin.from_prefect_flow()
+  # PrefectMixin.to_prefect_flow()
+  # PrefectMixin.from_prefect_task()
+  # PrefectMixin.to_prefect_task()
+  
+  # LuigiMixin methods
+  # -----------------
+  # LuigiMixin.from_luigi_flow()
+  # LuigiMixin.to_luigi_flow()
+  # LuigiMixin.from_luigi_task()
+  # LuigiMixin.to_luigi_task()
 
   # /mixin
 
@@ -283,15 +184,6 @@ class Operator(AirflowMixin):
       outputs = self.outputs
     )
 
-  # properties as planned
-
-  @property
-  def comms(self):
-    # this returns all the things communications such as email, Slack, Discord
-    # phone alerts, system notifications, gmeets, basically everything supported
-    # in https://github.com/huggingface/knockknock/tree/master/knockknock
-    raise NotImplementedError()
-
   # /properties
 
   # information passing/
@@ -301,6 +193,22 @@ class Operator(AirflowMixin):
       c.propagate(**kwargs)
     for k, v in kwargs.items():
       setattr(self, k, v)
+
+  def thaw(self, flowchart):
+    nodes = flowchart["nodes"]
+    edges = flowchart["edges"]
+    for n in nodes:
+      name = n["name"]
+      if name.startswith("self."):
+        name = name[5:]
+      if hasattr(self, name):
+        op: 'Operator' = getattr(self, name)
+        op.propagate(
+          node_info = n,
+          source_edges = list(filter(
+            lambda x: x["target"] == n["id"], edges
+          ))
+        )
 
   # /information passing
 
@@ -314,20 +222,6 @@ class Operator(AirflowMixin):
   _trace_object = Tracer()
   node_info = None
   source_edges = None
-
-  # def trace(self, *args, return_dag = True, **kwargs):
-  #   self._trace_object = TraceObject(self)
-  #   self.propagate(_trace_object = self._trace_object)
-  #   self(*args, **kwargs)
-  #   trace = self._trace_object.to_dict()
-  #   dag = self._trace_object.dag()
-  #   self.propagate(_trace_object = None)
-  #   self._trace_object = None
-  #
-  #   output = (trace,)
-  #   if return_dag:
-  #     output += (dag,)
-  #   return output
 
   def __call__(self, *args, **kwargs):
     # blank comment so docstring below is not loaded
@@ -384,32 +278,44 @@ class Operator(AirflowMixin):
 
   # nbx/
 
-  def thaw(self, flowchart):
-    nodes = flowchart["nodes"]
-    edges = flowchart["edges"]
-    for n in nodes:
-      name = n["name"]
-      if name.startswith("self."):
-        name = name[5:]
-      if hasattr(self, name):
-        op = getattr(self, name)
-        op.propagate(
-          node_info = n,
-          source_edges = list(filter(
-            lambda x: x["target"] == n["id"], edges
-          ))
-        )
-
   def deploy(
     self,
-    schedule: Cron,
     workspace: str,
-    init_folder: str = None,
+    init_folder: str,
+    job: Union[str, int],
+    schedule: Cron = None,
     cache_dir: str = None,
-    job_id = None,
-    job_name = None,
-  ):
-    logger.debug(f"Deploying {self.__class__.__name__} -> '{job_id}/{job_name}'")
+    *,
+    _return_data = False
+  ) -> Job:
+    """_summary_
+
+    Args:
+        workspace (str): Name of the workspace to be a part of this
+        init_folder (str, optional): Name the folder to zip
+        job (Union[str, int], optional): Name or ID of the job
+        schedule (Cron, optional): If ``None`` will run only once, so be careful
+        cache_dir (str, optional): Folder where to put the zipped file, if None will be tempdir
+        _return_data (bool, optional): Internal
+
+    Returns:
+        Job: Job object
+    """
+    logger.info(f"Deploying {self.__class__.__name__} -> '{job}'")
+    
+    # TODO: @yashbonde add this support after revamp
+    # data = nbox_webserver_subway.workspace.u(workspace).jobs() # get all the jobs for this user
+    # data = list(filter(lambda x: x["id"] == job or x["name"] == job, data)) # filter by name
+    # if not len(data):
+    #   raise ValueError(f"No job found with name or id '{job}'")
+    # if len(data) > 1:
+    #   raise ValueError(f"Multiple jobs found with name or id '{job}', please enter job id")
+    # this_job = data[0]
+    # job_id = this_job["id"]
+    # job_name = this_job["name"]
+
+    job_id = job
+    job_name = None
 
     # check if this is a valid folder or not
     if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
@@ -425,7 +331,7 @@ class Operator(AirflowMixin):
     dag = get_nbx_flow(self.forward)
     try:
       from json import dumps
-      dumps(dag)
+      dumps(dag) # check if works
     except:
       logger.error("Cannot perform pre-building, only live updates will be available!")
       logger.debug("Please raise an issue on chat to get this fixed")
@@ -441,32 +347,33 @@ class Operator(AirflowMixin):
         operator_name = cls_item.__class__.__name__
       n["operator_name"] = operator_name
 
-    logger.debug(f"Schedule: {schedule.get_dict}")
+    if schedule != None:
+      logger.debug(f"Schedule: {schedule.get_dict}")
 
     data = {
       "dag": dag,
-      "schedule": schedule.get_dict(),
+      "schedule": schedule.get_dict() if schedule != None else None,
       "job_id": job_id,
       "job_name": job_name,
       "created": datetime.now().isoformat(),
     }
 
-    with open(join(init_folder, "meta.json"), "w") as f:
+    if _return_data:
+      return data
+
+    with open(U.join(init_folder, "meta.json"), "w") as f:
       f.write(dumps(data))
 
     # zip all the files folder
-    all_f = []
-    for root, dirs, files in os.walk(init_folder):
-      for file in files:
-        all_f.append(join(root, file))
-    
-    import zipfile
-    zip_path = join(cache_dir if cache_dir else gettempdir(), "project.zip")
-    logger.debug(f"Zipping project to '{zip_path}'")
+    all_f = U.get_files_in_folder(init_folder)
+    all_f = [f[len(init_folder)+1:] for f in all_f] # remove the init_folder from zip
+
+    zip_path = U.join(cache_dir if cache_dir else gettempdir(), "project.zip")
+    logger.info(f"Zipping project to '{zip_path}'")
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
       for f in all_f:
         zip_file.write(f)
-
-    deploy_job(zip_path = zip_path, schedule = schedule, data = data, workspace = workspace)
+    
+    return deploy_job(zip_path = zip_path, schedule = schedule, data = data, workspace = workspace)
 
   # /nbx

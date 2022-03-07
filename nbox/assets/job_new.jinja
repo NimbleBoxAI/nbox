@@ -6,13 +6,17 @@
 # > feeling stuck, start by populating the functions below <
 
 import sys
-from fire import Fire{% if scheduled %}
-from datetime import datetime
-{% endif %}
+from fire import Fire{% if run_on_build %}
+import subprocess
+{% endif %}{% if scheduled %}
+from datetime import datetime{% endif %}
 
 from nbox import Operator
-from nbox.utils import folder{% if scheduled %}
-from nbox.network import Cron{% endif %}
+from nbox.utils import logger
+import nbox.utils as U{% if scheduled %}
+from nbox.network import Cron
+{% endif %}{% if run_on_build %}
+from nbox.jobs import Instance{% endif %}
 
 
 def get_op() -> Operator:
@@ -22,19 +26,40 @@ def get_op() -> Operator:
   return None
 
 
-def deploy():
+def deploy():{% if run_on_build %}
+  # the contract of this deploy() function is to push code to the compute location.
+  # In case of nbx-jobs it uploads the code to S3 and then K8s cluster will manage
+  # the execution of code. In this case of nbx-build, we will simply transfer the
+  # this folder to the instance. run() will execute the code as it is will.
+
+  instance = Instance({{ instance }})
+  if instance.status != "RUNNING":
+    # start with the default settings, user can override them
+    instance.start(
+      cpu_only = True,
+      cpu_count = 2,
+      gpu = "p100",
+      gpu_count = 1
+    )
+  instance.mv(U.folder(__file__), "nbx://{{ project_name }}")
+  logger.info(f"Deployed to instance: {instance.name}")
+  logger.info("Run the following command to run the code:")
+  logger.info(f"nbx instance -i {{ instance }} run_py 'nbx://{{ project_name }}/exe.py' run")
+
+  # shutdown the instance, comment out the line to keep it running
+  instance.stop(){% else %}
   op: Operator = get_op()
-  op.deploy(
+  job = op.deploy(
     workspace = workspace, # :str: workspace name or id
 
     # if job_id is None, new job will be created with job_name
     job_id = job_id,     # :str: job id
     job_name = job_name, # :str: job name
     # no need to change these
-    init_folder = folder(__file__),
+    init_folder = U.folder(__file__),
     {% if scheduled %}
     # simple scheduler like your Calender App
-    # "run at 4:30 every Friday" = Cron(4, 30, ["fri", "sat"], ["jan"])
+    # "run at 4:30 every Friday" = Cron(4, 30, ["fri"])
     #       "run every 10 hours" = Cron(10)
     schedule = Cron(
       hour,          # :int: Hour for the job to run
@@ -44,17 +69,17 @@ def deploy():
       starts = None, # :datetime: Starting datetime for the job
       ends = None,   # :datetime: Ending datetime for the job
     ),{% endif %}
-  )
+
+  ){% endif %}
+
 
 def run():
-  op: Operator = get_op()
-  {% if scheduled %}
-  op() # your operator is recurring avoid passing any values here
-  {% else %}
+  op: Operator = get_op(){% if run_on_build %}
+  subprocess.run(["pip", "install", "-r", U.join(U.folder(__file__), "requirements.txt")]){% endif %}{% if scheduled %}
+  op() # your operator is recurring avoid passing any values here{% else %}
   op(
     # your operator is going to run once, try passing all inputs here
-  )
-  {% endif %}
+  ){% endif %}
 
 
 if __name__ == "__main__":

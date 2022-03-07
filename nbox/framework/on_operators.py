@@ -202,4 +202,17 @@ class PrefectMixin:
 # pipelines of tasks.
 ################################################################################
 
+class LuigiMixin:
+  @classmethod
+  def from_luigi_flow(operator_cls, dag):
+    raise NotImplementedError
 
+  def to_luigi_flow():
+    raise NotImplementedError
+
+  @classmethod
+  def from_luigi_task(operator_cls, dag):
+    raise NotImplementedError
+
+  def to_luigi_task():
+    raise NotImplementedError

@@ -10,17 +10,18 @@ the second step towards YoCo and CasH, read more
 `here <https://yashbonde.github.io/general-perceivers/remote.html>`_.
 """
 
-import os
-import re
 import sys
 import time
+import shlex
 from functools import partial
 from tabulate import tabulate
+from tempfile import gettempdir
 from requests.sessions import Session
 
 from .utils import SpecSubway, Subway, TIMEOUT_CALLS
-from ..utils import NBOX_HOME_DIR, join, logger
-from ..init import nbox_session
+from ..utils import NBOX_HOME_DIR, logger
+from .. import utils as U
+from ..init import nbox_session, nbox_webserver_subway
 from ..auth import secret
 
 
@@ -32,6 +33,7 @@ from ..auth import secret
 ################################################################################
 
 def print_status(session = nbox_session):
+  # TODO: @yashbonde replace current urls with Sub30 class
   url = secret.get("nbx_url")
   r = session.get(f"{url}/api/instance/get_user_instances")
   r.raise_for_status()
@@ -61,12 +63,15 @@ class Instance():
   def __init__(self, i, cs_endpoint = "server"):
     super().__init__()
 
+    self.status = None # this is the status string
+
     self.url = secret.get('nbx_url')
     self.cs_url = None
     self.cs_endpoint = cs_endpoint
     self.session = Session()
     self.session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
     self.web_server = Subway(f"{self.url}/api/instance", self.session)
+    # self.web_server = nbox_webserver_subway.api.instance # wesbserver RPC stub
     logger.debug(f"WS: {self.web_server}")
 
     self.instance_id = None
@@ -123,9 +128,9 @@ class Instance():
 
   def start(self, cpu_only = True, cpu_count = 2, gpu = "p100", gpu_count = 1, region = "asia-south-1"):
     """``cpu_count`` should be one of [2, 4, 8]"""
-    if self.__opened:
-      logger.debug(f"Instance {self.name} ({self.instance_id}) is already opened")
-      return
+    # if self.__opened:
+    #   logger.debug(f"Instance {self.name} ({self.instance_id}) is already opened")
+    #   return
 
     if not self.state == "RUNNING":
       logger.debug(f"Starting instance {self.name} ({self.instance_id})")
@@ -182,7 +187,7 @@ class Instance():
     # now load all the functions from methods.py
     logger.debug(f"Testing instance {self.name} ({self.instance_id})")
     out = self.compute_server.test()
-    with open(join(NBOX_HOME_DIR, "methods.py"), "w") as f:
+    with open(U.join(NBOX_HOME_DIR, "methods.py"), "w") as f:
       f.write(out["data"])
 
     sys.path.append(NBOX_HOME_DIR)
@@ -246,6 +251,13 @@ class Instance():
     if not message == "success":
       raise ValueError(message)
 
+  def run_py(self, fp: str, *args, write_fp = sys.stdout):
+    fp = fp.replace("nbx://", "/mnt/disks/user/project/")
+    pid = self(fp)
+    from time import sleep
+    while self(pid) == "running":
+      sleep(10)
+
   def __call__(self, x: str):
     """Caller is the most important UI/UX. The letter ``x`` in programming is reserved the most
     arbitrary thing, and this ``nbox.Instance`` is the gateway to a cloud instance. You can:
@@ -266,42 +278,42 @@ class Instance():
     if not isinstance(x, str):
       raise ValueError("x must be a string")
 
-    def _run_cloud(fpath):
-      fpath = "/mnt/disks/user/project/" + fpath.split("nbx://")[1]
-      meta = list(filter(
-        lambda y: y["path"] == fpath, self.compute_server.myfiles.info(fpath)["data"]
-      ))
-      if not meta:
-        raise ValueError(f"File {x} not found on instance {self.name} ({self.instance_id})")
-      return self.compute_server.rpc.start(fpath)["uid"]
-
-    if re.match(r"[a-z]+-[a-z]+", x) is not None:
-      logger.debug(f"Getting status of Job '{x}' on instance {self.name} ({self.instance_id})")
+      # this is to check if the PID state, returns boolean
+    if x.startswith("PID_"):
+      x = x[4:]
       data = self.compute_server.rpc.status(x)
       if not data["msg"] == "success":
         raise ValueError(data["msg"])
-      else:
-        status = data["status"]
-        logger.debug(f"Script {x} on instance {self.name} ({self.instance_id}) is {status}")
+      
+      status = data["status"]
+      logger.debug(f"Script {x} on instance {self.name} ({self.instance_id}) is {status}")
 
-      # if stopped then get the logs and run
-      if status == "stopped":
+      if status in ["stopped", "failed"]:
         out = self.compute_server.rpc.logs(x)
         if out["err"]:
-          logger.error("Execution errored out")
+          logger.error(f"PID: {x} Error")
+          print(out)
           return "error-done"
         else:
           return "done"
       return status
-    elif os.path.isfile(x):
-      self.mv(x, f"nbx://{x}")
-      uid = _run_cloud(f"nbx://{x}")
-      self.running_scripts.append(uid)
-      return uid
-    elif x.startswith("nbx://"):
-      logger.debug("Running file on cloud")
-      uid = _run_cloud(x)
-      self.running_scripts.append(uid)
-      return uid
-    else:
-      raise ValueError(f"Unknown: {x}")
+
+    # # assuming this is a shell command
+    # command = shlex.join(shlex.split(x)) # sanitize the input
+    comm_hash = U.hash_(x)
+    # sh_fpath = U.join(gettempdir(), "run.sh")
+    # with open(sh_fpath, "w") as f:
+    #   f.write(command)
+    # logger.info(f"Running command '{command}' [{comm_hash}] on instance {self.name} ({self.instance_id})")
+    # nbx_fpath = f"nbx://{comm_hash}.sh"
+    # fpath = nbx_fpath.replace("nbx://", "/mnt/disks/user/project/")
+    # self.mv(sh_fpath, nbx_fpath)
+    # meta = list(filter(
+    #   lambda y: y["path"] == fpath, self.compute_server.myfiles.info(fpath)["data"]
+    # ))
+    # if not meta:
+    #   raise ValueError(f"File {x} not found on instance {self.name} ({self.instance_id})")
+    uid = "PID_" + self.compute_server.rpc.start(x, args = ["run"])["uid"]
+    logger.info(f"Command {comm_hash} is running with PID {uid}")
+    self.running_scripts.append(uid)
+    return uid

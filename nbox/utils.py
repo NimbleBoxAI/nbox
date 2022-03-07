@@ -131,7 +131,7 @@ def from_pickle(path):
   with open(path, "rb") as f:
     return dill.load(f)
 
-NBOX_HOME_DIR = join(os.path.expanduser("~"), ".nbx")
+NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", join(os.path.expanduser("~"), ".nbx"))
 
 # /path
 

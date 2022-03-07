@@ -318,6 +318,17 @@ def deploy_job(
   Returns:
       [type]: [description]
   """
+
+  # upload_job(stub)
+  # listJobs(stub)
+  # deleteJob(stub)
+  # updateDag(stub)
+  # create_job(stub)
+  # getJob(stub)
+  updateRun(stub)
+
+
+
   from nbox.auth import secret, get_stub # it can refresh so add it in the method
 
   access_token = secret.get("access_token")
@@ -333,11 +344,14 @@ def deploy_job(
   from .hyperloop.job_pb2 import Job, NBXAuthInfo
   from .hyperloop.dag_pb2 import DAG
 
+  from .init import nbox_grpc_stub
+
   from google.protobuf.timestamp_pb2 import Timestamp
   from google.protobuf.json_format import MessageToJson
 
   try:
-    job = get_stub(
+    # upload_job(stub)
+    job = nbox_grpc_stub(
       UploadCodeRequest(
         job=Job(
           code=Job.Code(
@@ -393,12 +407,27 @@ def deploy_job(
 
   # Once the file is loaded create a new job
   logger.debug("Creating new job ...")
+  
+  # create_job(stub)
   try:
-    job = utils.nbx_stub(
-      CreateJobRequest(
-        job = job
+    job = data = open("./flowchart.json").readlines()
+    flowchart = Parse("\n".join(data), Flowchart(), ignore_unknown_fields=True)
+    try:
+      job = stub.CreateJob(
+          CreateJobRequest(
+              job=Job(
+                  id="jt3earah",
+                  dag=DAG(flowchart=flowchart),
+                  schedule=Job.Schedule(cron="*/1 * * * *"),
+                  auth_info=NBXAuthInfo(workspace_id="zcxdpqlk"),
+              )
+          )
       )
-    )
+    except grpc.RpcError as e:
+        print("ERROR:", e.details())
+    else:
+        # print(MessageToJson(response, indent=2, preserving_proto_field_name=True))
+        pass
   except Exception as e:
     logger.debug(f"Failed to create job: {e}")
     return

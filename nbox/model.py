@@ -1,17 +1,13 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
-from multiprocessing.sharedctypes import Value
 import os
 import json
-from random import random
 import tarfile
-from glob import glob
 from copy import deepcopy
 from datetime import datetime
 from tempfile import gettempdir
-from time import sleep
 
-from . import utils
+from . import utils as U
 from .utils import logger
 from .framework import get_model_mixin
 from .network import deploy_model
@@ -52,7 +48,6 @@ class Model:
     YoCo. Since there is a decidate serialise function, we should have one for deserialisation as well. Use
     ``nbox.Model.desirialise`` to load a serialised model.
     """
-
 
     self.user_model = m0
     self.model_support = m1
@@ -128,9 +123,9 @@ class Model:
     """
 
     # create the export folder
-    folder = utils.join(
-      utils.NBOX_HOME_DIR, f"{model_name}", datetime.now().utcnow().strftime("UTC_%Y-%m-%dT%H:%M:%S")
-    ) if not _unit_test else utils.join(
+    folder = U.join(
+      U.NBOX_HOME_DIR, f"{model_name}", datetime.now().utcnow().strftime("UTC_%Y-%m-%dT%H:%M:%S")
+    ) if not _unit_test else U.join(
       gettempdir(), f"{model_name}"
     )
     logger.debug(f"Serialising '{model_name}' to '{export_type}' at '{folder}'")
@@ -144,12 +139,12 @@ class Model:
       **kwargs
     )
 
-    meta_path = utils.join(folder, f"nbox_config.json")
+    meta_path = U.join(folder, f"nbox_config.json")
     with open(meta_path, "w") as f:
       f.write(json.dumps(nbox_meta.get_dict()))
 
     nbx_path = os.path.join(folder, f"{model_name}.nbox")
-    all_files = utils.get_files_in_folder(folder)
+    all_files = U.get_files_in_folder(folder)
 
     if not _do_tar:
       return (all_files, nbx_path)
@@ -173,7 +168,7 @@ class Model:
       raise ValueError(f"{filepath} is not a valid .nbox file")
 
     with tarfile.open(filepath, "r:gz") as tar:
-      folder = utils.join(gettempdir(), os.path.basename(filepath).replace(".nbox", ""))
+      folder = U.join(gettempdir(), os.path.basename(filepath).replace(".nbox", ""))
       logger.debug(f"Extracted to folder: {folder}")
       tar.extractall(folder)
 
@@ -218,9 +213,9 @@ class Model:
     all_files, nbx_path = serialised_fn(_do_tar = False, _unit_test = _unit_test)
 
     from types import SimpleNamespace
-    train_fn_path = utils.join(utils.folder(nbx_path), "train_fn.dill")
+    train_fn_path = U.join(U.folder(nbx_path), "train_fn.dill")
     logger.debug(f"Train function saved at {train_fn_path}")
-    utils.to_pickle(SimpleNamespace(train_fn = train_fn, args = other_args), train_fn_path)
+    U.to_pickle(SimpleNamespace(train_fn = train_fn, args = other_args), train_fn_path)
     all_files.append(train_fn_path)
 
     logger.debug(f"Creating nbox zip: {nbx_path}")
@@ -237,11 +232,11 @@ class Model:
     instance("cd {}; python3 -m nbox.train_fn".format(run_folder))
 
     instance.mv(
-      utils.join(utils.folder(__file__), "assets", "train_fn.jina"),
-      utils.join(run_folder, "run.py")
+      U.join(U.folder(__file__), "assets", "train_fn.jinja"),
+      U.join(run_folder, "run.py")
     )
 
-    pid = instance(utils.join(run_folder, "run.py"))
+    pid = instance(U.join(run_folder, "run.py"))
     instance.stream_logs(pid)
 
     if shutdown_once_done:
