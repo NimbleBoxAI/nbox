@@ -61,7 +61,7 @@ def isthere(*packages, soft = True):
           __import__(package)
         except ImportError:
           if not soft:
-            raise ImportError(f"{package} is not installed")
+            raise ImportError(f"{package} is not installed, but is required by {fn}")
           # raise a warning, let the modulenotfound exception bubble up
           logger.warning(
             f"{package} is not installed, but is required by {fn.__module__}, some functionality may not work"

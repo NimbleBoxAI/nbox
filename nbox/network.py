@@ -316,36 +316,27 @@ def deploy_job(
       workspace (str): Name of the workspace this is to be deployed at
 
   Returns:
-      [type]: [description]
+      nbox.Job: the job object
   """
 
-  # upload_job(stub)
-  # listJobs(stub)
-  # deleteJob(stub)
-  # updateDag(stub)
-  # create_job(stub)
-  # getJob(stub)
-  # updateRun(stub)
+  from grpc import RpcError
+  from google.protobuf.timestamp_pb2 import Timestamp
+  from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
+  from .hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
+  from .hyperloop.dag_pb2 import DAG, Flowchart
 
-  from nbox.auth import secret, get_stub # it can refresh so add it in the method
+  from google.protobuf.json_format import MessageToDict
 
-  access_token = secret.get("access_token")
+  from .init import nbox_grpc_stub
+  from .auth import secret
+  from .jobs import Job
+
   URL = secret.get("nbx_url")
   file_size = os.stat(zip_path).st_size // (1024 ** 2) # in MBs
 
   # intialise the console logger
   logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
-
-  # gRPC baby
-  from grpc import RpcError
-  from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
-  from .hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
-  from .hyperloop.dag_pb2 import DAG
-  from google.protobuf.timestamp_pb2 import Timestamp
-
-  from .init import nbox_grpc_stub
-
 
   try:
     job = JobProto(
@@ -354,7 +345,11 @@ def deploy_job(
         type = JobProto.Code.Type.NBOX
       ),
       dag = DAG(
-        flowchart=data["dag"],
+        flowchart=Flowchart(
+          nodes = data["dag"]["flowchart"]["nodes"],
+          edges = data["dag"]["flowchart"]["edges"]
+        ),
+        symbols = data["dag"]["symbols"]
       ),
       schedule = JobProto.Schedule(
         start = Timestamp(
@@ -366,7 +361,7 @@ def deploy_job(
           nanos = 0
         ),
         cron = schedule.cron
-      ),
+      ) if schedule != None else schedule
     )
 
     if data["job_id"] != None:
@@ -375,16 +370,16 @@ def deploy_job(
       job.name = data["job_name"]
 
     job: JobProto = nbox_grpc_stub.UploadJobCode(
-      UploadCodeRequest(job = job),
-      auth = NBXAuthInfo(username = secret.get("username"), workspace_id = workspace)
+      UploadCodeRequest(job = job, auth = NBXAuthInfo(username = secret.get("username"), workspace_id = workspace)),
     )
 
   except RpcError as e:
     logger.error(f"Failed to deploy job: {e.details()}")
     raise e
 
-  s3_url = job.code["s3Url"]
-  s3_meta = job.code["s3Meta"]
+  job_code = MessageToDict(job.code)
+  s3_url = job_code["s3Url"]
+  s3_meta = job_code["s3Meta"]
   job_id = job.id
   logger.debug(f"job_id: {job_id}")
 
@@ -398,16 +393,17 @@ def deploy_job(
     return
 
   if data["job_id"] != None:
+    logger.info(f"Job {job_id} already present")
     # if this jobs is already present, there is no need to create another entry
     # simply return this job and any changes to this should be done via Job
     return job
 
   # Otherwise we are creating a new job
   logger.debug("Creating new job ...")
-  
+
   try:
     job = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job))
   except RpcError as e:
     logger.error(f"Failed to create job: {e.details()}")
-  
-  return job
+
+  return Job(job_id)

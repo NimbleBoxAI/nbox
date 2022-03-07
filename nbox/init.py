@@ -20,24 +20,32 @@ def get_stub():
     logger.warn(f"Could not import gRPC commands, some functionality might not work")
     return None
 
-  nbx_stub = WSJobServiceStub(
-    grpc.secure_channel(
-      "grpc.revamp-online.test-2.nimblebox.ai:443",
-      grpc.composite_channel_credentials(
-        grpc.ssl_channel_credentials(),
-        grpc.access_token_call_credentials(secret.get("access_token"))
-      )
+  creds = grpc.access_token_call_credentials(secret.get("access_token"))
+  creds = grpc.composite_channel_credentials(grpc.local_channel_credentials(grpc.LocalConnectionType.UDS), creds)
+  channel = grpc.secure_channel(
+      "unix:///tmp/jobs-ws.sock",
+      creds
     )
-  )
-  return nbx_stub
 
+  TIMEOUT = 2
+
+  logger.info(f"Checking connection on channel for {TIMEOUT}s")
+  try:
+    grpc.channel_ready_future(channel).result(TIMEOUT)
+  except grpc.FutureTimeoutError:
+    logger.warn(f"gRPC server timeout, some functionality might not work")
+    return None
+
+  nbx_stub = WSJobServiceStub(channel)
+  return nbx_stub
 
 def create_webserver_subway(version = "v1"):
   r = nbox_session.get(secret.get("nbx_url") + f"/api/{version}/openapi.json")
   try:
     r.raise_for_status()
   except Exception as e:
-    logger.error(f"Could not connect to webserver at {secret.get('nbx_url')}, {e}")
+    logger.error(f"Could not connect to webserver at {secret.get('nbx_url')}")
+    logger.error(e)
     return None
 
   return Sub30(secret.get("nbx_url"), r.json(), nbox_session)
@@ -48,6 +56,7 @@ nbox_session = requests.Session()
 nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 nbox_grpc_stub = get_stub()
 nbox_webserver_subway = create_webserver_subway()
+# nbox_webserver_subway = None
 
 # add code here to warn user of nbox deprecation -> not sure how to implement this yet
 # raise_old_version_warning()

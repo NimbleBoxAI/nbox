@@ -6,51 +6,69 @@ Jobs
 """
 
 import sys
-import requests
 
-from ..auth import secret
 from ..utils import logger
+from ..init import nbox_grpc_stub
+from ..network import Cron
 
 class Job:
   def __init__(self, id):
-    logger.debug(f"Creating job {id}")
-    self.id = id
     self.update()
 
-  @classmethod
-  def create(cls, name):
-    # create new job from API
-    r = requests.post(secret.get("url") + "/api/v1/create", json={"name": name})
-    if not r.status_code == 200:
-      raise Exception(f"Failed to create job {name} | {r.content.decode()}")
-
-  def change_schedule(self, new_status):
+  def change_schedule(self, new_schedule: Cron):
     # nbox should only request and server should check if possible or not
     pass
 
   def stream_logs(self, f = sys.stdout):
     # this function will stream the logs of the job in anything that can be written to
+    import grpc
+    from ..hyperloop.nbox_ws_pb2 import JobLogsRequest
+    
+    logger.info(f"Streaming logs of job {self.id}")
+    try:
+      log_iter = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = self._this_job))
+    except grpc.RpcError as e:
+      logger.error(f"Could not get logs of job {self.id}")
+      raise e
 
-    from ..hyperloop.nbox_ws_pb2 import WSJobService_Stub
+    for job_log in log_iter:
+      for log in job_log.log:
+        f.write(log)
+        f.flush()
 
+  def delete(self):
+    import grpc
+    from ..hyperloop.nbox_ws_pb2 import JobInfo
+    
+    try:
+      nbox_grpc_stub.DeleteJob(JobInfo(job = self._this_job))
+    except grpc.RpcError as e:
+      logger.error(f"Could not delete job {self.id}")
+      raise e
 
   def update(self):
-    # this function will update all information for the job
-    r = requests.get(secret.get("url") + "/jobs/" + id, headers=secret.get("headers"))
-    if not r.status_code == 200:
-      raise Exception(f"Failed to load job {id} | {r.content.decode()}")
+    import grpc
+    from ..hyperloop.job_pb2 import Job
+    logger.info("Updating job info")
 
-    data = r.json()
-    self.name = data['name']
-    self.created_at = data['created_at']
-    self.code = data['code']
-    self.auth_info = data['auth_info']
-    self.schedule = data['schedule']
-    self.dag = data['dag']
-    self.status = data['status']
+    try:
+      job: Job = nbox_grpc_stub.GetJob(Job(id=id))
+    except grpc.RpcError as e:
+      logger.error(f"Could not get job {id}")
+      raise e
+
+    for descriptor, value in job.ListFields():
+      setattr(self, descriptor.name, value)
+    self._this_job = job
 
   def trigger(self):
-    # this function will trigger the job
-    r = requests.post(secret.get("url") + "/jobs/" + id + "/trigger", headers=secret.get("headers"))
-    if not r.status_code == 200:
-      raise Exception(f"Failed to trigger job {id} | {r.content.decode()}")
+    import grpc
+    from nbox.hyperloop.nbox_ws_pb2 import JobInfo
+    logger.info(f"Triggering job {self.id}")
+    
+    try:
+      nbox_grpc_stub.TriggerJob(JobInfo(job = self._this_job))
+    except grpc.RpcError as e:
+      logger.error(f"Could not trigger job {self.id}")
+      raise e
+
