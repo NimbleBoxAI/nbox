@@ -31,23 +31,27 @@ class StateDictModel(DBase):
 
 class Tracer:
   def __init__(self, tracer = None):
-    self.tracer = tracer
     if tracer == "stub":
       # when job is running on NBX, gRPC stubs are used
       if nbox_grpc_stub == None:
         raise RuntimeError("nbox_grpc_stub is not initialized")
-      self.stub = nbox_grpc_stub
+    self.tracer = tracer
 
   def __call__(self, dag_update):
     if self._trace_obj == "stub":
+      from grpc import RpcError
+      from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest
+      from ..hyperloop.job_pb2 import NBXAuthInfo
+
+      dag = dag_update["dag"]
+
       try:
-        response = self.stub.UpdateRun(
+        response = nbox_grpc_stub.UpdateRun(
           UpdateRunRequest(job=Job(id="jt3earah", dag=None, status="COMPLETED", auth_info=NBXAuthInfo(workspace_id="zcxdpqlk")))
         )
-      except grpc.RpcError as e:
-        print("ERROR:", e.details())
-      else:
-        print(MessageToJson(response))
+      except RpcError as e:
+        logger.error(f"Could not update job {self.id}")
+        raise e
     else:
       logger.info(dag_update)
 
@@ -316,7 +320,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     # job_name = this_job["name"]
 
     job_id = job
-    job_name = None
+    job_name = U.get_random_name(True).split("-")[0] if job_id == None else job
 
     # check if this is a valid folder or not
     if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
