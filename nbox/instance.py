@@ -21,7 +21,7 @@ from requests.sessions import Session
 from .subway import SpecSubway, Subway, TIMEOUT_CALLS
 from .utils import NBOX_HOME_DIR, logger
 from . import utils as U
-from .init import nbox_session, nbox_webserver_subway
+from .init import nbox_session, nbox_ws_v1
 from .auth import secret
 
 
@@ -32,8 +32,13 @@ from .auth import secret
 # make the entire process functional.
 ################################################################################
 
-def print_status():
+def print_status(workspace_id: str = None):
   # TODO: @yashbonde replace current urls with Sub30 class
+  # if workspace_id == None:
+  #   data = nbox_ws_v1.user.projects()
+  # else:
+  #   data = nbox_ws_v1.workspace.u(workspace_id).projects()
+
   url = secret.get("nbx_url")
   r = nbox_session.get(f"{url}/api/instance/get_user_instances")
   r.raise_for_status()
@@ -71,7 +76,7 @@ class Instance():
     self.session = Session()
     self.session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
     self.web_server = Subway(f"{self.url}/api/instance", self.session)
-    # self.web_server = nbox_webserver_subway.api.instance # wesbserver RPC stub
+    # self.web_server = nbox_ws_v1.api.instance # wesbserver RPC stub
     logger.debug(f"WS: {self.web_server}")
 
     self.instance_id = None

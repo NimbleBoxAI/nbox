@@ -37,7 +37,8 @@ def get_stub():
   return nbx_stub
 
 def create_webserver_subway(version = "v1"):
-  r = nbox_session.get(secret.get("nbx_url") + f"/api/{version}/openapi.json")
+  _version_specific_url = secret.get("nbx_url") + f"/api/{version}"
+  r = nbox_session.get(_version_specific_url + "/openapi.json")
   try:
     r.raise_for_status()
   except Exception as e:
@@ -45,15 +46,14 @@ def create_webserver_subway(version = "v1"):
     logger.error(e)
     return None
 
-  return Sub30(secret.get("nbx_url"), r.json(), nbox_session)
+  return Sub30(_version_specific_url, r.json(), nbox_session)
 
 
 # common networking items that will be used everywhere
 nbox_session = requests.Session()
 nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 nbox_grpc_stub = get_stub()
-nbox_webserver_subway = create_webserver_subway()
-# nbox_webserver_subway = None
+nbox_ws_v1 = create_webserver_subway("v1")
 
 # add code here to warn user of nbox deprecation -> not sure how to implement this yet
 # raise_old_version_warning()
