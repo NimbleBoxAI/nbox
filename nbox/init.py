@@ -22,12 +22,9 @@ def get_stub():
 
   creds = grpc.access_token_call_credentials(secret.get("access_token"))
   creds = grpc.composite_channel_credentials(grpc.local_channel_credentials(grpc.LocalConnectionType.UDS), creds)
-  channel = grpc.secure_channel(
-      "unix:///tmp/jobs-ws.sock",
-      creds
-    )
+  channel = grpc.secure_channel("unix:///tmp/jobs-ws.sock", creds)
 
-  TIMEOUT = 2
+  TIMEOUT = 1
 
   logger.info(f"Checking connection on channel for {TIMEOUT}s")
   try:
@@ -93,4 +90,5 @@ nbox_webserver_subway = create_webserver_subway()
 #      engineering: build, deploy (serve), jobs
 #            build: disk_space, cpu, memory, network, gpu
 #   deploy (serve): model, model_properties, networking, compute (flops), memory (storage)
-#             jobs: operators, 
+#             jobs: operators
+#
