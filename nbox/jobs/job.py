@@ -84,6 +84,23 @@ def open():
   import webbrowser
   webbrowser.open(secret.get("nbx_url")+"/"+"jobs")
 
+def get_job_list(workspace_id: str):
+  import grpc
+  from ..hyperloop.job_pb2 import NBXAuthInfo
+  from ..hyperloop.nbox_ws_pb2 import ListJobsRequest
+  from google.protobuf.json_format import MessageToDict
+  
+  auth_info = NBXAuthInfo(workspace_id = workspace_id)
+  
+  try:
+    out = nbox_grpc_stub.ListJobs(ListJobsRequest(auth_info = auth_info))
+  except grpc.RpcError as e:
+    logger.error(f"{e.details()}")
+    sys.exit(1)
+
+  out = MessageToDict(out)
+  print(out)
+
 
 ################################################################################
 # NimbleBox.ai Jobs
@@ -98,12 +115,13 @@ class Job:
 
     self.id = id
     self.workspace_id = workspace_id
-    self.auth_info = NBXAuthInfo(workspace_id=self.workspace_id)
+    self.auth_info = NBXAuthInfo(workspace_id = self.workspace_id)
     self.update()
 
   # static methods
   new = staticmethod(new)
   open = staticmethod(open)
+  status = staticmethod(get_job_list)
 
   def change_schedule(self, new_schedule: Cron):
     # nbox should only request and server should check if possible or not

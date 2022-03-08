@@ -19,7 +19,6 @@ from .sub_utils import ssh
 NBX = dict(
   instance = Instance            , # nbox instance
   jobs = Job                     , # nbox jobs
-  status = Instance.print_status , # nbox status
   tunnel = ssh.tunnel            , # nbox tunnel
   home = n.open_home             , # nbox home
 )

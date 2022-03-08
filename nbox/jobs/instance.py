@@ -85,8 +85,7 @@ class Instance():
       self.start()
 
   __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
-
-  print_status = staticmethod(print_status)
+  status = staticmethod(print_status)
 
   @classmethod
   def new(cls, name) -> 'Instance':
