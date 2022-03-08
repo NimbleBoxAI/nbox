@@ -436,8 +436,8 @@ def get_nbx_flow(forward):
           inputs = [], # :list[Dict[Any, Any]]
           outputs = [], # :list[str]
         ),
-      nbox_string = f"CODE: {str(type(expr))}", # :str
-      run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
+        nbox_string = f"CODE: {str(type(expr))}", # :str
+        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
       )
       nodes.append(node)
       continue
