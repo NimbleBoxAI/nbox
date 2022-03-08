@@ -17,7 +17,7 @@ from .. import utils as U
 from ..framework import AirflowMixin, PrefectMixin, LuigiMixin
 from ..framework.on_functions import get_nbx_flow, DBase
 from ..init import nbox_grpc_stub, nbox_webserver_subway
-from ..jobs.job import Job
+from ..jobs import Job
 
 
 class StateDictModel(DBase):

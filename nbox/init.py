@@ -9,7 +9,7 @@ is typical for any powerful tool: magic or a headache depending on the day and t
 import requests
 from .auth import secret
 from .utils import logger
-from .jobs.utils import Sub30
+from .subway import Sub30
 
 
 def get_stub():

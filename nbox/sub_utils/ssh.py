@@ -6,7 +6,7 @@ from typing import List
 
 from ..utils import logger
 from ..auth import secret
-from ..jobs import Instance
+from ..instance import Instance
 
 class RSockClient:
   """

@@ -12,7 +12,7 @@ from .utils import logger
 from .framework import get_model_mixin
 from .network import deploy_model
 from .framework.on_ml import ModelOutput, ModelSpec
-from .jobs import Instance
+from .instance import Instance
 
 # model/
 

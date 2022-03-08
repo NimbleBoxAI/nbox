@@ -13,7 +13,8 @@ The commands are broken down according to the products they are related to.
 
 import fire
 from . import cli as n # nbox-cli
-from .jobs import Instance, Job
+from .jobs import Job
+from .instance import Instance
 from .sub_utils import ssh
 
 NBX = dict(

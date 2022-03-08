@@ -3,7 +3,7 @@
 from .operator import Operator
 
 from ..utils import PoolBranch
-from ..jobs import Instance
+from ..instance import Instance
 
 # nbox/
 

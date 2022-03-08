@@ -10,7 +10,7 @@ import re
 import string
 from functools import lru_cache
 
-from ..utils import logger
+from .utils import logger
 
 TIMEOUT_CALLS = 60
 

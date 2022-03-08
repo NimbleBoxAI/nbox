@@ -18,11 +18,11 @@ from tabulate import tabulate
 from tempfile import gettempdir
 from requests.sessions import Session
 
-from .utils import SpecSubway, Subway, TIMEOUT_CALLS
-from ..utils import NBOX_HOME_DIR, logger
-from .. import utils as U
-from ..init import nbox_session, nbox_webserver_subway
-from ..auth import secret
+from .subway import SpecSubway, Subway, TIMEOUT_CALLS
+from .utils import NBOX_HOME_DIR, logger
+from . import utils as U
+from .init import nbox_session, nbox_webserver_subway
+from .auth import secret
 
 
 ################################################################################

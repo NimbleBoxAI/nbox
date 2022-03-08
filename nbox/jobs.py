@@ -8,11 +8,11 @@ Jobs
 import sys
 import jinja2
 
-from ..utils import logger
-from .. import utils as U
-from ..init import nbox_grpc_stub
-from ..network import Cron
-from ..auth import secret
+from .utils import logger
+from . import utils as U
+from .init import nbox_grpc_stub
+from .network import Cron
+from .auth import secret
 
 ################################################################################
 # NBX-Jobs Functions
@@ -55,7 +55,7 @@ def new(project_name):
   os.chdir(project_name)
 
   # jinja is cool
-  assets = U.join(U.folder(U.folder(__file__)), "assets")
+  assets = U.join(U.folder(__file__), "assets")
   path = U.join(assets, "job_new.jinja")
   with open(path, "r") as f, open("exe.py", "w") as f2:
     f2.write(
@@ -80,14 +80,14 @@ def new(project_name):
 
   logger.debug("Completed")
 
-def open():
+def open_home():
   import webbrowser
   webbrowser.open(secret.get("nbx_url")+"/"+"jobs")
 
 def get_job_list(workspace_id: str):
   import grpc
-  from ..hyperloop.job_pb2 import NBXAuthInfo
-  from ..hyperloop.nbox_ws_pb2 import ListJobsRequest
+  from .hyperloop.job_pb2 import NBXAuthInfo
+  from .hyperloop.nbox_ws_pb2 import ListJobsRequest
   from google.protobuf.json_format import MessageToDict
   
   auth_info = NBXAuthInfo(workspace_id = workspace_id)
@@ -111,7 +111,7 @@ def get_job_list(workspace_id: str):
 
 class Job:
   def __init__(self, id, workspace_id =None):
-    from ..hyperloop.job_pb2 import NBXAuthInfo
+    from .hyperloop.job_pb2 import NBXAuthInfo
 
     self.id = id
     self.workspace_id = workspace_id
@@ -120,7 +120,7 @@ class Job:
 
   # static methods
   new = staticmethod(new)
-  open = staticmethod(open)
+  home = staticmethod(open_home)
   status = staticmethod(get_job_list)
 
   def change_schedule(self, new_schedule: Cron):
@@ -130,7 +130,7 @@ class Job:
   def stream_logs(self, f = sys.stdout):
     # this function will stream the logs of the job in anything that can be written to
     import grpc
-    from ..hyperloop.nbox_ws_pb2 import JobLogsRequest
+    from .hyperloop.nbox_ws_pb2 import JobLogsRequest
     
     logger.info(f"Streaming logs of job {self.id}")
     try:
@@ -147,7 +147,7 @@ class Job:
 
   def delete(self):
     import grpc
-    from ..hyperloop.nbox_ws_pb2 import JobInfo
+    from .hyperloop.nbox_ws_pb2 import JobInfo
     try:
       nbox_grpc_stub.DeleteJob(JobInfo(job = self._this_job,))
     except grpc.RpcError as e:
@@ -157,8 +157,8 @@ class Job:
 
   def update(self):
     import grpc
-    from ..hyperloop.nbox_ws_pb2 import JobInfo
-    from ..hyperloop.job_pb2 import Job as JobProto
+    from .hyperloop.nbox_ws_pb2 import JobInfo
+    from .hyperloop.job_pb2 import Job as JobProto
     logger.info("Updating job info")
 
     try:
@@ -189,7 +189,7 @@ class Job:
     import grpc
     from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
     from google.protobuf.field_mask_pb2 import FieldMask
-    from ..hyperloop.job_pb2 import Job as JobProto
+    from .hyperloop.job_pb2 import Job as JobProto
     logger.info(f"Pausing job {self.id}")
     
     try:
@@ -208,7 +208,7 @@ class Job:
     import grpc
     from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
     from google.protobuf.field_mask_pb2 import FieldMask
-    from ..hyperloop.job_pb2 import Job as JobProto
+    from .hyperloop.job_pb2 import Job as JobProto
     logger.info(f"Resuming job {self.id}")
     
     try:
