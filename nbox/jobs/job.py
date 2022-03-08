@@ -34,6 +34,7 @@ class Job:
       log_iter = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = self._this_job))
     except grpc.RpcError as e:
       logger.error(f"Could not get logs of job {self.id}")
+      logger.error("Error:", e.details())
       raise e
 
     for job_log in log_iter:
@@ -48,18 +49,20 @@ class Job:
       nbox_grpc_stub.DeleteJob(JobInfo(job = self._this_job,))
     except grpc.RpcError as e:
       logger.error(f"Could not delete job {self.id}")
+      logger.error("Error:", e.details())
       raise e
 
   def update(self):
     import grpc
     from ..hyperloop.nbox_ws_pb2 import JobInfo
-    from ..hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
+    from ..hyperloop.job_pb2 import Job as JobProto
     logger.info("Updating job info")
 
     try:
       job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info=self.auth_info)))
     except grpc.RpcError as e:
       logger.error(f"Could not get job {id}")
+      logger.error("Error:", e.details())
       raise e
     for descriptor, value in job.ListFields():
       setattr(self, descriptor.name, value)
@@ -76,5 +79,45 @@ class Job:
       nbox_grpc_stub.TriggerJob(JobInfo(job=self._this_job))
     except grpc.RpcError as e:
       logger.error(f"Could not trigger job {self.id}")
+      logger.error("Error:", e.details())
       raise e
+  
+  def pause(self):
+    import grpc
+    from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
+    from google.protobuf.field_mask_pb2 import FieldMask
+    from ..hyperloop.job_pb2 import Job as JobProto
+    logger.info(f"Pausing job {self.id}")
+    
+    try:
+      job: JobProto = self._this_job
+      job.status = JobProto.Status.PAUSED
+      job.paused = True
+      update_mask = FieldMask(paths=["status", "paused"])
+      nbox_grpc_stub.UpdateJob(UpdateJobRequest(job=job, update_mask=update_mask))
+    except grpc.RpcError as e:
+      logger.error(f"Could not pause job {self.id}")
+      logger.error("Error:", e.details())
+      raise e
+    logger.info(f"Paused job {self.id}")
+  
+  def resume(self):
+    import grpc
+    from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
+    from google.protobuf.field_mask_pb2 import FieldMask
+    from ..hyperloop.job_pb2 import Job as JobProto
+    logger.info(f"Resuming job {self.id}")
+    
+    try:
+      job: JobProto = self._this_job
+      job.status = JobProto.Status.SCHEDULED
+      job.paused = False
+      update_mask = FieldMask(paths=["status", "paused"])
+      nbox_grpc_stub.UpdateJob(UpdateJobRequest(job=job, update_mask=update_mask))
+    except grpc.RpcError as e:
+      logger.error(f"Could not resume job {self.id}")
+      logger.error("Error:", e.details())
+      raise e
+    logger.info(f"Resumed job {self.id}")
+    
 
