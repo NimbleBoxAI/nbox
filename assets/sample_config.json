@@ -1,8 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "username": null,
   "access_token": null, 
-  "nbx_url": null,
+  "nbx_url": "https://nimblebox.ai",
   "ocd": [
     {
       "url": null,
