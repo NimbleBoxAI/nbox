@@ -7,6 +7,9 @@ from time import sleep
 from pprint import pprint as pp
 from datetime import datetime, timedelta
 
+from google.protobuf.json_format import MessageToJson
+from nbox.framework.model_spec_pb2 import ModelSpec
+
 from .utils import logger
 from . import utils
 
@@ -17,7 +20,8 @@ class NBXAPIError(Exception):
 
 def deploy_model(
   export_model_path,
-  model_spec,
+  ws_stub,
+  model_spec: ModelSpec,
   wait_for_deployment=False,
 ):
   """One-Click-Deploy method v3 that takes in a .nbox file and deploys it to the nbox server.
@@ -35,20 +39,18 @@ def deploy_model(
       the deployed model
   """
   from nbox.auth import secret # it can refresh so add it in the method
-
-  # pp(nbox_meta)
-
   access_token = secret.get("access_token")
   URL = secret.get("nbx_url")
-  file_size = os.stat(export_model_path).st_size // (1024 ** 2) # in MBs
 
   # intialise the console logger
   logger.debug("-" * 30 + " NBX Deploy " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
-  deployment_type = nbox_meta["spec"]["deployment_type"]
-  deployment_id = nbox_meta["spec"]["deployment_id"]
-  deployment_name = nbox_meta["spec"]["deployment_name"]
-  model_name = nbox_meta["spec"]["model_name"]
+  
+  # TODO: @yashbonde figure out protobuf way of storing deployment_id strings
+  deployment_type = "nbox" # model_spec.deploy.type
+  deployment_id = model_spec.deploy.id
+  deployment_name = "" # model_spec.deploy.name
+  model_name = model_spec.name
 
   logger.debug(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
 
@@ -56,35 +58,48 @@ def deploy_model(
     logger.debug("Deployment ID not passed will create a new deployment with name >>")
     deployment_name = utils.get_random_name().replace("-", "_")
 
+  file_size = os.stat(export_model_path).st_size // (1024 ** 2) # because in MB
   logger.debug(
     f"Deployment Name: '{deployment_name}', Model Name: '{model_name}', Model Path: '{export_model_path}', file_size: {file_size} MBs"
   )
   logger.debug("Getting bucket URL")
 
-  # get bucket URL
-  r = requests.get(
-    url=f"{URL}/api/model/get_upload_url",
-    params={
-      "file_size": file_size, # because in MB
-      "file_type": "nbox",
-      "model_name": model_name,
-      "convert_args": nbox_meta["spec"]["convert_args"],
-      "nbox_meta": json.dumps(nbox_meta), # annoying, but otherwise only the first key would be sent
-      "deployment_type": deployment_type, # "nbox" or "ovms2"
-      "deployment_id": deployment_id,
-      "deployment_name": deployment_name,
-    },
-    headers={"Authorization": f"Bearer {access_token}"},
+  # get bucket URL and upload the data
+
+  # r = requests.get(
+  #   url=f"{URL}/api/model/get_upload_url",
+  #   params={
+  #   },
+  #   headers={"Authorization": f"Bearer {access_token}"},
+  # )
+  # try:
+  #   r.raise_for_status()
+  # except:
+  #   raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
+  # out = r.json()
+
+  out = ws_stub.get_upload_url(
+    file_size = file_size,
+    file_type = "nbox",
+    model_name = model_name,
+    convert_args = None,
+    nbox_meta = MessageToJson(
+      model_spec,
+      including_default_value_fields=True,
+      preserving_proto_field_name=True,
+      sort_keys=False,
+      use_integers_for_enums=True,
+      float_precision=4
+    ), # annoying, but otherwise only the first key would be sent
+    deployment_type = deployment_type, # "nbox" or "ovms2"
+    deployment_id = deployment_id,
+    deployment_name = deployment_name,
   )
-  try:
-    r.raise_for_status()
-  except:
-    raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
-  out = r.json()
   model_id = out["fields"]["x-amz-meta-model_id"]
   deployment_id = out["fields"]["x-amz-meta-deployment_id"]
   logger.debug(f"model_id: {model_id}")
   logger.debug(f"deployment_id: {deployment_id}")
+  ws_stub_model = ws_stub.models.u(model_id) # eager create the stub
 
   # upload the file to a S3 -> don't raise for status here
   logger.debug("Uploading model to S3 ...")
@@ -92,11 +107,19 @@ def deploy_model(
 
   # checking if file is successfully uploaded on S3 and tell webserver
   # whether upload is completed or not because client tells
+
+  # requests.post(
+  #   url=f"{URL}/api/model/update_model_status",
+  #   json={"upload": True if },
+  #   headers={"Authorization": f"Bearer {access_token}"},
+  # )
+
   logger.debug("Verifying upload ...")
-  requests.post(
-    url=f"{URL}/api/model/update_model_status",
-    json={"upload": True if r.status_code == 204 else False, "model_id": model_id, "deployment_id": deployment_id},
-    headers={"Authorization": f"Bearer {access_token}"},
+  ws_stub_model.update(
+    _method = "post",
+    upload = True if r.status_code == 204 else False,
+    model_id = model_id,
+    deployment_id = deployment_id
   )
 
   # polling
@@ -121,12 +144,15 @@ def deploy_model(
     sleep(5)
 
     # get the status update
+
+    # r = requests.get(
+    #   url=f"{URL}/api/model/get_model_history",
+    #   params={"model_id": model_id, "deployment_id": deployment_id},
+    #   headers={"Authorization": f"Bearer {access_token}"},
+    # )
+
     logger.debug(f"Getting updates ...")
-    r = requests.get(
-      url=f"{URL}/api/model/get_model_history",
-      params={"model_id": model_id, "deployment_id": deployment_id},
-      headers={"Authorization": f"Bearer {access_token}"},
-    )
+    updates = ws_stub_model.history()["data"]
     try:
       r.raise_for_status()
       updates = r.json()

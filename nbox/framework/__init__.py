@@ -41,6 +41,5 @@ def get_model_functions(py_model):
       return methods
   except ImportError:
     pass
-  
-  return False
+  return {}
 

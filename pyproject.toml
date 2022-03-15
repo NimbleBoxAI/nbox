@@ -5,7 +5,9 @@ description = "ML Inference 🥶"
 authors = [
   "NBX Research <research@nimblebox.ai>",
   "Yash Bonde <bonde.yash97@gmail.com>",
-  "Aakash Kaushik <kaushikaakash7539@gmail.com>"
+  "Aakash Kaushik <kaushikaakash7539@gmail.com>",
+  "Akash Pathak <pathakvikash9211@gmail.com>",
+  "Shubham Rao <cshubhamrao@gmail.com>",
 ]
 homepage = "https://github.com/NimbleBoxAI/nbox"
 repository = "https://github.com/NimbleBoxAI/nbox"

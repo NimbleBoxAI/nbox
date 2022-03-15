@@ -63,17 +63,25 @@ def test_feedforward():
 
   model_spec.requirements.extend(["torchvision"]) # add the dependencies for pre_fn
 
-  model_spec, nbx_path = src_model.deploy(
-    model_spec,
-    deployment_id_or_name="jjsu3n4",
-    workspace_id="nerf89",
-    _unittest = True
-  )
-  print(model_spec)
+  # model_spec, nbx_path = src_model.deploy(
+  #   model_spec,
+  #   deployment_id_or_name="jjsu3n4",
+  #   workspace_id="nerf89",
+  #   _unittest = True
+  # )
+  # print(model_spec)
 
-  trg_model = Model.deserialise(model_spec, nbx_path)
-  print(trg_model)
-  print("trg_out:", np.array(trg_model(x)).shape)
+  # trg_model = Model.deserialise(model_spec, nbx_path)
+  # print(trg_model)
+  # print("trg_out:", np.array(trg_model(x)).shape)
+
+  url, key = src_model.deploy(
+    model_spec,
+    deployment_id_or_name="ywrrpw8g",
+    workspace_id="zcxdpqlk",
+    _unittest = False
+  )
+  print(url, key)
 
 
 test_feedforward()

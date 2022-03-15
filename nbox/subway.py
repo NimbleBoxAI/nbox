@@ -279,3 +279,46 @@ class SpecSubway():
         return out[0]
     return out
 
+
+################################################################################
+# Applications
+# ============
+# Anything that has an openapi.json spec can become a subway:
+#   NboxModel: A subway to vanilla nbox-serving fastapi server
+################################################################################
+
+class NboxModelSubway:
+  def __init__(self, x):
+    from requests import Session
+
+    url, key = self.pattern(x)
+    self.url = url
+    self.key = key
+    self.session = Session()
+    self.session.headers.update({"Authorization": f"Bearer {key}"})
+    r = self.session.get(url + "/openapi.json")
+    r.raise_for_status()
+    self.spec = r.json()
+    self.model_sub = SpecSubway(url, self.session, self.spec)
+
+  @staticmethod
+  def pattern(x):
+    import re
+    out = re.search(r"^_NBX-Deploy_([a-z0-9]+)_([a-z0-9]+_)?$", x)
+    if not out:
+      return False
+
+    x = out.groups()
+    if len(x) == 1:
+      return (x, None)
+    else:
+      return x
+
+  @staticmethod
+  def __eq__(other: str) -> bool:
+    if not isinstance(other, str):
+      return False
+    return NboxModelSubway.pattern(other) != False
+
+  def __call__(self, x):
+    return self.model_sub.predict(x)

@@ -45,8 +45,9 @@ def create_webserver_subway(version = "v1"):
     logger.error(f"Could not connect to webserver at {secret.get('nbx_url')}")
     logger.error(e)
     return None
-
-  return Sub30(_version_specific_url, r.json(), nbox_session)
+  out = Sub30(_version_specific_url, r.json(), nbox_session)
+  logger.debug(f"Connected to webserver at {out}")
+  return out
 
 
 # common networking items that will be used everywhere

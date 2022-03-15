@@ -2,15 +2,17 @@
 
 import os
 import tarfile
-from typing import Any
+from typing import Any, Dict
 from types import SimpleNamespace
 from google.protobuf.json_format import MessageToJson, ParseDict
+
 
 from . import utils as U
 from .utils import logger
 from .init import nbox_ws_v1
 from .network import deploy_model
 from .instance import Instance
+from .subway import Sub30, NboxModelSubway
 from .framework import get_model_functions
 from .framework import ModelSpec, Deployment, NboxOptions
 
@@ -40,25 +42,13 @@ class Model:
 
     Raises:
       ValueError: If any category is "text" and tokenizer is not provided.
-
-    This class can process the following types of models:
-
-    .. code-block::
-
-      ``torch.nn.Module`` |           |           |
-              ``sklearn`` | __init__ > serialise > S-*
-           ``nbx-deploy`` |___________|___________|____
-               ``S-onnx`` |              |
-        ``S-torchscript`` | .deserialise > __init__
-                ``S-pkl`` |______________|___________
-
-    Serialised models are 1-3 models that have been serialised to load later. This is especially useful for
-    ``nbox-serving``, one of the server types we use in NBX Deploy, yes production. This is also part of
-    YoCo. Since there is a decidate serialise function, we should have one for deserialisation as well. Use
-    ``nbox.Model.desirialise`` to load a serialised model.
     """
 
-    self.model = model
+    if model == NboxModelSubway:
+      self.model = NboxModelSubway(model)
+      method = None
+    else:
+      self.model = model
     self.method = method
     self.forward_fn = self.model if method == None else getattr(self.model, method)
     self.pre = pre if pre != None else lambda x: x
@@ -66,10 +56,11 @@ class Model:
     self.model_spec = model_spec
     self.verbose = verbose
 
-    self.extra_fns = get_model_functions(self.model)
+    self.extra_fns: Dict = get_model_functions(self.model)
     for (fn_name, fn_meta) in self.extra_fns.items():
       fn, _ = fn_meta
       setattr(self, fn_name, fn)
+      logger.debug(f"Adding {fn_name}")
 
   ################################################################################
   # Utility functions
@@ -171,24 +162,22 @@ class Model:
         want, be default it will create a random name.
       **ser_kwargs (Any, optional): keyword arguments to be passed to ``serialise`` function
     """
-    # TODO: @yashbonde update APIs for revamp: Auto check deployments and name
-    # if workspace_id == None:
-    #   data = nbox_ws_v1.user.deployment()
-    # else:
-    #   data = nbox_ws_v1.workspace.u(workspace_id).deployment()
-    #
-    # if deployment_id_or_name not in data:
-    #   depl = list(filter(
-    #     lambda x: x["name"] == deployment_id_or_name, data
-    #   ))
-    #   if len(depl) == 0:
-    #     raise ValueError(f"No deployment with name: '{deployment_id_or_name}' found!")
-    #   data = depl[0]
-    # else:
-    #   data = data[deployment_id_or_name]
-    #
-    # deployment_id = data["deployment_id"]
-    # deployment_name = data["deployment_name"]
+    if workspace_id == None:
+      stub_all_depl = nbox_ws_v1.user.deployments
+    else:
+      stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
+
+    deployments = list(filter(
+      lambda x: x["deployment_id"] == deployment_id_or_name or x["deployment_name"] == deployment_id_or_name,
+      stub_all_depl()["data"]
+    ))
+    if len(deployments) == 0:
+      raise ValueError(f"Deployment '{deployment_id_or_name}' not found")
+    elif len(deployments) > 1:
+      raise ValueError(f"Multiple deployments found for '{deployment_id_or_name}'")
+    
+    data = deployments[0]
+    stub_depl: Sub30 = stub_all_depl.u(data["deployment_id"])
 
     # update model spec with deployment related information
     model_spec.deploy.CopyFrom(Deployment(
@@ -233,10 +222,10 @@ class Model:
       # returns the minimum information needed to deserialise the model
       return model_spec, folder
 
-
     # OCD baby!
     return deploy_model(
       export_model_path=nbx_path,
+      ws_stub=stub_depl,
       model_spec=model_spec,
       wait_for_deployment=wait_for_deployment,
     )
