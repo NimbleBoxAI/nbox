@@ -6,6 +6,7 @@ Jobs
 """
 
 import sys
+import grpc
 import jinja2
 
 from .utils import logger
@@ -84,8 +85,7 @@ def open_home():
   import webbrowser
   webbrowser.open(secret.get("nbx_url")+"/"+"jobs")
 
-def get_job_list(workspace_id: str):
-  import grpc
+def get_job_list(workspace_id: str = None):
   from .hyperloop.job_pb2 import NBXAuthInfo
   from .hyperloop.nbox_ws_pb2 import ListJobsRequest
   from google.protobuf.json_format import MessageToDict
@@ -129,7 +129,7 @@ class Job:
 
   def stream_logs(self, f = sys.stdout):
     # this function will stream the logs of the job in anything that can be written to
-    import grpc
+
     from .hyperloop.nbox_ws_pb2 import JobLogsRequest
     
     logger.info(f"Streaming logs of job {self.id}")
@@ -146,7 +146,7 @@ class Job:
         f.flush()
 
   def delete(self):
-    import grpc
+
     from .hyperloop.nbox_ws_pb2 import JobInfo
     
     logger.info(f"Deleting job {self.id}")
@@ -158,7 +158,7 @@ class Job:
       raise e
 
   def update(self):
-    import grpc
+
     from .hyperloop.nbox_ws_pb2 import JobInfo
     from .hyperloop.job_pb2 import Job as JobProto
 
@@ -175,7 +175,7 @@ class Job:
     self._this_job.auth_info.CopyFrom(self.auth_info)
 
   def trigger(self):
-    import grpc
+
     from nbox.hyperloop.nbox_ws_pb2 import JobInfo
 
     logger.info(f"Triggering job {self.id}")
@@ -187,7 +187,7 @@ class Job:
       raise e
   
   def pause(self):
-    import grpc
+
     from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
     from google.protobuf.field_mask_pb2 import FieldMask
     from .hyperloop.job_pb2 import Job as JobProto
@@ -206,7 +206,7 @@ class Job:
     logger.info(f"Paused job {self.id}")
   
   def resume(self):
-    import grpc
+
     from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
     from google.protobuf.field_mask_pb2 import FieldMask
     from .hyperloop.job_pb2 import Job as JobProto

@@ -1,32 +1,41 @@
 # this file has the code for nbox.Model that is the holy grail of the project
 
 import os
-import json
 import tarfile
-from copy import deepcopy
-from datetime import datetime
-from tempfile import gettempdir
+from typing import Any
+from types import SimpleNamespace
+from google.protobuf.json_format import MessageToJson, ParseDict
 
 from . import utils as U
 from .utils import logger
-from .framework import get_model_mixin
+from .init import nbox_ws_v1
 from .network import deploy_model
-from .framework.on_ml import ModelOutput, ModelSpec
 from .instance import Instance
+from .framework import get_model_functions
+from .framework import ModelSpec, Deployment, NboxOptions
+
 
 # model/
 
 class Model:
-  def __init__(self, m0, m1, verbose=False):
+  def __init__(
+    self,
+    model: Any,
+    method: str = None,
+    pre: callable = None,
+    post: callable = None,
+    model_spec = None,
+    verbose = False
+  ):
     """Top of the stack Model class.
 
     Args:
-      model_or_model_url (Any): Model to be wrapped or model url
-      nbx_api_key (str, optional): API key for this deployed model
-      category (str, optional): Input categories for each input type to the model
-      tokenizer ([transformers.PreTrainedTokenizer], optional): If this is a text model then tokenizer for this. Defaults to None.
-      model_key (str, optional): With what key is this model initialised, useful for public models. Defaults to None.
-      model_meta (dict, optional): Extra metadata when starting the model. Defaults to None.
+      model (Any): First input to the model
+      method (str, optional): If there is a specific function to call for the model.
+        if ``None`` then ``__call__`` will be made else ``model.method`` will be called.
+        Defaults to None.
+      pre (callable): preprocessing function to be applied to the ``input_object``
+      post (callable): postprocessing function to be applied to the model prediction
       verbose (bool, optional): If true provides detailed prints. Defaults to False.
 
     Raises:
@@ -49,139 +58,188 @@ class Model:
     ``nbox.Model.desirialise`` to load a serialised model.
     """
 
-    self.user_model = m0
-    self.model_support = m1
+    self.model = model
+    self.method = method
+    self.forward_fn = self.model if method == None else getattr(self.model, method)
+    self.pre = pre if pre != None else lambda x: x
+    self.post = post if post != None else lambda x: x
+    self.model_spec = model_spec
     self.verbose = verbose
-    self.model = get_model_mixin(self.user_model, self.model_support)
 
-################################################################################
-# Functions here utility functions
-################################################################################
+    self.extra_fns = get_model_functions(self.model)
+    for (fn_name, fn_meta) in self.extra_fns.items():
+      fn, _ = fn_meta
+      setattr(self, fn_name, fn)
+
+  ################################################################################
+  # Utility functions
+  ################################################################################
 
   def __repr__(self):
     return f"<nbox.Model: {self.model} >"
 
-  def eval(self):
-    """if underlying model has eval method, call it"""
-    if hasattr(self.model, "eval"):
-      self.model.eval()
+  def __dir__(self):
+    # be careful: https://docs.python.org/3/library/functions.html#dir
+    return [
+      # core functions
+      "__init__",
+      "__repr__",
+      "__call__",
+      "deserialise",
+      "deploy",
+      "train_on_instance",
 
-  def train(self):
-    """if underlying model has train method, call it"""
-    if hasattr(self.model, "train"):
-      self.model.train()
+      # attributes
+      "model",
+      "method",
+      "forward_fn",
+      "pre",
+      "post",
+      "model_spec",
+      "verbose",
+      "extra_fns",
 
-################################################################################
-# Functions here are the services that NBX provides to the user and no longer
-# >v0.8.7 the implementation of processing logic.
-################################################################################
+      # framework related functions
+      *tuple(self.extra_fns.keys())
+    ]
 
-  def __call__(self, input_object) -> ModelOutput:
+  ################################################################################
+  # Functions here are the services that NBX provides to the user and no longer
+  # >v0.8.7 the implementation of processing logic.
+  ################################################################################
+
+  def __call__(self, input_object) -> Any:
     r"""Caller is the most important UI/UX. The ``input_object`` can be anything from
-    a tensor, an image file, filepath as string, string and must be processed automatically by a
-    well written ``nbox.parser.BaseParser`` object . This ``__call__`` should understand the different
-    usecases and manage accordingly.
-
-    The current idea is that what ever the input, based on the category (image, text, audio, smell)
-    it will be parsed through dedicated parsers that can make ingest anything.
+    a tensor, an image file, filepath as string, string and is processed by ``pre`` function.
 
     The entire purpose of this package is to make inference chill.
 
     Args:
       input_object (Any): input to be processed
-
-    Returns:
-      Any: currently this is output from the model, so if it is tensors and return dicts.
     """
-    return self.model.forward(input_object)
+    pre_out = self.pre(input_object) # pre processing output
+    model_out = self.forward_fn(**pre_out) # model prediction
+    post_out = self.post(model_out) # post processing output
+    return post_out
 
-  def serialise(
+  @classmethod
+  def deserialise(cls, model_spec, folder) -> 'Model':
+    """load spec and files in the folder to start running the model."""
+    if isinstance(model_spec, dict):
+      _model_spec = ModelSpec()
+      ParseDict(model_spec, _model_spec)
+      model_spec = _model_spec
+    logger.info(f"{model_spec}")
+    init_data = U.from_pickle(U.join(folder, "model.extras.pkl"))
+
+    # now need to load the model from the serialised object
+    _class, _method = model_spec.target.method.split(".")
+    exec(f"from .framework.ml import {_class}")
+    _module = eval(f"{_class}")
+    loader, options_cls = _module._METHODS.get(_method)
+    m0 = loader(
+      user_options = options_cls(),
+      nbox_options = NboxOptions(model_name = model_spec.name, folder = folder, create_folder = False)
+    )
+    return cls(m0, method = init_data["method"], pre = init_data["pre"], post = init_data["post"], model_spec = model_spec)
+
+  def deploy(
     self,
-    input_object,
-    model_name,
-    export_type="onnx",
-    return_meta = False,
+    model_spec: ModelSpec,
+    deployment_id_or_name: str = None,
+    workspace_id: str = None,
+    wait_for_deployment=False,
     *,
-    _do_tar = True,
-    _unit_test = False,
-    **kwargs
-  ) -> str:
-    """This creates a singular .nbox file that contains the model binary and config file in ``self.cache_dir``:
+    _unittest = False
+  ):
+    """NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
 
-    Creates a folder at ``/tmp/{model_name}`` and then let's the underlying framework to fill it with anything
-    that it wants. Once the entire creation of file is completed it will zip them all in ``/tmp/{model_name}.nbox``
-    in process deleting all the files.
+    This deploys the current model onto our managed K8s clusters. This tight product service integration
+    is very crucial for us and is the best way to make deploy a model for usage.
+
+    Raises appropriate assertion errors for strict checking of inputs
 
     Args:
-      input_object (Any): input to be processed
-      model_name (str, optional): name of the model
-      export_type (str, optional): [description]. Defaults to "onnx".
-      generate_ov_args (bool, optional): Return the CLI args to be passed for Intel OpenVino
-
-    Returns:
-      path (str): path for the tar file
+      model_spec (nbox.framework.ModelSpec): what the name says!
+      export_type (str, optional): Export type for the model, check documentation for more details
+      wait_for_deployment (bool, optional): wait for deployment to complete
+      deployment_id (str, optional): ``deployment_id`` to put this model under, if you do not pass this
+        it will automatically create a new deployment check `platform <https://nimblebox.ai/oneclick>`_
+        for more info or check the logs.
+      deployment_name (str, optional): if ``deployment_id`` is not given and you want to create a new
+        deployment group (ie. webserver will create a new ``deployment_id``) you can tell what name you
+        want, be default it will create a random name.
+      **ser_kwargs (Any, optional): keyword arguments to be passed to ``serialise`` function
     """
+    # TODO: @yashbonde update APIs for revamp: Auto check deployments and name
+    # if workspace_id == None:
+    #   data = nbox_ws_v1.user.deployment()
+    # else:
+    #   data = nbox_ws_v1.workspace.u(workspace_id).deployment()
+    #
+    # if deployment_id_or_name not in data:
+    #   depl = list(filter(
+    #     lambda x: x["name"] == deployment_id_or_name, data
+    #   ))
+    #   if len(depl) == 0:
+    #     raise ValueError(f"No deployment with name: '{deployment_id_or_name}' found!")
+    #   data = depl[0]
+    # else:
+    #   data = data[deployment_id_or_name]
+    #
+    # deployment_id = data["deployment_id"]
+    # deployment_name = data["deployment_name"]
 
-    # create the export folder
-    folder = U.join(
-      U.NBOX_HOME_DIR, f"{model_name}", datetime.now().utcnow().strftime("UTC_%Y-%m-%dT%H:%M:%S")
-    ) if not _unit_test else U.join(
-      gettempdir(), f"{model_name}"
-    )
-    logger.debug(f"Serialising '{model_name}' to '{export_type}' at '{folder}'")
-    os.makedirs(folder, exist_ok=True)
-    
-    # export the model
-    nbox_meta = self.model.export(
-      format = export_type,
-      input_object = input_object,
-      export_model_path = folder,
-      **kwargs
-    )
+    # update model spec with deployment related information
+    model_spec.deploy.CopyFrom(Deployment(
+      id = deployment_id_or_name,
+      workspace_id = workspace_id,
+      type = Deployment.DeploymentTypes.NBOX_SERVING
+    ))
+
+    # pack everything nicely
+    folder = model_spec.folder
+    extras = U.join(folder, f"model.extras.pkl")
+    logger.info(f"Writing model.extras: {extras}")
+    U.to_pickle({"pre": self.pre, "post": self.post, "method": self.method}, extras)
+
+    req = U.join(folder, "requirements.txt")
+    with open(req, "w") as f:
+      logger.info(f"Writing the requirements file: {req}")
+      f.write("\n".join(model_spec.requirements))
 
     meta_path = U.join(folder, f"nbox_config.json")
     with open(meta_path, "w") as f:
-      f.write(json.dumps(nbox_meta.get_dict()))
+      logger.info(f"Writing nbox.meta: {meta_path}")
+      f.write(MessageToJson(
+        model_spec,
+        including_default_value_fields=True,
+        preserving_proto_field_name=True,
+        indent=2,
+        sort_keys=False,
+        use_integers_for_enums=True,
+        float_precision=4
+      ))
 
-    nbx_path = os.path.join(folder, f"{model_name}.nbox")
+    nbx_path = U.join(folder, f"{folder}.nbox")
     all_files = U.get_files_in_folder(folder)
-
-    if not _do_tar:
-      return (all_files, nbx_path)
-
     with tarfile.open(nbx_path, "w|gz") as tar:
+      logger.info(f"Writing: {nbx_path}")
       for path in all_files:
         tar.add(path, arcname = os.path.basename(path))
-        # os.remove(path)
         logger.debug(f"Removed {path}")
 
-    return nbx_path if not return_meta else (nbx_path, nbox_meta)
+    if _unittest:
+      # returns the minimum information needed to deserialise the model
+      return model_spec, folder
 
-  @classmethod
-  def deserialise(cls, filepath):
-    """This is the counterpart of ``serialise``, it deserialises the model from the .nbox file.
 
-    Args:
-      nbx_path (str): path to the .nbox file
-    """
-    if not tarfile.is_tarfile(filepath) or not filepath.endswith(".nbox"):
-      raise ValueError(f"{filepath} is not a valid .nbox file")
-
-    with tarfile.open(filepath, "r:gz") as tar:
-      folder = U.join(gettempdir(), os.path.basename(filepath).replace(".nbox", ""))
-      logger.debug(f"Extracted to folder: {folder}")
-      tar.extractall(folder)
-
-    # go into the currect folder so it's much easier to load things
-    _pre_dir = deepcopy(os.getcwd())
-    os.chdir(folder)
-
-    with open("./nbox_config.json", "r") as f:
-      nbox_meta = json.load(f)
-    m0, m1 = get_model_mixin(ModelSpec(**nbox_meta), deserialise=True)
-    
-    os.chdir(_pre_dir) # shift path back to original
-    return cls(m0, m1)
+    # OCD baby!
+    return deploy_model(
+      export_model_path=nbx_path,
+      model_spec=model_spec,
+      wait_for_deployment=wait_for_deployment,
+    )
 
   @staticmethod
   def train_on_instance(
@@ -192,7 +250,7 @@ class Model:
     target_folder: str = "/", # anything after /project folder
     shutdown_once_done: bool = False,
     *,
-    _unit_test = False,
+    _unit_test: bool = False,
   ):
     """Train this model on an NBX-Build Instance. Though this function is generic enough to execute
     any arbitrary code, this is built primarily for internal use.
@@ -212,7 +270,6 @@ class Model:
     assert instance.status == "RUNNING", f"Instance {instance.id} is not running"
     all_files, nbx_path = serialised_fn(_do_tar = False, _unit_test = _unit_test)
 
-    from types import SimpleNamespace
     train_fn_path = U.join(U.folder(nbx_path), "train_fn.dill")
     logger.debug(f"Train function saved at {train_fn_path}")
     U.to_pickle(SimpleNamespace(train_fn = train_fn, args = other_args), train_fn_path)
@@ -228,9 +285,7 @@ class Model:
     run_folder = f"/project/{target_folder}/"
 
     instance.mv(nbx_path, run_folder)
-
     instance("cd {}; python3 -m nbox.train_fn".format(run_folder))
-
     instance.mv(
       U.join(U.folder(__file__), "assets", "train_fn.jinja"),
       U.join(run_folder, "run.py")
@@ -241,54 +296,3 @@ class Model:
 
     if shutdown_once_done:
       instance.stop()
-
-  def deploy(
-    self,
-    input_object,
-    model_name,
-    export_type="onnx",
-    wait_for_deployment=False,
-    deployment_id=None,
-    deployment_name=None,
-    **ser_kwargs,
-  ):
-    """NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
-
-    This deploys the current model onto our managed K8s clusters. This tight product service integration
-    is very crucial for us and is the best way to make deploy a model for usage.
-
-    Raises appropriate assertion errors for strict checking of inputs
-
-    Args:
-      input_object (Any): input to be processed
-      model_name (str, optional): custom model name for this model
-      export_type (str, optional): Export type for the model, check documentation for more details
-      wait_for_deployment (bool, optional): wait for deployment to complete
-      deployment_id (str, optional): ``deployment_id`` to put this model under, if you do not pass this
-        it will automatically create a new deployment check `platform <https://nimblebox.ai/oneclick>`_
-        for more info or check the logs.
-      deployment_name (str, optional): if ``deployment_id`` is not given and you want to create a new
-        deployment group (ie. webserver will create a new ``deployment_id``) you can tell what name you
-        want, be default it will create a random name.
-      **ser_kwargs (Any, optional): keyword arguments to be passed to ``serialise`` function
-    """
-
-    export_model_path, nbox_meta = self.serialise(
-      input_object = input_object,
-      model_name = model_name,
-      export_type = export_type,
-      _unit_test = False,
-      return_meta = True,
-      **ser_kwargs
-    )
-
-    nbox_meta["deployment_type"] = "nbox" # TODO: @yashbonde remove hardcode
-    nbox_meta["deployment_id"] = deployment_id
-    nbox_meta["deployment_name"] = deployment_name
-
-    # OCD baby!
-    return deploy_model(
-      export_model_path=export_model_path,
-      nbox_meta=nbox_meta,
-      wait_for_deployment=wait_for_deployment,
-    )

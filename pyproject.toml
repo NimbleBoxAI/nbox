@@ -22,6 +22,7 @@ grpcio = "1.43.0"
 Jinja2 = "3.0.3"
 dill = "0.3.4"
 python-json-logger = "2.0.2"
+mypy-protobuf = "3.2.0" # this is used for generating nbox spec
 
 [tool.poetry.dev-dependencies]
 pytest = "^5.2"

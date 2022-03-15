@@ -5,6 +5,7 @@
 import ast
 import base64
 import inspect
+from typing import Union
 from uuid import uuid4
 
 from ..utils import logger
@@ -40,71 +41,73 @@ class DBase:
 
 # ================== These classes are the code nodes
 
-class ExpressionNodeInfo(DBase):
-  __slots__ = [
-    'name', # :str
-    'code', # :str (base64)
-    'nbox_string', # :str
-    'lineno', # :int
-    'col_offset', # :int
-    'end_lineno', # :int
-    'end_col_offset', # :int
-    'inputs', # :list[Dict[Any, Any]]
-    'outputs', # :list[str]
-  ]
+from ..hyperloop.dag_pb2 import DAG, Flowchart, Node, NodeInfo, Edge
 
-class IfNodeInfo(DBase):
-  __slots__ = [
-    'nbox_string', # :str
-    'conditions', # :list[ExpressionNodeInfo]
-    'inputs', # :list[Dict[Any, Any]]
-    'outputs', # :list[str]
-  ]
+# class ExpressionNodeInfo(DBase):
+#   __slots__ = [
+#     'name', # :str
+#     'code', # :str (base64)
+#     'nbox_string', # :str
+#     'lineno', # :int
+#     'col_offset', # :int
+#     'end_lineno', # :int
+#     'end_col_offset', # :int
+#     'inputs', # :list[Dict[Any, Any]]
+#     'outputs', # :list[str]
+#   ]
 
-class ForNodeInfo(DBase):
-  __slots__ = [
-    'nbox_string', # :str
-    'iterable', # :list[str]
-    'inputs', # :list[Dict[Any, Any]]
-    'node_info', # :ExpressionNodeInfo
-    'code', # :str
-  ]
+# class IfNodeInfo(DBase):
+#   __slots__ = [
+#     'nbox_string', # :str
+#     'conditions', # :list[ExpressionNodeInfo]
+#     'inputs', # :list[Dict[Any, Any]]
+#     'outputs', # :list[str]
+#   ]
 
-class ReturnNodeInfo(DBase):
-  __slots__ = [
-    'nbox_string', # :str
-  ]
+# class ForNodeInfo(DBase):
+#   __slots__ = [
+#     'nbox_string', # :str
+#     'iterable', # :list[str]
+#     'inputs', # :list[Dict[Any, Any]]
+#     'info', # :ExpressionNodeInfo
+#     'code', # :str
+#   ]
 
-# ================== These classes create the DAG
+# class ReturnNodeInfo(DBase):
+#   __slots__ = [
+#     'nbox_string', # :str
+#   ]
 
-class RunStatus(DBase):
-  __slots__ = [
-    'start', # :str
-    'end', # :str
-    'inputs', # :Dict
-    'outputs', # :Dict
-  ]
+# # ================== These classes create the DAG
 
-class Node(DBase):
-  __slots__ = [
-    'id', # :str
-    'execution_index', # :int
-    'name', # :str
-    'type', # :str: OneOf['op-node', 'if-node']
-    'node_info', # :Union[ExpressionNodeInfo, IfNodeInfo]
-    'operator', # :str
-    'nbox_string', # :str
-    'run_status', # :RunStatus
-  ]
+# class RunStatus(DBase):
+#   __slots__ = [
+#     'start', # :str
+#     'end', # :str
+#     'inputs', # :Dict
+#     'outputs', # :Dict
+#   ]
 
-class Edge(DBase):
-  __slots__ = [
-    'id', # :str
-    'source', # :str
-    'target', # :str
-    'type', # :str
-    'nbox_string', # :str
-  ]
+# class Node(DBase):
+#   __slots__ = [
+#     'id', # :str
+#     'execution_index', # :int
+#     'name', # :str
+#     'type', # :str: OneOf['op-node', 'if-node']
+#     'info', # :Union[ExpressionNodeInfo, IfNodeInfo]
+#     'operator', # :str
+#     'nbox_string', # :str
+#     'run_status', # :RunStatus
+#   ]
+
+# class Edge(DBase):
+#   __slots__ = [
+#     'id', # :str
+#     'source', # :str
+#     'target', # :str
+#     'type', # :str
+#     'nbox_string', # :str
+#   ]
 
 
 # ==================
@@ -149,7 +152,7 @@ nbxl = NboxStrings()
 
 def write_program(nodes):
   for i, n in enumerate(nodes):
-    logger.debug(f"{i:03d}|{n.get('nbox_string', n.get('node_info').get('nbox_string'))}")
+    logger.debug(f"{i:03d}|{n.get('nbox_string', n.get('info').get('nbox_string'))}")
 
 
 # ==================
@@ -232,7 +235,7 @@ def parse_kwargs(node, lines):
   elif isinstance(node, ast.Call):
     return get_code_portion(lines, **node.func.__dict__)
 
-def node_assign_or_expr(node, lines) -> ExpressionNodeInfo:
+def node_assign_or_expr(node, lines, node_proto: Node) -> Union[Node, None]:
   # print(get_code_portion(lines, b64 = False, **node.__dict__))
   value = node.value
   try:
@@ -258,20 +261,26 @@ def node_assign_or_expr(node, lines) -> ExpressionNodeInfo:
       else [parse_kwargs(targets, lines)
     ]
 
-  return ExpressionNodeInfo(
-    name = name,
-    inputs = inputs,
-    outputs = outputs,
-    nbox_string = nbxl.function(name, inputs, outputs),
-    code = get_code_portion(lines, **node.__dict__),
-    lineno = node.lineno,
-    col_offset = node.col_offset,
-    end_lineno = node.end_lineno,
-    end_col_offset = node.end_col_offset,
-  )
+  # return ExpressionNodeInfo(
+  #   name = name,
+  #   inputs = inputs,
+  #   outputs = outputs,
+  #   nbox_string = 
+  #   code = get_code_portion(lines, **node.__dict__),
+  #   lineno = node.lineno,
+  #   col_offset = node.col_offset,
+  #   end_lineno = node.end_lineno,
+  #   end_col_offset = node.end_col_offset,
+  # )
+  node_proto.operator = Node.NodeTypes.LOOP
 
-def node_if_expr(node, lines) -> IfNodeInfo:
-  def if_cond(node, lines, conds = []):
+  # updates for NodeInfo
+  node_proto.info.name = name
+  node_proto.info.nbox_string = nbxl.function(name, inputs, outputs),
+
+
+def node_if_expr(node, lines, node_proto: Node) -> Node:
+  def get_conditions(node, lines, conds = []):
     if not hasattr(node, "test"):
       else_cond = list(filter(lambda x: x["condition"] == "else", conds))
       if not else_cond:
@@ -302,13 +311,13 @@ def node_if_expr(node, lines) -> IfNodeInfo:
         }
       })
       for x in node.orelse:
-        if_cond(x, lines, conds)
+        get_conditions(x, lines, conds)
 
     return conds
   
   # get all the conditions and structure as ExpressionNodeInfo
-  
-  all_conditions = if_cond(node, lines, conds = [])
+
+  all_conditions = get_conditions(node, lines, conds = [])
   ends = []
   for b0, b1  in zip(all_conditions[:-1], all_conditions[1:]):
     ends.append([b0["code"], b1["code"]])
@@ -321,13 +330,12 @@ def node_if_expr(node, lines) -> IfNodeInfo:
     }
   ends += [all_conditions[-1]["code"]]
 
-  conditions = []
+  conditions = {}
   for i, c in enumerate(all_conditions):
     box = ends[i]
-    _node = ExpressionNodeInfo(
+    _node = NodeInfo(
       name = f"if-{i}",
       nbox_string = c["condition"],
-      code = get_code_portion(lines, **box),
       lineno = box['lineno'],
       col_offset = box['col_offset'],
       end_lineno = box['end_lineno'],
@@ -335,31 +343,38 @@ def node_if_expr(node, lines) -> IfNodeInfo:
       inputs = [],
       outputs = [],
     )
-    conditions.append(_node)
+    conditions[_node.name] = _node
 
-  nbox_string = "IF: { " + ", ".join(x.nbox_string for x in conditions) + " }"
-  return IfNodeInfo(
-    conditions = conditions,
-    nbox_string = nbox_string,
-    inputs = [],
-    outputs = []
-  )
+  node_proto.info.nbox_string = "IF: { " + ", ".join(x.nbox_string for x in conditions) + " }"
+  node_proto.info.conditions = conditions
+  # return IfNodeInfo(
+  #   conditions = conditions,
+  #   nbox_string = nbox_string,
+  #   inputs = [],
+  #   outputs = []
+  # )
+  return node_proto
 
-def node_for_expr(node, lines) -> ForNodeInfo:
-  targets = [x.id for x in node.target.elts]
-  iter_str = get_code_portion(lines, **node.iter.__dict__)
-  code = get_code_portion(lines, **node.body[0].__dict__)
-  return ForNodeInfo(
-    targets = targets,
-    iter_str = iter_str,
-    code = code,
-    nbox_string = nbxl.for_loop(iter_str, targets),
-  )
+def node_for_expr(node, lines, node_proto: Node) -> Node:
+  node_proto.info.nbox_string = nbxl.for_loop(get_code_portion(lines, **node.value.__dict__))
+  node_proto.name = f"for-{i}"
+  node_proto.operator = Node.NodeTypes.LOOP
+  # targets = [x.id for x in node.target.elts]
+  # iter_str = get_code_portion(lines, **node.iter.__dict__)
+  # code = get_code_portion(lines, **node.body[0].__dict__)
+  # return ForNodeInfo(
+  #   targets = targets,
+  #   iter_str = iter_str,
+  #   code = code,
+  #   nbox_string = nbxl.for_loop(iter_str, targets),
+  # )
+  return node_proto
 
-def node_return(node, lines) -> ReturnNodeInfo:
-  return ReturnNodeInfo(
-    nbox_string = nbxl.return_statement(get_code_portion(lines, **node.value.__dict__)),
-  )
+def node_return(node, lines, node_proto: Node) -> Node:
+  node_proto.info.nbox_string = nbxl.return_statement(get_code_portion(lines, **node.value.__dict__))
+  node_proto.name = f"return"
+  node_proto.operator = Node.NodeTypes.RETURN
+  return node_proto
 
 def def_func_or_class(node, lines):
   out = {
@@ -397,6 +412,31 @@ type_wise_logic = {
 
 # ==================
 
+
+def code_node(execution_index, expr, code_lines) -> Node:
+  # code pieces that are not yet supported should still see the code
+  return Node(
+    id = str(uuid4()),
+    execution_index = execution_index,
+    name = f"codeblock-{execution_index}",
+    type = "op-node",
+    operator = "CodeBlock",
+    nbox_string = f"CODE: {str(type(expr))}", # :str
+    run_status = Node.RunStatus(), # no need tp initialise this object
+    info = NodeInfo(
+      name = f"codeblock-{execution_index}", # :str
+      code = get_code_portion(code_lines, bs64 = True, **expr.__dict__), # :str (base64)
+      nbox_string = None, # :str
+      lineno = expr.lineno, # :int
+      col_offset = expr.col_offset, # :int
+      end_lineno = expr.end_lineno, # :int
+      end_col_offset = expr.end_col_offset, # :int
+      inputs = [], # :list[Dict[Any, Any]]
+      outputs = [], # :list[str]
+    )
+  )
+
+
 def get_nbx_flow(forward):
   """Get NBX flowchart. Read python grammar here:
   https://docs.python.org/3/reference/grammar.html
@@ -409,118 +449,63 @@ def get_nbx_flow(forward):
   code_lines = code.splitlines()
   node = ast.parse(code)
 
-  edges = [] # this is the flow
-  nodes = [] # this is the operators
+  edges = {} # this is the flow
+  nodes = {} # this is the operators
   symbols_to_nodes = {} # this is things that are defined at runtime
 
   for i, expr in enumerate(node.body[0].body):
-    # if isinstance(expr, ast.Module):
-    #   continue
-
+    # create the empty node that will be used everywhere
     if not type(expr) in type_wise_logic:
-      # code pieces that are not yet supported should still see the code
-      node = Node(
-        id = str(uuid4()),
-        execution_index = i,
-        name = f"codeblock-{i}",
-        type = "op-node",
-        operator = "CodeBlock",
-        node_info = ExpressionNodeInfo(
-          name = f"codeblock-{i}", # :str
-          code = get_code_portion(code_lines, bs64 = True, **expr.__dict__), # :str (base64)
-          nbox_string = None, # :str
-          lineno = expr.lineno, # :int
-          col_offset = expr.col_offset, # :int
-          end_lineno = expr.end_lineno, # :int
-          end_col_offset = expr.end_col_offset, # :int
-          inputs = [], # :list[Dict[Any, Any]]
-          outputs = [], # :list[str]
-        ),
-        nbox_string = f"CODE: {str(type(expr))}", # :str
-        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
-      )
-      nodes.append(node)
+      node.info = code_node(i, expr, code_lines)
+      nodes[node.id] = node
       continue
 
-    output = type_wise_logic[type(expr)](expr, code_lines)
+    output = type_wise_logic[type(expr)](expr, code_lines, node)
     if output is None:
       continue
 
-    if isinstance(output, ExpressionNodeInfo):
-      output = Node(
-        id = str(uuid4()),
-        execution_index = i,
-        name = output.name,
-        type = "op-node",
-        operator = "CodeBlock",
-        node_info = output,
-        nbox_string = None,
-        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
-      )
-      nodes.append(output)
-    
-    elif isinstance(output, IfNodeInfo):
-      output = Node(
-        id = str(uuid4()),
-        execution_index = i,
-        name = f"if-{i}",
-        type = "op-node",
-        operator = "Conditional",
-        node_info = output,
-        nbox_string = output.nbox_string,
-        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
-      )
-      nodes.append(output)
-    
-    elif isinstance(output, ForNodeInfo):
-      output = Node(
-        id = str(uuid4()),
-        execution_index = i,
-        name = f"for-{i}",
-        type = "op-node",
-        operator = "Loop",
-        node_info = output,
-        nbox_string = output.nbox_string,
-        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
-      )
-      nodes.append(output)
-    
-    elif isinstance(output, ReturnNodeInfo):
-      output = Node(
-        id = str(uuid4()),
-        execution_index = i,
-        name = f"return",
-        type = "op-node",
-        operator = "Return",
-        node_info = output,
-        nbox_string = output.nbox_string,
-        run_status = RunStatus(start = None, end = None, inputs = [], outputs = [])
-      )
-      nodes.append(output)
-    
-    elif "def" in output["type"]:
+    if "def" in output["type"]:
       symbols_to_nodes[output['name']] = {
-        "node_info": output,
+        "info": output,
         "execution_index": i,
         "nbox_string": nbxl.define(output["name"], output["inputs"])
       }
+      continue
+
+    # if isinstance(output, ExpressionNodeInfo):
+    
+    # elif isinstance(output, IfNodeInfo):
+    #   node_.name = f"if-{i}"
+    #   node_.operator = Node.NodeTypes.BRANCHING
+    #   node_.nbox_string = output.nbox_string
+    
+    # elif isinstance(output, ForNodeInfo):
+      
+    
+    # elif isinstance(output, ReturnNodeInfo):
+      
+
+    # nodes[node_.id] = node_
 
   # edges for execution order can be added
-  for op0, op1 in zip(nodes[:-1], nodes[1:]):
-    edges.append(
-      Edge(
-        id = f"edge-{op0.id}-X-{op1.id}",
-        source = op0.id,
-        target = op1.id,
-        type = "execution-order",
-        nbox_string = None
+  _node_ids = tuple(nodes.keys())
+  for op0, op1 in zip(_node_ids[:-1], _node_ids[1:]):
+    _id = f"edge-{op0}-X-{op1}"
+    edges[_id] = Flowchart.Edge(
+      id = _id,
+      source = op0,
+      target = op1,
+      type = "execution-order",
+      nbox_string = None
     )
-  )
 
-  return {
-    "flowchart": {
-      "edges": [x.get_dict() for x in edges],
-      "nodes": [x.get_dict() for x in nodes],
-    },
-    "symbols": symbols_to_nodes
-  }
+  # from pprint import pprint
+  # pprint(edges)
+  # pprint(nodes)
+
+  return DAG(
+    flowchart = Flowchart(
+      nodes = nodes, edges = edges
+    ),
+    symbols=symbols_to_nodes
+  )

@@ -23,16 +23,110 @@ Read the code for best understanding.
 # from nbox.framework.on_ml import ModelOuput
 # read as "from nbox's framework on ML import ModelOutput"
 
+import os
+import dill
 import json
 import inspect
 import requests
 from time import time
-from typing import Any, Tuple
-import dill
+from typing import Any, Dict, Tuple
 
 from .on_functions import DBase
-from ..utils import isthere, join, logger
+from ..utils import logger
+from .. import utils as U
 from ..auth import secret
+from .autogen import ml_register
+from .model_spec_pb2 import ModelSpec, Tensor
+
+class NboxOptions:
+  def __init__(self, model_name: str, folder: str = None, create_folder = False):
+    if create_folder:
+      self.folder = U.join(folder if folder != None else U.NBOX_HOME_DIR, model_name)
+      self.model_name = model_name
+      os.makedirs(self.folder, exist_ok = False)
+    else:
+      self.folder = folder
+      self.model_name = model_name
+
+@ml_register.conditional(framework = "torch",)
+def torch_condition(model):
+  import torch
+  if isinstance(model, torch.nn.Module):
+    return True
+  return False
+
+@ml_register.register(
+  framework = "torch",
+  target = "torch",
+  target_processor_name = "torchscript_to_torch",
+  stub_name = "torch_to_torchscript",
+  message_name = "TorchToTorchscript",
+  export_fn_import = "from torch.jit import trace",
+  dependencies = ["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
+)
+def torch_export_torchscript(user_options, nbox_options, spec):
+  import torch
+  from torch.jit import trace
+  traced_model = trace(**user_options.__dict__)
+  filepath = U.join(nbox_options.folder, "model.pt")
+  spec.source.path = filepath
+  spec.inputs.extend([
+    Tensor(
+      name = str(i),
+      shape = tuple(t.shape),
+      dtype = str(t.numpy().dtype)
+    ) for i, t in enumerate(user_options.example_inputs)
+  ])
+
+  # actual export
+  torch.jit.save(traced_model, filepath)
+  return spec
+
+@ml_register.register(
+  framework = "torch",
+  target = "torch",
+  stub_name = "torchscript_to_torch",
+  message_name = "TorchscriptToTorch",
+  export_fn_import = "from torch.jit import load",
+  dependencies = ["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
+  ignore_args= ["f"],
+)
+def torch_import_torchscript(user_options, nbox_options, spec):
+  from torch.jit import load
+  model = load(U.join(nbox_options.folder, "model.pt"), map_location="cpu")
+  return model
+
+@ml_register.register(
+  framework = "torch",
+  target = "onnx",
+  target_processor_name = "onnx_runtime",
+  stub_name = "torch_to_onnx",
+  message_name="TorchToOnnx",
+  export_fn_import="from torch.onnx import export",
+  dependencies=["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
+  ignore_args = ["f"],
+)
+def torch_export_onnx(user_options, nbox_options, spec):
+  import torch
+  from torch.onnx import export
+  user_options.f = nbox_options.filepath # override the folder
+  inputs = user_options.args
+  if isinstance(inputs, torch.Tensor):
+    spec.inputs.append(Tensor(name = '0', shape = tuple(inputs.shape), dtype = str(inputs.numpy().dtype)))
+  elif isinstance(inputs, tuple):
+    if any(isinstance(x, dict) for x in inputs):
+      if not inputs[-1] == {}:
+        logger.warning(f"Last input is not an empty dictionary and is recommended by ONNX Export")
+    for i,t in enumerate(inputs):
+      if isinstance(t, torch.Tensor):
+        spec.inputs.append(Tensor(name = str(i), shape = tuple(t.shape), dtype = str(t.numpy().dtype)))
+      elif isinstance(t, dict):
+        for k,v in t.items():
+          spec.inputs.append(Tensor(name = k, shape = tuple(v.shape), dtype = str(v.numpy().dtype)))
+
+  # actual export
+  export(**user_options.__dict__)
+  return spec
 
 
 ################################################################################
@@ -54,44 +148,74 @@ class ModelOutput(DBase):
     "outputs", # :Any
   ]
 
-class ModelSpec(DBase):
-  __slots__ = [
-    # where from
-    "src_framework", # :str: name of the source framework
-    "src_framework_version", # :str
-    'export_path', # str: there is no reason for the Pod to know anything about the user
+  def serialise():
+    raise NotImplementedError
 
-    # where to
-    "export_type", # :str
-    "exported_time", # :str: UTC time when the model was exported
+# class ModelSpec(DBase):
+#   __slots__ = [
+#     # where from
+#     "src_framework", # :str: name of the source framework
+#     "src_framework_version", # :str
+#     'export_path', # str: there is no reason for the Pod to know anything about the user
 
-    # how to
-    "load_method", # :str: The classmethod to call to load this model
-    "load_kwargs", # :dict: kwargs to pass to the load method
-    "io_dict", # :dict: obtained from above function
+#     # where to
+#     "export_type", # :str
+#     "exported_time", # :str: UTC time when the model was exported
 
-    # 'what to' is the serving script!
-  ]
+#     # how to
+#     "load_method", # :str: The classmethod to call to load this model
+#     "load_kwargs", # :dict: kwargs to pass to the load method
+#     "io_dict", # :dict: obtained from above function
+
+#     # 'what to' is the serving script!
+#     "required_packages", # :list: list of things to write in requirements.txt
+#   ]
 
 class FrameworkAgnosticProtocol(object):
-  """https://nimblebox.notion.site/nbox-FrameworkAgnosticProtocol-6b39249316b1497b8ad9ff8f02b227f0"""
+  """
+  This Protocol only aims to serve as an abstracted layer that calls the underlying framework
+  specific code and returns the output. This mainly is intended to implement three functions:
+  * forward: the forward pass of the model
+  * export: that takes in a string for export format and arguments for it
+  * deserialise: that takes the model spec object and returns the loader for this model
+  https://nimblebox.notion.site/nbox-FrameworkAgnosticProtocol-6b39249316b1497b8ad9ff8f02b227f0
+  """
   # def __init__(self, i0: Any, i1: Any) -> None
 
-  def forward(self, input_object: Any) -> ModelOutput:
-    raise NotImplementedError()
+  def forward(self, input_object) -> ModelOutput:
+    out = self._model(**input_object)
+    return ModelOutput(inputs = input_object, outputs = out)
 
-  def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
-    raise NotImplementedError()
+  # def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
+  #   raise InvalidProtocolError(f"export method not implemented: {self.__class__.__name__} -> {format}")
+
+  def serialise(self, format):
+    if format not in self.serialisations:
+      raise InvalidProtocolError(f"Format {format} not supported for torch export")
+    return self.serialisations[format]
 
   @staticmethod
-  def deserialise(self, model_meta: ModelSpec) -> Tuple[Any, Any]:
-    raise NotImplementedError()
+  def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
+    raise InvalidProtocolError(f"deserialise method not implemented: '{model_meta.export_type}'")
 
 
-def io_dict(input_object, output_object):
-  """Generic method to convert the inputs to get ``nbox_meta['metadata']`` dictionary"""
-  # get the meta object
+def get_io_dict(input_object, call_fn, forward_fn):
+  """Generates and returns an io_dict by performing forward pass through the model
 
+  Args:
+      input_object (Any): Input to a model
+      call_fn (Callable): function that Model.model employs to do a forward pass.
+      forward_fn (Callable): forward() function of the Model
+
+  Returns:
+      io : io_dict
+  """
+  logger.info(f"Generating io_dict")
+  out = forward_fn(input_object)
+  args = inspect.getfullargspec(call_fn)
+  args.args.remove("self")
+
+  # Create the i/o dict
   def __get_struct(object):
 
     def process_dict(x, curr_idx) -> dict:
@@ -137,38 +261,17 @@ def io_dict(input_object, output_object):
 
     return parse(object)[0]
 
-  meta = {
-    "inputs": __get_struct(input_object),
-    "outputs": __get_struct(output_object)
-  }
-  return meta
-
-def get_io_dict(input_object, call_fn, forward_fn):
-  """Generates and returns an io_dict by performing forward pass through the model
-
-  Args:
-      input_object (Any): Input to a model
-      call_fn (Callable): function that Model.model employs to do a forward pass.
-      forward_fn (Callable): forward() function of the Model
-
-  Returns:
-      io : io_dict
-  """
-  out = forward_fn(input_object)
-  args = inspect.getfullargspec(call_fn)
-  args.args.remove("self")
-
-  io = io_dict(
-    input_object=out.inputs,
-    output_object=out.outputs
-  )
-  io["arg_spec"] = {
-    "args": args.args,
-    "varargs": args.varargs,
-    "varkw": args.varkw,
-    "defaults": args.defaults,
-    "kwonlyargs": args.kwonlyargs,
-    "kwonlydefaults": args.kwonlydefaults,
+  io = {
+    "inputs": __get_struct(out.inputs),
+    "outputs": __get_struct(out.outputs),
+    "arg_spec": {
+      "args": args.args,
+      "varargs": args.varargs,
+      "varkw": args.varkw,
+      "defaults": args.defaults,
+      "kwonlyargs": args.kwonlyargs,
+      "kwonlydefaults": args.kwonlydefaults,
+    }
   }
   return io
 
@@ -176,27 +279,33 @@ def get_io_dict(input_object, call_fn, forward_fn):
 ################################################################################
 # NimbleBox.ai Deployments
 # ========================
-# NBX-Deploy is a serive that you can use to load the API endpoints where it is
+# NBX-Deploy is a service that you can use to load the API endpoints where it is
 # deployed. This is a special kind of method because it can consume all the
 # objects that other models can consume.
 ################################################################################
 
 # TODO:@yashbonde
 class NBXModel(FrameworkAgnosticProtocol):
-  @isthere("numpy", soft=False)
-  def __init__(self, url, key):
-    self.url = url
-    self.key = key
+  @U.isthere("numpy", soft=False)
+  def __init__(self, url_key: Tuple[str, str]):
+    logger.debug(f"Trying to load as NBX-Api")
+    if not (isinstance(url_key, (tuple, list)) and len(url_key) == 2):
+      raise InvalidProtocolError(f"Invalid url_key for NBX-Api")
 
-    logger.debug(f"Trying to load as url")
+    url, key = url_key
+
     if not isinstance(url, str):
       raise InvalidProtocolError(f"Model must be a string, got: {type(url)}")
     if not (url.startswith("https://") or url.startswith("http://")):
       raise InvalidProtocolError("Model URL must start with http:// or https://")
+
     if not isinstance(key, str):
       raise InvalidProtocolError("Nbx API key must be a string")
     if not key.startswith("nbxdeploy_"):
       raise InvalidProtocolError("Not a valid NBX Api key, please check again.")
+
+    self.url = url
+    self.key = key
 
     # fetch the metadata from the cloud
     model_url = url.rstrip("/")
@@ -261,12 +370,7 @@ class NBXModel(FrameworkAgnosticProtocol):
       logger.debug(f"Took {et:.3f} seconds!")
     except Exception as e:
       logger.debug(f"Failed: {str(e)} | {r.content.decode()}")
-
-  def export(*_, **__):
-    raise InvalidProtocolError("NBX-Deploy does not support exporting")
-
-  def deserialise(*_, **__):
-    raise InvalidProtocolError("NBX-Deploy cannot be loaded by deserialisation, use __init__")
+      raise e
 
 
 ################################################################################
@@ -278,168 +382,23 @@ class NBXModel(FrameworkAgnosticProtocol):
 # a user to get all the output
 ################################################################################
 
-class TorchModel(FrameworkAgnosticProtocol):
-  @isthere("torch", soft=False)
-  def __init__(self, m1, m2):
-    import torch
 
-    if not isinstance(m1, torch.nn.Module):
-      raise InvalidProtocolError(f"First input must be a torch model, got: {type(m1)}")
-    if m2 != None and not callable(m2):
-      # this is the processing logic for the incoming data this has to be a some kind of callable,
-      # because user can define whatever they want and it removes any onus on NBX to ensure that
-      # processing works, halting problem is no joke!
-      raise ValueError(f"Second input for torch model must be a callable, got: {type(m2)}")
 
-    self._model = m1
-    self._logic = m2 if m2 else lambda x: x # Identity function
 
-  def train(self):
-    self._model.train()
+#   @staticmethod
+#   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
+#     import torch
+#     logger.debug(f"Deserialising torch model from {model_meta.export_path}")
 
-  def eval(self):
-    self._model.eval()
+#     kwargs = model_meta.load_kwargs
 
-  def forward(self, input_object) -> ModelOutput:
-    model_inputs = self._logic(input_object) # TODO: @yashbonde enforce logic to return dict
-    if isinstance(model_inputs, dict):
-      out = self._model(**model_inputs)
-    else:
-      out = self._model(model_inputs)
-    return ModelOutput(inputs = input_object, outputs = out)
-
-  def _serialise_logic(self, fpath):
-    logger.debug(f"Saving logic to {fpath}")
-    with open(fpath, "wb") as f:
-      dill.dump(self._logic, f)
-
-  def export_to_onnx(
-    self,
-    input_object,
-    export_model_path,
-    export_params=True,
-    verbose=False,
-    logic_file_name = "logic.dill",
-    model_file_name="model.onnx",
-    opset_version=12,
-    do_constant_folding=True,
-    use_external_data_format=False,
-    **kwargs
-  ) -> ModelSpec:
-    iod = get_io_dict(input_object, self._model.forward, self.forward)
-    self._serialise_logic(join(export_model_path, logic_file_name))
-
-    export_path = join(export_model_path, model_file_name)
-
-    import torch
-    torch.onnx.export(
-      self._model,
-      input_object,
-      f=export_path,
-      verbose=verbose,
-      use_external_data_format=use_external_data_format, # RuntimeError: Exporting model exceed maximum protobuf size of 2GB
-      export_params=export_params, # store the trained parameter weights inside the model file
-      opset_version=opset_version, # the ONNX version to export the model to
-      do_constant_folding=do_constant_folding, # whether to execute constant folding for optimization
-    )
-
-    return ModelSpec(
-        src_framework = "torch",
-        src_framework_version = torch.__version__,
-        export_type = "onnx",
-        export_path = export_model_path,
-        load_class = self.__class__.__name__,
-        load_kwargs = {
-          "model": f"./{model_file_name}",
-          "map_location": "cpu",
-          "logic_path": f"./{logic_file_name}"
-        },
-        io_dict = iod,
-      )
-
-  def export_to_torchscript(
-    self,
-    input_object,
-    export_model_path,
-    check_tolerance = 1e-4,
-    optimize = None,
-    check_trace = True,
-    check_inputs = None,
-    strict = True,
-    logic_file_name = "logic.dill",
-    model_file_name = "model.bin",
-  ) -> ModelSpec:
-    iod = get_io_dict(input_object, self._model.forward, self.forward)
-
-    self._serialise_logic(join(export_model_path, logic_file_name))
-
-    import torch
-
-    args = self._logic(input_object)
-
-    if isinstance(args, dict):
-      args = tuple(args.values())
-
-    traced_model = torch.jit.trace(
-      func = self._model,
-      example_inputs = args,
-      check_tolerance = check_tolerance,
-      optimize = optimize,
-      check_trace = check_trace,
-      check_inputs = check_inputs,
-      strict = strict,
-    )
-
-    export_path = join(export_model_path, model_file_name)
-    logger.debug(f"Saving model to {export_path}")
-
-    torch.jit.save(traced_model, export_path)
-
-    # return as
-    return ModelSpec(
-        src_framework = "torch",
-        src_framework_version = torch.__version__,
-        export_type = "torchscript",
-        export_path = export_path,
-        load_class = self.__class__.__name__,
-        load_kwargs = {
-          "model": f"./{model_file_name}",
-          "map_location": "cpu",
-          "logic_path": f"./{logic_file_name}"
-        },
-        io_dict = iod,
-      )
-
-  def export(self, format, input_object, export_model_path, **kwargs) -> ModelSpec:
-    logger.debug(f"Exporting torch model to {format}")
-
-    if format == "onnx":
-      return self.export_to_onnx(
-        input_object = input_object, export_model_path = export_model_path, **kwargs
-      )
-    elif format == "torchscript":
-      return self.export_to_torchscript(
-        input_object = input_object, export_model_path = export_model_path, **kwargs
-      )
-    else:
-      raise InvalidProtocolError(f"Unknown format: {format}")
-
-  @staticmethod
-  def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
-    import torch
-    logger.debug(f"Deserialising torch model from {model_meta.export_path}")
-
-    kwargs = model_meta.load_kwargs
-
-    if model_meta.export_type == "torchscript":
-      lp = kwargs.pop("logic_path")
-      logger.debug(f"Loading logic from {lp}")
-      with open(lp, "rb") as f:
-        logic = dill.load(f)
-      model = torch.jit.load(model_meta.load_kwargs["model"], map_location=kwargs["map_location"])
-      return model, logic
-    else:
-      raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
+#     if model_meta.export_type == "torchscript":
+#       lp = kwargs.pop("logic_path")
+#       logger.debug(f"Loading logic from {lp}")
+#       model = torch.jit.load(model_meta.load_kwargs["model"], map_location=kwargs["map_location"])
+#       return model
+#     else:
+#       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
 
 ################################################################################
@@ -451,80 +410,57 @@ class TorchModel(FrameworkAgnosticProtocol):
 # side processing.
 ################################################################################
 
-# TODO:@yashbonde
 class ONNXRtModel(FrameworkAgnosticProtocol):
-  @isthere("onnxruntime", "numpy", soft = False)
-  def __init__(self, m0, m1):
+  @U.isthere("onnx", "onnxruntime", "numpy", soft = False)
+  def __init__(self, m0):
     import onnx
     import onnxruntime as ort
+    logger.debug(f"Trying to load as ONNX Runtime")
+
     if not isinstance(m0, onnx.onnx_ml_pb2.ModelProto):
       raise InvalidProtocolError(f"First input must be a ONNX model, got: {type(m0)}")
 
-    if m1!= None and not callable(m1):
-      # this is the processing logic for the incoming data this has to be a some kind of callable,
-      # because user can define whatever they want and it removes any onus on NBX to ensure that
-      # processing works, halting problem is no joke!
-      raise ValueError(f"Second input for torch model must be a callable, got: {type(m1)}")
-
-    self._model = m0
-    self._logic = m1 if m1 else lambda x: x
     self._sess = ort.InferenceSession(self._model.SerializeToString())
 
   def forward(self, input_object) -> ModelOutput:
-    import numpy as np
-    model_inputs = self._logic(input_object)
-    input_names = [i.name for i in self._sess.get_inputs()]
-    output_names = [o.name for o in self._sess.get_outputs()]
-    if isinstance(model_inputs,dict):
-      tensor_dict = model_inputs
-      if isinstance(list(model_inputs.values())[0],SklearnInput):
-        tensor_dict = {list(model_inputs.keys())[0]:list(model_inputs.values())[0].inputs}
-      model_inputs = {name: tensor for name, tensor in zip(input_names, tuple(tensor_dict.values()))}
-    else:
-      raise ValueError("Your Logic needs to return dictionary")
+    # import numpy as np
+    # model_inputs = self._logic(input_object)
+    # input_names = [i.name for i in self._sess.get_inputs()]
+    # output_names = [o.name for o in self._sess.get_outputs()]
+    # if isinstance(model_inputs,dict):
+    #   tensor_dict = model_inputs
+    #   if isinstance(list(model_inputs.values())[0],SklearnInput):
+    #     tensor_dict = {list(model_inputs.keys())[0]:list(model_inputs.values())[0].inputs}
+    #   model_inputs = {name: tensor for name, tensor in zip(input_names, tuple(tensor_dict.values()))}
+    # else:
+    #   raise ValueError("Your Logic needs to return dictionary")
 
-    # conversion to proper arrays -> if can be numpy-ed and float32
-    for key, value in model_inputs.items():
-      if hasattr(value, "numpy"):
-        value = value.numpy()
-      if value.dtype in (np.float64, np.float32, np.float16):
-        value = value.astype(np.float32)
-      elif value.dtype in (np.int64, np.int32, np.int16, np.int8, np.int64):
-        value = value.astype(np.int32)
-      model_inputs[key] = value
+    # # conversion to proper arrays -> if can be numpy-ed and float32
+    # for key, value in model_inputs.items():
+    #   if hasattr(value, "numpy"):
+    #     value = value.numpy()
+    #   if value.dtype in (np.float64, np.float32, np.float16):
+    #     value = value.astype(np.float32)
+    #   elif value.dtype in (np.int64, np.int32, np.int16, np.int8, np.int64):
+    #     value = value.astype(np.int32)
+    #   model_inputs[key] = value
 
-    res = self._sess.run(output_names=output_names, input_feed=model_inputs)
+    # res = self._sess.run(output_names=output_names, input_feed=model_inputs)
+
+    res = self._sess.run(**input_object)
     return ModelOutput(
       inputs = input_object,
       outputs = res,
     )
 
-  def _serialise_logic(self, fpath):
-    logger.debug(f"Saving logic to {fpath}")
-    with open(fpath, "wb") as f:
-      dill.dump(self._logic, f)
-
-  def export(*_, **__):
-    raise InvalidProtocolError("ONNXRtModel cannot be exported")
-
   @staticmethod
-  def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
+  def deserialise(model_meta: ModelSpec) -> Any:
+    import onnx
     logger.debug(f"Deserialising ONNX model from {model_meta.export_path}")
 
-    kwargs = model_meta.load_kwargs
-
     if model_meta.export_type == "onnx":
-      if "logic_path" in kwargs:
-        lp = kwargs.pop("logic_path")
-      else:
-        lp = kwargs.pop("method_path")
-      logger.debug(f"Loading logic from {lp}")
-      with open(lp, "rb") as f:
-        logic = dill.load(f)
-
-      import onnx
       model = onnx.load(model_meta.load_kwargs["model"])
-      return model, logic
+      return model
     else:
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
@@ -537,70 +473,55 @@ class ONNXRtModel(FrameworkAgnosticProtocol):
 # means that a dedicate Input DataModel is required.
 ################################################################################
 
-# TODO:@yashbonde
-class SklearnInput(DBase):
-  __slots__ = [
-    "inputs", # :Any
-    "method", # :str
-    "kwargs", # :Dict
-  ]
-
 class SklearnModel(FrameworkAgnosticProtocol):
-  @isthere("sklearn", "numpy", soft = False)
-  def __init__(self, m1, m2):
+  @U.isthere("sklearn", "numpy", soft = False)
+  def __init__(self, m1):
+    logger.debug(f"Trying to load as Sklearn")
     if not "sklearn" in str(type(m1)):
       raise InvalidProtocolError
-    if m2 != None and not callable(m2):
-      # this is the processing logic for the incoming data this has to be a some kind of callable,
-      # because user can define whatever they want and it removes any onus on NBX to ensure that
-      # processing works, halting problem is no joke!
-      InvalidProtocolError(f"Second input must be a callable, got: {type(m2)}")
 
     self._model = m1
-    self._logic = m2 # this is not used anywhere
 
-  def forward(self, input_object: SklearnInput) -> ModelOutput:
+    self.exporters = {
+      "pkl": U.to_pickle
+    }
+    self.loaders = {
+      "pkl": U.from_pickle
+    }
+
+  def forward(self, input_object: Dict) -> ModelOutput:
+    """Sklearn covers a far wider range of models and is therefore more complicated to cover.
+    For now the input is expected to be a Dict that has "inputs" dict that will be fed to the model.
+    And it has "method" key that will be called upon the model i.e. whether user wants
+    ``predict`` (default) or ``predict_proba`` is left upto the user.
+    """
+
+    # if "sklearn.neighbors.NearestNeighbors" in str(type(self._model)):
+    #   method = getattr(self._model, "kneighbors") if method == None else getattr(self._model, method)
+    # elif "sklearn.cluster" in str(type(self._model)):
+    #   if any(
+    #     x in str(type(self._model)) for x in ["AgglomerativeClustering", "DBSCAN", "OPTICS", "SpectralClustering"]
+    #   ):
+    #     method = getattr(self._model, "fit_predict")
+    # else:
+    #   try:
+    #     method = getattr(self._model, "predict") if method == None else getattr(self._model, method)
+    #   except Exception as e:
+    #     logger.debug(f"[ERROR] Model Prediction Function is not yet registered {e}")
+
     model_input = input_object.get("inputs", None)
-    method = input_object.get("method", None)
-    extra_args = input_object.get("kwargs", {})
+    method = input_object.get("method", "predict")
+    method_fn = getattr(self._model, method, None)
+    if method_fn == None:
+      logger.error(f"Method {method} not found in SklearModel")
+      raise ValueError(f"Method {method} not found in model")
+    out = method(**model_input)
 
-    if "sklearn.neighbors.NearestNeighbors" in str(type(self._model)):
-      method = getattr(self._model, "kneighbors") if method == None else getattr(self._model, method)
-      out = method(model_input, **extra_args)
-    elif "sklearn.cluster" in str(type(self._model)):
-      if any(
-        x in str(type(self._model)) for x in ["AgglomerativeClustering", "DBSCAN", "OPTICS", "SpectralClustering"]
-      ):
-        method = getattr(self._model, "fit_predict")
-        out = method(model_input)
-    else:
-      try:
-        method = getattr(self._model, "predict") if method == None else getattr(self._model, method)
-        out = method(model_input)
-      except Exception as e:
-        logger.debug(f"[ERROR] Model Prediction Function is not yet registered {e}")
+    return ModelOutput(inputs = model_input, outputs = out,)
 
-    return ModelOutput(
-      inputs = model_input,
-      outputs = out,
-    )
-
-  def _serialise_method(self, fpath):
-    logger.info(f"Saving logic to {fpath}")
-    with open(fpath, "wb") as f:
-      dill.dump(self._logic, f)
-
-  @isthere("skl2onnx", soft = False)
-  def export_to_onnx(
-    self,
-    input_object,
-    export_model_path,
-    method_file_name="logic.dill",
-    model_file_name="model.onnx",
-    opset_version=None,
-  ) -> ModelSpec:
-    import sklearn
-    from skl2onnx import to_onnx
+  @U.isthere("skl2onnx", soft = False)
+  def export_to_onnx(self, input_object, export_model_path, model_file_name="model.onnx", opset_version=None,) -> ModelSpec:
+    import skl2onnx
     import skl2onnx.common.data_types as dt
 
     __NP_DTYPE_TO_SKL_DTYPE = {
@@ -621,11 +542,12 @@ class SklearnModel(FrameworkAgnosticProtocol):
       "uint8": dt.UInt8TensorType,
     }
 
-    self._serialise_method(join(export_model_path, method_file_name))
-
     export_path = join(export_model_path, model_file_name)
-    method = input_object.get("method", None)
-    method = getattr(self._model, "predict") if method == None else getattr(self._model, method)
+    method = input_object.get("method", "predict")
+    method = getattr(self._model, method, None)
+    if method == None:
+      logger.error(f"Method {method} not found in SklearModel")
+      raise ValueError(f"Method {method} not found in model")
     iod = get_io_dict(input_object, method, self.forward)
 
     # the args need to be converted to proper formatted data types
@@ -634,14 +556,13 @@ class SklearnModel(FrameworkAgnosticProtocol):
 
     # Case for input object with single tensor
     inputs=iod["inputs"]
-    if type(inputs['name'])==str:
+    if isinstance(inputs['name'], str):
       input_names.append(inputs["name"])
       input_dtypes.append(inputs["dtype"])
       tensorShape = list()
       for i in inputs["tensorShape"]["dim"]:
         tensorShape.append(i["size"])
       input_shapes.append(tensorShape)
-
     else:
       for key in inputs:
         input_names.append(inputs[key]['name'])
@@ -654,14 +575,12 @@ class SklearnModel(FrameworkAgnosticProtocol):
     for name, shape, dtype in zip(input_names, input_shapes, input_dtypes):
       shape[0] = None # batching requires the first dimension to be None
       initial_types.append((name, __NP_DTYPE_TO_SKL_DTYPE[str(dtype)](shape)))
-    onx = to_onnx(self._model, initial_types=initial_types, target_opset=opset_version)
+    onx_model = skl2onnx.to_onnx(self._model, initial_types=initial_types, target_opset=opset_version)
 
     with open(export_path, "wb") as f:
-      f.write(onx.SerializeToString())
+      f.write(onx_model.SerializeToString())
 
     return ModelSpec(
-      src_framework="sklearn",
-      src_framework_version=sklearn.__version__,
       export_type="onnx",
       export_path=export_path,
       load_class=self.__class__.__name__,
@@ -669,14 +588,11 @@ class SklearnModel(FrameworkAgnosticProtocol):
       load_kwargs={
         "model": f"./{model_file_name}",
         "map_location": "cpu",
-        "method_path": f"./{method_file_name}",
       },
       io_dict=iod,
     )
 
-  def export_to_pkl(self, input_object, export_model_path, method_file_name = "method.dill", model_file_name = "model.pkl"):
-    import sklearn
-    self._serialise_method(join(export_model_path, method_file_name))
+  def export_to_pkl(self, input_object, export_model_path, model_file_name = "model.pkl"):
     export_path = join(export_model_path, model_file_name)
     with open(export_path, "wb") as f:
       dill.dump(self._model, f)
@@ -686,36 +602,33 @@ class SklearnModel(FrameworkAgnosticProtocol):
     iod = get_io_dict(input_object, method, self.forward)
 
     return ModelSpec(
-      src_framework = "SkLearn",
-      src_framework_version = sklearn.__version__,
       export_type = "pkl",
-      export_path = export_path,
-      load_class = self.__class__.__name__,
       load_kwargs = {
         "model": f"./{model_file_name}",
         "map_location": "cpu",
-        "method_path": f"./{method_file_name}"
       },
       io_dict = iod,
     )
 
   def export(self, format, input_object, export_model_path, **kwargs) -> ModelSpec:
     if format == "onnx":
-      return self.export_to_onnx(input_object, export_model_path=export_model_path,**kwargs)
+      model_spec = self.export_to_onnx(input_object, export_model_path=export_model_path,**kwargs)
     elif format == "pkl":
-      return self.export_to_pkl(input_object, export_model_path=export_model_path, **kwargs)
+      model_spec = self.export_to_pkl(input_object, export_model_path=export_model_path, **kwargs)
     else:
       raise InvalidProtocolError(f"Unsupported export format for torch Module: {format}")
 
+    import sklearn
+    model_spec.src_framework = "sklearn"
+    model_spec.src_framework_version = sklearn.__version__
+
+    return model_spec
+
   @staticmethod
   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
-    logger.info(f"Deserialising SkLearn model from {model_meta.export_path}")
+    logger.info(f"Deserialising SkLearn model")
     kwargs = model_meta.load_kwargs
     if model_meta.export_type == "pkl":
-      lp = kwargs["method_path"]
-      logger.info(f"Loading method from {lp}")
-      with open(lp, "rb") as f:
-        logic = dill.load(f)
       with open(kwargs["model"], "rb") as f:
         model = dill.load(f)
 
@@ -723,6 +636,7 @@ class SklearnModel(FrameworkAgnosticProtocol):
       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
     return model, logic
+
 
 ################################################################################
 # Tensorflow
@@ -732,20 +646,14 @@ class SklearnModel(FrameworkAgnosticProtocol):
 ################################################################################
 
 class TensorflowModel(FrameworkAgnosticProtocol):
-  @isthere("tensorflow", soft = False)
-  def __init__(self, m0, m1):
+  @U.isthere("tensorflow", soft = False)
+  def __init__(self, m0):
     import tensorflow as tf
+    logger.debug(f"Trying to load Tensorflow model")
     if not isinstance(m0, (tf.keras.Model, tf.Module)):
       raise InvalidProtocolError(f"First input must be a tensorflow module or Keras model, got: {type(m0)}")
 
-    if m1!= None and not callable(m1):
-      # this is the processing logic for the incoming data this has to be a some kind of callable,
-      # because user can define whatever they want and it removes any onus on NBX to ensure that
-      # processing works, halting problem is no joke!
-      raise ValueError(f"Second input for torch model must be a callable, got: {type(m1)}")
-
     self._model = m0
-    self._logic = m1 if m1 else lambda x: x
 
   def forward(self, input_object: Any) -> ModelOutput:
     model_inputs = self._logic(input_object)
@@ -760,7 +668,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     with open(fpath, "wb") as f:
       dill.dump(self._logic, f)
 
-  @isthere("tf2onnx", soft = False)
+  @U.isthere("tf2onnx", soft = False)
   def export_to_onnx(
     self,
     input_object,
@@ -768,7 +676,7 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     logic_file_name="logic.dill",
     model_file_name="model.onnx",
     opset_version=None,
-) -> ModelSpec:
+  ) -> ModelSpec:
     import tf2onnx
     import tensorflow as tf
 
@@ -885,7 +793,6 @@ class TensorflowModel(FrameworkAgnosticProtocol):
     else:
       raise InvalidProtocolError(f"Unsupported h5 export for tensorflow model: {type(self._model)}")
 
-
   def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
     if format == "onnx":
       return self.export_to_onnx(
@@ -933,15 +840,17 @@ class TensorflowModel(FrameworkAgnosticProtocol):
 ################################################################################
 # Flax
 # ===
-# Flax is built by Google, it is a neural network library and ecosystem for JAX designed for flexibility. Read more here:
-# https://github.com/google/flax
+# Flax is built by Google, it is a neural network library and ecosystem for JAX
+# designed for flexibility. Read more here: https://github.com/google/flax
 ################################################################################
 
 class FlaxModel(FrameworkAgnosticProtocol):
-  @isthere("flax", soft = False)
-  def __init__(self, m0, m1):
+  @U.isthere("flax", soft = False)
+  def __init__(self, m0):
     import flax
     from flax import linen as nn
+
+    logger.debug("Trying to load Flax model")
 
     if not isinstance(m0, nn.Module):
       raise InvalidProtocolError(f"First input must be a Flax module, got: {type(m0)}")
@@ -953,7 +862,6 @@ class FlaxModel(FrameworkAgnosticProtocol):
 
     self._model = m0
     self._params = m1
-
 
   def forward(self, input_object: Any) -> ModelOutput:
     model_inputs = input_object

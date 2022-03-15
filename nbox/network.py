@@ -17,7 +17,7 @@ class NBXAPIError(Exception):
 
 def deploy_model(
   export_model_path,
-  nbox_meta,
+  model_spec,
   wait_for_deployment=False,
 ):
   """One-Click-Deploy method v3 that takes in a .nbox file and deploys it to the nbox server.
