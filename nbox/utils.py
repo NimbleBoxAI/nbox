@@ -7,8 +7,9 @@
 
 import os
 import io
+import sys
+import dill
 import logging
-import logging.config
 import hashlib
 import requests
 import tempfile
@@ -46,6 +47,18 @@ logger = get_logger() # package wide logger
 
 # lazy_loading/
 
+class Fn:
+  # TODO: @yashbonde build this, any arbitrary function
+  def __init__(self, fn, requirements = None):
+    self.fn = fn
+    self.requirements = requirements
+
+  def __repr__(self) -> str:
+    return f"<Fn {self.fn.__module__}.{self.fn.__qualname__}>"
+
+  def __call__(self, *args, **kwargs):
+    return self.fn(*args, **kwargs)
+
 def isthere(*packages, soft = True):
   """Checks all the packages
 
@@ -53,12 +66,27 @@ def isthere(*packages, soft = True):
       soft (bool, optional): If ``False`` raises ``ImportError``. Defaults to True.
   """
   def wrapper(fn):
+    _fn_ = Fn(fn, packages)
     def _fn(*args, **kwargs):
       # since we are lazy evaluating this thing, we are checking when the function
       # is actually called. This allows checks not to happen during __init__.
       for package in packages:
+        # split the package name to get version number as well, not all will have package
+        # version so continue those that have a version
+        package = package.split("==")
+        if len(package) == 1:
+          package_name, package_version = package[0], None
+        else:
+          package_name, package_version = package
+        if package_name in sys.modules:
+          # trying to install these using pip will cause issues, so avoid that
+          continue
+
         try:
-          __import__(package)
+          module = __import__(package_name)
+          if hasattr(module, "__version__") and package_version:
+            if module.__version__ != package_version:
+              raise ImportError(f"{package_name} version mismatch")
         except ImportError:
           if not soft:
             raise ImportError(f"{package} is not installed, but is required by {fn}")
@@ -66,17 +94,10 @@ def isthere(*packages, soft = True):
           logger.warning(
             f"{package} is not installed, but is required by {fn.__module__}, some functionality may not work"
           )
-      return fn(*args, **kwargs)
+      return _fn_(*args, **kwargs)
     return _fn
   return wrapper
 
-def _isthere(*packages):
-  for package in packages:
-    try:
-      __import__(package)
-    except Exception:
-      return False
-  return True
 
 # /lazy_loading
 
@@ -122,12 +143,10 @@ def join(x, *args):
   return os.path.join(x, *args)
 
 def to_pickle(obj, path):
-  import dill
   with open(path, "wb") as f:
     dill.dump(obj, f)
 
 def from_pickle(path):
-  import dill
   with open(path, "rb") as f:
     return dill.load(f)
 
@@ -162,6 +181,10 @@ def get_image(file_path_or_url):
 def convert_to_list(x):
   # recursively convert tensors -> list
   import torch
+  import numpy as np
+
+  x = x.outputs.detach()
+
   if isinstance(x, list):
     return x
   if isinstance(x, dict):

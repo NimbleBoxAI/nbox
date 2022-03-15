@@ -23,26 +23,24 @@ Documentation
 
 from .on_ml import  *
 from .on_operators import *
+from .model_spec_pb2 import *
 
-ALL_PROTOCOLS = [NBXModel, TensorflowModel, TorchModel, SklearnModel, ONNXRtModel]
+try:
+  from .ml import *
+except ImportError:
+  from .autogen import compile
+  compile()
+  from .ml import *
 
-def register_new_on_ml_protocol(proto: FrameworkAgnosticProtocol):
-  ALL_PROTOCOLS.append(proto)
 
+def get_model_functions(py_model):
+  try:
+    __import__(Framework_torch._load_framework)
+    if Framework_torch._conditional(py_model):
+      methods = Framework_torch._METHODS
+      return methods
+  except ImportError:
+    pass
+  
+  return False
 
-def get_model_mixin(i0, i1 = None, deserialise = False):
-  all_e = []
-  for m in ALL_PROTOCOLS:
-
-    try:
-      # if this is the correct method 
-      if not deserialise:
-        return m(i0, i1)
-      else:
-        return m.deserialise(i0)
-    except InvalidProtocolError as e:
-      all_e.append(f"--> ERROR: {m.__class__.__name__}: {e}")
-    except NotImplementedError:
-      pass
-
-  raise InvalidProtocolError(f"Unkown inputs [{deserialise}]: {type(i0)} {type(i1)}!" + "\n".join(all_e))

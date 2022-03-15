@@ -115,7 +115,7 @@ PRETRAINED_MODELS = {
 # ---- load function has to manage everything and return Model object properly initialised
 
 
-def load(model, pre_fn = None, verbose=False, **loader_kwargs) -> Model:
+def load(model, pre = None, post = None, verbose=False, **loader_kwargs) -> Model:
   """This function loads the nbox.Model object from the pretrained models index.
 
   Args:
@@ -156,9 +156,5 @@ def load(model, pre_fn = None, verbose=False, **loader_kwargs) -> Model:
 
   # now just load the underlying graph and the model and off you go
   model = model_fn(model=src_key, model_instr=model_instr, **loader_kwargs)
-  out = Model(
-    m0 = model,
-    m1 = pre_fn,
-    verbose=verbose,
-  )
+  out = Model(model, pre, post, verbose=verbose)
   return out

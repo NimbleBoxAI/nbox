@@ -31,6 +31,8 @@ class StateDictModel(DBase):
 
 class Tracer:
   def __init__(self, tracer = None):
+    self.job_id = os.getenv("JOB_ID", None)
+    self.job_id = self.job_id.upper() if self.job_id else None
     if tracer == "stub":
       # when job is running on NBX, gRPC stubs are used
       if nbox_grpc_stub == None:
@@ -38,20 +40,23 @@ class Tracer:
     self.tracer = tracer
 
   def __call__(self, dag_update):
-    if self._trace_obj == "stub":
+    if self.tracer == "stub":
       from grpc import RpcError
       from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest
       from ..hyperloop.job_pb2 import NBXAuthInfo
 
       dag = dag_update["dag"]
-
+      print(dag)
       try:
         response = nbox_grpc_stub.UpdateRun(
-          UpdateRunRequest(job=Job(id="jt3earah", dag=None, status="COMPLETED", auth_info=NBXAuthInfo(workspace_id="zcxdpqlk")))
+          UpdateRunRequest(job=Job(
+            id=self.job_id, dag=dag, auth_info=NBXAuthInfo(workspace_id="zcxdpqlk")
+          ))
         )
       except RpcError as e:
         logger.error(f"Could not update job {self.id}")
         raise e
+      return response
     else:
       logger.info(dag_update)
 
@@ -62,7 +67,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
-    self._trace_object = Tracer()
+    self._tracer = Tracer()
 
   # mixin/
 
@@ -258,7 +263,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     if self.node_info != None:
       self.node_info["run_status"]["start"] = datetime.now().isoformat()
       self.node_info["run_status"]["inputs"] = {k: str(type(v)) for k, v in input_dict.items()}
-      self._trace_object(self.node_info)
+      self._tracer(self.node_info)
 
     # ----input
     out = self.forward(**input_dict) # pass this through the user defined forward()
@@ -276,7 +281,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
         outputs = {"out_0": type(out)}
       self.node_info["run_status"]["end"] = datetime.now().isoformat()
       self.node_info["run_status"]["outputs"] = outputs
-      self._trace_object(self.node_info)
+      self._tracer(self.node_info)
 
     return out
 
@@ -340,9 +345,9 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     except:
       logger.error("Cannot perform pre-building, only live updates will be available!")
       logger.debug("Please raise an issue on chat to get this fixed")
-      dag = {"flowchart": None, "symbols": None}
+      dag = {"flowchart": {}, "symbols": {}}
 
-    for n in dag["flowchart"]["nodes"]:
+    for _, n in dag["flowchart"]["nodes"].items():
       name = n["name"]
       if name.startswith("self."):
         name = name[5:]
@@ -364,7 +369,17 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     }
 
     if _return_data:
-      return data
+      # pp(dag, indent=2)
+      # _flow = Node()
+      # node = dag["flowchart"]["nodes"][next(iter(dag["flowchart"]["nodes"]))]
+      # pp(node)
+
+      # _flow = Flowchart.Edge()
+      # edge = dag["flowchart"]["edges"][next(iter(dag["flowchart"]["edges"]))]
+      # dag = ParseDict(edge, _flow, ignore_unknown_fields=True)
+
+      flow_chart = Flowchart()
+      return _flow
 
     with open(U.join(init_folder, "meta.json"), "w") as f:
       f.write(dumps(data))
