@@ -58,38 +58,3 @@ nbox_ws_v1 = create_webserver_subway("v1")
 
 # add code here to warn user of nbox deprecation -> not sure how to implement this yet
 # raise_old_version_warning()
-
-
-# I am trying to write code that can be used to create permutations
-# ex.:
-# time < [hourly, daily, weekly, monthly, yearly]
-# client < [users, time]
-# _internal < [workspace, user, time]
-# projects x _internal
-
-# total_projects
-# total_deployments
-# member_usage
-# project_backup
-# runtime
-# storage_utilisation_of_project
-# weekly_breakdown_of_runtime
-# utilisation_daily_weekly
-# most_used_hw_config
-# api_calls_of_deployments
-# deployment_by_online_hours
-# utilisation_daily_weekly
-
-# what are all the data points that are being generated?
-# Build:
-#   - 
-
-# worspace, users and other such are "by" variables which are used to group the data
-# in general all the business related things fall in this category
-# while all the things from engineering side are the actual data:
-#         business: by user, workspace, project
-#      engineering: build, deploy (serve), jobs
-#            build: disk_space, cpu, memory, network, gpu
-#   deploy (serve): model, model_properties, networking, compute (flops), memory (storage)
-#             jobs: operators
-#

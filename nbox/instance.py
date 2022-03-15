@@ -19,8 +19,8 @@ from tempfile import gettempdir
 from requests.sessions import Session
 
 from .subway import SpecSubway, Subway, TIMEOUT_CALLS
-from .utils import NBOX_HOME_DIR, logger
 from . import utils as U
+from .utils import NBOX_HOME_DIR, logger
 from .init import nbox_session, nbox_ws_v1
 from .auth import secret
 
@@ -33,21 +33,22 @@ from .auth import secret
 ################################################################################
 
 def print_status(workspace_id: str = None):
-  # TODO: @yashbonde replace current urls with Sub30 class
-  # if workspace_id == None:
-  #   data = nbox_ws_v1.user.projects()
-  # else:
-  #   data = nbox_ws_v1.workspace.u(workspace_id).projects()
+  if workspace_id == None:
+    stub_projects = nbox_ws_v1.user.projects
+  else:
+    stub_projects = nbox_ws_v1.workspace.u(workspace_id).projects
 
-  url = secret.get("nbx_url")
-  r = nbox_session.get(f"{url}/api/instance/get_user_instances")
-  r.raise_for_status()
-  message = r.json()["msg"]
-  if message != "success":
-    raise Exception(message)
+  # url = secret.get("nbx_url")
+  # r = nbox_session.get(f"{url}/api/instance/get_user_instances")
+  # r.raise_for_status()
+  # message = r.json()["msg"]
+  # if message != "success":
+  #   raise Exception(message)
 
-  money = r.json()["nbBucks"]
-  data = [{k: x[k] for k in Instance.useful_keys} for x in r.json()["data"]]
+  data = stub_projects()["data"]
+
+  money = data["nbBucks"]
+  data = [{k: x[k] for k in Instance.useful_keys} for x in data["data"]]
 
   logger.info(f"Total NimbleBox.ai credits left: {money}")
   data_table = [[x[k] for k in Instance.useful_keys] for x in data]

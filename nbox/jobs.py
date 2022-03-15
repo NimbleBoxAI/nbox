@@ -15,6 +15,14 @@ from .init import nbox_grpc_stub
 from .network import Cron
 from .auth import secret
 
+from google.protobuf.field_mask_pb2 import FieldMask
+from google.protobuf.json_format import MessageToDict
+
+from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
+from .hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, UpdateJobRequest
+from .hyperloop.nbox_ws_pb2 import JobInfo
+
+
 ################################################################################
 # NBX-Jobs Functions
 # ==================
@@ -86,12 +94,7 @@ def open_home():
   webbrowser.open(secret.get("nbx_url")+"/"+"jobs")
 
 def get_job_list(workspace_id: str = None):
-  from .hyperloop.job_pb2 import NBXAuthInfo
-  from .hyperloop.nbox_ws_pb2 import ListJobsRequest
-  from google.protobuf.json_format import MessageToDict
-  
   auth_info = NBXAuthInfo(workspace_id = workspace_id)
-  
   try:
     out = nbox_grpc_stub.ListJobs(ListJobsRequest(auth_info = auth_info))
   except grpc.RpcError as e:
@@ -110,9 +113,13 @@ def get_job_list(workspace_id: str = None):
 ################################################################################
 
 class Job:
-  def __init__(self, id, workspace_id =None):
-    from .hyperloop.job_pb2 import NBXAuthInfo
+  def __init__(self, id, workspace_id = None):
+    """Python wrapper for NBX-Jobs gRPC API
 
+    Args:
+        id (str): job ID
+        workspace_id (str, optional): If None personal workspace is used. Defaults to None.
+    """
     self.id = id
     self.workspace_id = workspace_id
     self.auth_info = NBXAuthInfo(workspace_id = self.workspace_id)
@@ -129,9 +136,6 @@ class Job:
 
   def stream_logs(self, f = sys.stdout):
     # this function will stream the logs of the job in anything that can be written to
-
-    from .hyperloop.nbox_ws_pb2 import JobLogsRequest
-    
     logger.info(f"Streaming logs of job {self.id}")
     try:
       log_iter = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = self._this_job))
@@ -146,9 +150,6 @@ class Job:
         f.flush()
 
   def delete(self):
-
-    from .hyperloop.nbox_ws_pb2 import JobInfo
-    
     logger.info(f"Deleting job {self.id}")
     try:
       nbox_grpc_stub.DeleteJob(JobInfo(job = self._this_job,))
@@ -158,10 +159,6 @@ class Job:
       raise e
 
   def update(self):
-
-    from .hyperloop.nbox_ws_pb2 import JobInfo
-    from .hyperloop.job_pb2 import Job as JobProto
-
     logger.info("Updating job info")
     try:
       job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info = self.auth_info)))
@@ -175,9 +172,6 @@ class Job:
     self._this_job.auth_info.CopyFrom(self.auth_info)
 
   def trigger(self):
-
-    from nbox.hyperloop.nbox_ws_pb2 import JobInfo
-
     logger.info(f"Triggering job {self.id}")
     try:
       nbox_grpc_stub.TriggerJob(JobInfo(job=self._this_job))
@@ -186,12 +180,7 @@ class Job:
       logger.error("Error:", e.details())
       raise e
   
-  def pause(self):
-
-    from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
-    from google.protobuf.field_mask_pb2 import FieldMask
-    from .hyperloop.job_pb2 import Job as JobProto
-    
+  def pause(self):    
     logger.info(f"Pausing job {self.id}")
     try:
       job: JobProto = self._this_job
@@ -206,11 +195,6 @@ class Job:
     logger.info(f"Paused job {self.id}")
   
   def resume(self):
-
-    from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
-    from google.protobuf.field_mask_pb2 import FieldMask
-    from .hyperloop.job_pb2 import Job as JobProto
-    
     logger.info(f"Resuming job {self.id}")
     try:
       job: JobProto = self._this_job
@@ -223,5 +207,3 @@ class Job:
       logger.error("Error:", e.details())
       raise e
     logger.info(f"Resumed job {self.id}")
-    
-

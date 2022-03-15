@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 
 from google.protobuf.json_format import MessageToJson
 from nbox.framework.model_spec_pb2 import ModelSpec
+from nbox.subway import Sub30
 
 from .utils import logger
 from . import utils
@@ -20,7 +21,7 @@ class NBXAPIError(Exception):
 
 def deploy_model(
   export_model_path,
-  ws_stub,
+  ws_stub: Sub30,
   model_spec: ModelSpec,
   wait_for_deployment=False,
 ):
@@ -67,7 +68,7 @@ def deploy_model(
   # get bucket URL and upload the data
 
   # r = requests.get(
-  #   url=f"{URL}/api/model/get_upload_url",
+  #   url=f"{ws_stub._url}/api/model/get_upload_url",
   #   params={
   #   },
   #   headers={"Authorization": f"Bearer {access_token}"},

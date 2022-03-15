@@ -183,7 +183,7 @@ class Model:
     model_spec.deploy.CopyFrom(Deployment(
       id = deployment_id_or_name,
       workspace_id = workspace_id,
-      type = Deployment.DeploymentTypes.NBOX_SERVING
+      type = Deployment.DeploymentTypes.NBOX_SERVING # ignored for now
     ))
 
     # pack everything nicely
