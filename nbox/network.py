@@ -8,11 +8,13 @@ from pprint import pprint as pp
 from datetime import datetime, timedelta
 
 from google.protobuf.json_format import MessageToJson
-from nbox.framework.model_spec_pb2 import ModelSpec
-from nbox.subway import Sub30
+from google.protobuf.timestamp_pb2 import Timestamp
 
+from .framework.model_spec_pb2 import ModelSpec
+from .subway import Sub30
 from .utils import logger
-from . import utils
+from . import utils as U
+from .hyperloop.job_pb2 import Job as JobProto
 
 
 class NBXAPIError(Exception):
@@ -57,7 +59,7 @@ def deploy_model(
 
   if not deployment_id and not deployment_name:
     logger.debug("Deployment ID not passed will create a new deployment with name >>")
-    deployment_name = utils.get_random_name().replace("-", "_")
+    deployment_name = U.get_random_name().replace("-", "_")
 
   file_size = os.stat(export_model_path).st_size // (1024 ** 2) # because in MB
   logger.debug(
@@ -311,11 +313,8 @@ class Cron:
       raise ValueError(f"Invalid months: {diff}")
     self.months = ",".join([self._months[m] for m in months]) if months else "*"
 
-    starts = starts or datetime.utcnow()
-    self.starts = starts.isoformat()
-
-    ends = ends or datetime.utcnow() + timedelta(days = 7)
-    self.ends = ends.isoformat()
+    self.starts = starts or datetime.utcnow()
+    self.ends = ends or datetime.utcnow() + timedelta(days = 7)
 
   @property
   def cron(self):
@@ -331,6 +330,13 @@ class Cron:
       "starts": self.starts,
       "ends": self.ends,
     }
+
+  def get_message(self) -> JobProto.Schedule:
+    return JobProto.Schedule(
+      start = Timestamp(seconds=int(self.starts.timestamp()), nanos=0),
+      end = Timestamp(seconds=int(self.ends.timestamp()), nanos=0),
+      cron = self.cron
+    )
 
   def __repr__(self):
     return str(self.get_dict())

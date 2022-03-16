@@ -94,14 +94,13 @@ class Instance():
   status = staticmethod(print_status)
 
   @classmethod
-  def new(cls, name) -> 'Instance':
-    url = secret.get("nbx_url")
-    r = nbox_session.post(
-      f"{url}/api/instance/create_new_instance_v4",
-      json = {"project_name": name, "project_template": "blank"}
-    )
-    r.raise_for_status() # if its not 200, it's an error
-    return cls(name, url)
+  def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
+    if workspace_id == None:
+      stub_all_projects = nbox_ws_v1.user.projects
+    else:
+      stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
+    out = stub_all_projects(_method = "post", project_name = project_name, storage_limit = storage_limit, project_type = project_type)
+    return cls(project_name, url)
 
   mv = None # atleast registered
 

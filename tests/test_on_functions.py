@@ -1,7 +1,6 @@
 from nbox.framework import on_functions as F
 
-# the function below clearly does not work because of the many different dependencies
-# that are requried
+# the function below clearly does not work because of the many different dependencies that are requried
 def main(
   filepath: str,
   m: int = 64,

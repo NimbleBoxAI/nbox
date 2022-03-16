@@ -1,6 +1,6 @@
 import unittest
 
-from nbox.operators.operator import *
+from nbox.operator import *
 
 # operators/
 

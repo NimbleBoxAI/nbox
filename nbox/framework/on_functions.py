@@ -9,105 +9,9 @@ from typing import Union
 from uuid import uuid4
 
 from ..utils import logger
+from ..hyperloop.dag_pb2 import DAG, Flowchart, Node, Code, Edge, RunStatus
 
 # ==================
-
-# dataclasses are not that good: these classes are for the Op
-
-class DBase:
-  def __init__(self, **kwargs):
-    for k, v in kwargs.items():
-      setattr(self, k, v)
-
-  def get(self, k, v = None):
-    return getattr(self, k, v)
-  
-  def get_dict(self):
-    data = {}
-    for k in self.__slots__:
-      _obj = getattr(self, k, None)
-      if _obj == None:
-        continue
-      if isinstance(_obj, DBase):
-        data[k] = _obj.get_dict()
-      elif _obj != None and isinstance(_obj, (list, tuple)) and len(_obj) and isinstance(_obj[0], DBase):
-        data[k] = [_obj.get_dict() for _obj in _obj]
-      else:
-        data[k] = _obj
-    return data
-
-  def __repr__(self):
-    return str(self.get_dict())
-
-# ================== These classes are the code nodes
-
-from ..hyperloop.dag_pb2 import DAG, Flowchart, Node, NodeInfo, Edge
-
-# class ExpressionNodeInfo(DBase):
-#   __slots__ = [
-#     'name', # :str
-#     'code', # :str (base64)
-#     'nbox_string', # :str
-#     'lineno', # :int
-#     'col_offset', # :int
-#     'end_lineno', # :int
-#     'end_col_offset', # :int
-#     'inputs', # :list[Dict[Any, Any]]
-#     'outputs', # :list[str]
-#   ]
-
-# class IfNodeInfo(DBase):
-#   __slots__ = [
-#     'nbox_string', # :str
-#     'conditions', # :list[ExpressionNodeInfo]
-#     'inputs', # :list[Dict[Any, Any]]
-#     'outputs', # :list[str]
-#   ]
-
-# class ForNodeInfo(DBase):
-#   __slots__ = [
-#     'nbox_string', # :str
-#     'iterable', # :list[str]
-#     'inputs', # :list[Dict[Any, Any]]
-#     'info', # :ExpressionNodeInfo
-#     'code', # :str
-#   ]
-
-# class ReturnNodeInfo(DBase):
-#   __slots__ = [
-#     'nbox_string', # :str
-#   ]
-
-# # ================== These classes create the DAG
-
-# class RunStatus(DBase):
-#   __slots__ = [
-#     'start', # :str
-#     'end', # :str
-#     'inputs', # :Dict
-#     'outputs', # :Dict
-#   ]
-
-# class Node(DBase):
-#   __slots__ = [
-#     'id', # :str
-#     'execution_index', # :int
-#     'name', # :str
-#     'type', # :str: OneOf['op-node', 'if-node']
-#     'info', # :Union[ExpressionNodeInfo, IfNodeInfo]
-#     'operator', # :str
-#     'nbox_string', # :str
-#     'run_status', # :RunStatus
-#   ]
-
-# class Edge(DBase):
-#   __slots__ = [
-#     'id', # :str
-#     'source', # :str
-#     'target', # :str
-#     'type', # :str
-#     'nbox_string', # :str
-#   ]
 
 
 # ==================
@@ -267,8 +171,8 @@ def node_assign_or_expr(node, lines, node_proto: Node) -> Union[Node, None]:
 
   node_proto.MergeFrom(Node(
     name = name,
-    type = Node.NodeTypes.OP,
-    info = NodeInfo(
+    type = Node.NodeType.OP,
+    info = Code(
       name = name,
       nbox_string = nbox_string,
       code = get_code_portion(lines, **node.__dict__),
@@ -334,7 +238,7 @@ def node_if_expr(node: ast.IfExp, lines: list, node_proto: Node) -> Node:
   conditions = []
   for i, c in enumerate(all_conditions):
     box = ends[i]
-    _node = NodeInfo(
+    _node = Code(
       name = f"if-{i}",
       nbox_string = c["condition"],
       lineno = box['lineno'],
@@ -349,8 +253,8 @@ def node_if_expr(node: ast.IfExp, lines: list, node_proto: Node) -> Node:
   # update the node_proto
   node_proto.MergeFrom(Node(
     name = "if",
-    type = Node.NodeTypes.BRANCHING,
-    info = NodeInfo(
+    type = Node.NodeType.BRANCHING,
+    info = Code(
       name = "if",
       nbox_string = "IF: { " + ", ".join(x.nbox_string for x in conditions) + " }",
       lineno = node.lineno,
@@ -376,8 +280,8 @@ def node_for_expr(node: ast.For, lines: list, node_proto: Node) -> Node:
   # update node_proto
   node_proto.MergeFrom(Node(
     name = "for",
-    type = Node.NodeTypes.LOOP,
-    info = NodeInfo(
+    type = Node.NodeType.LOOP,
+    info = Code(
       name = "for",
       code = code_,
       nbox_string = nbox_string,
@@ -398,8 +302,8 @@ def node_return(node: ast.Return, lines, node_proto: Node) -> Node:
     returns = [get_name(node.value)]
   node_proto.MergeFrom(Node(
     name = "return",
-    # type = Node.NodeTypes.RETURN,
-    info = NodeInfo(
+    # type = Node.NodeType.RETURN,
+    info = Code(
       name = "return",
       code = get_code_portion(lines, **node.__dict__),
       nbox_string = nbxl.return_statement(returns),
@@ -459,8 +363,8 @@ def code_node(execution_index, expr, code_lines) -> Node:
     type = "op-node",
     operator = "CodeBlock",
     nbox_string = f"CODE: {str(type(expr))}", # :str
-    run_status = Node.RunStatus(), # no need tp initialise this object
-    info = NodeInfo(
+    run_status = RunStatus(), # no need to initialise this object
+    info = Code(
       name = f"codeblock-{execution_index}", # :str
       code = get_code_portion(code_lines, bs64 = True, **expr.__dict__), # :str (base64)
       nbox_string = None, # :str
@@ -474,7 +378,7 @@ def code_node(execution_index, expr, code_lines) -> Node:
   )
 
 
-def get_nbx_flow(forward):
+def get_nbx_flow(forward) -> DAG:
   """Get NBX flowchart. Read python grammar here:
   https://docs.python.org/3/reference/grammar.html
 
@@ -491,7 +395,6 @@ def get_nbx_flow(forward):
   symbols_to_nodes = {} # this is things that are defined at runtime
 
   try:
-
     for i, expr in enumerate(node.body[0].body):
       # create the empty node that will be used everywhere
       if not type(expr) in type_wise_logic:
@@ -500,7 +403,7 @@ def get_nbx_flow(forward):
         continue
 
       # define an initial proto and then then other functions will fill it up
-      node_proto = Node(id = str(uuid4()), execution_index = i, run_status = Node.RunStatus())
+      node_proto = Node(id = str(uuid4()), execution_index = i)
       output = type_wise_logic[type(expr)](expr, code_lines, node_proto)
       if output is None:
         continue
@@ -521,18 +424,14 @@ def get_nbx_flow(forward):
         id = _id,
         source = op0,
         target = op1,
-        type = "execution-order",
+        type = Edge.EdgeType.EXECUTION_ORDER,
         nbox_string = None
       )
-  except:
-    logger.error("Some error in parsing the job-flow")
+  except Exception as e:
+    logger.error("Error in parsing the job-flow")
+    logger.error(e)
     nodes = {}
     edges = {}
     symbols_to_nodes = {}
 
-  return DAG(
-    flowchart = Flowchart(
-      nodes = nodes, edges = edges
-    ),
-    symbols=symbols_to_nodes
-  )
+  return DAG(flowchart = Flowchart(nodes = nodes, edges = edges), symbols=symbols_to_nodes)

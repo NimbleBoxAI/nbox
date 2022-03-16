@@ -36,7 +36,7 @@ def get_logger():
 
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(logging.Formatter(
-      '[%(asctime)s] [%(levelname)s] %(message)s',
+      '[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s',
       datefmt = "%Y-%m-%dT%H:%M:%S%z"
     ))
     logger.addHandler(logHandler)
@@ -167,6 +167,35 @@ def hash_(item, fn="md5"):
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
 # /misc
+
+# datastore/
+
+class DBase:
+  def __init__(self, **kwargs):
+    for k, v in kwargs.items():
+      setattr(self, k, v)
+
+  def get(self, k, v = None):
+    return getattr(self, k, v)
+  
+  def get_dict(self):
+    data = {}
+    for k in self.__slots__:
+      _obj = getattr(self, k, None)
+      if _obj == None:
+        continue
+      if isinstance(_obj, DBase):
+        data[k] = _obj.get_dict()
+      elif _obj != None and isinstance(_obj, (list, tuple)) and len(_obj) and isinstance(_obj[0], DBase):
+        data[k] = [_obj.get_dict() for _obj in _obj]
+      else:
+        data[k] = _obj
+    return data
+
+  def __repr__(self):
+    return str(self.get_dict())
+
+# /datastore
 
 # model/
 

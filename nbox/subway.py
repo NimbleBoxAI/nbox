@@ -133,8 +133,9 @@ class Sub30:
             json[p] = kwargs[p]
           else:
             if not p in kwargs and not "default" in schema_ref["properties"][p]:
-              assert False, f"{p} is not provided"
-            json[p] = kwargs[p]
+              json[p] = None
+            else:
+              json[p] = kwargs[p]
       # elif "plain/text" in content_type:
 
     # call and return

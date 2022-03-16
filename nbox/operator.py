@@ -6,57 +6,29 @@ import os
 import json
 import zipfile
 from grpc import RpcError
+from hashlib import sha256
 from functools import partial
 from typing import Callable, Union
 from collections import OrderedDict
 from tempfile import gettempdir, mkdtemp
-from datetime import datetime, timedelta
+from datetime import datetime
+
+from google.protobuf.json_format import MessageToJson
+from google.protobuf.timestamp_pb2 import Timestamp
 
 
-from ..network import deploy_job, Cron
-from .. import utils as U
-from ..utils import logger
-from ..subway import Sub30
-from ..framework import AirflowMixin, PrefectMixin, LuigiMixin
-from ..framework.on_functions import get_nbx_flow, DBase
-from ..init import nbox_grpc_stub, nbox_ws_v1
-from ..jobs import Job
-from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest
-from ..hyperloop.job_pb2 import NBXAuthInfo
-
-
-class StateDictModel(DBase):
-  __slots__ = [
-    "state",   # :str
-    "data",    # :dict
-    "inputs",  # :dict
-    "outputs", # :dict
-  ]
-
-
-class Tracer:
-  def __init__(self, tracer = None):
-    self.job_id = os.getenv("JOB_ID", None)
-    self.workspace_id = os.getenv("WORKSPACE_ID", None)
-    self.job_id = self.job_id.upper() if self.job_id else None
-    if tracer == "stub":
-      # when job is running on NBX, gRPC stubs are used
-      self.auth_info = NBXAuthInfo(workspace_id=self.workspace_id)
-    self.tracer = tracer
-
-  def __call__(self, dag_update):
-    if self.tracer == "stub":
-      dag = dag_update["dag"]
-      try:
-        nbox_grpc_stub.UpdateRun(UpdateRunRequest(
-          job=Job(id=self.job_id, dag=dag, auth_info=self.auth_info
-        )))
-      except RpcError as e:
-        logger.error(f"Could not update job {self.id}")
-        raise e
-    else:
-      logger.info(dag_update)
-
+from . import utils as U
+from .utils import logger
+from .init import nbox_grpc_stub
+from .jobs import Job
+from .subway import Sub30
+from .network import deploy_job, Cron
+from .framework import AirflowMixin, PrefectMixin, LuigiMixin
+from .framework.on_functions import get_nbx_flow
+from .hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from .hyperloop.dag_pb2 import DAG, Node, RunStatus
+from .lib.tracer import Tracer
 
 class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   _version: int = 1 # always try to keep this an i32
@@ -81,7 +53,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   # PrefectMixin.to_prefect_flow()
   # PrefectMixin.from_prefect_task()
   # PrefectMixin.to_prefect_task()
-  
+
   # LuigiMixin methods
   # -----------------
   # LuigiMixin.from_luigi_flow()
@@ -167,8 +139,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   def children(self):
     return self._operators.values()
 
-  # user can manually define inputs if they want, avoid this user if you don't know
-  # how this system works
+  # user can manually define inputs if they want, avoid this user if you don't know how this system works
+
   _inputs = []
   @property
   def inputs(self):
@@ -182,15 +154,6 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
       args += self._inputs
     return args
 
-  @property
-  def state_dict(self) -> StateDictModel:
-    return StateDictModel(
-      state = self.__class__.__name__,
-      data = {},
-      inputs = self.inputs,
-      outputs = self.outputs
-    )
-
   # /properties
 
   # information passing/
@@ -201,19 +164,19 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     for k, v in kwargs.items():
       setattr(self, k, v)
 
-  def thaw(self, flowchart):
-    nodes = flowchart["nodes"]
-    edges = flowchart["edges"]
-    for n in nodes:
-      name = n["name"]
+  def thaw(self, job: JobProto):
+    nodes = job.dag.flowchart.nodes
+    edges = job.dag.flowchart.edges
+    for _id, node in nodes.items():
+      name = node.name
       if name.startswith("self."):
         name = name[5:]
       if hasattr(self, name):
         op: 'Operator' = getattr(self, name)
         op.propagate(
-          node_info = n,
+          node = node,
           source_edges = list(filter(
-            lambda x: x["target"] == n["id"], edges
+            lambda x: edges[x].target == node.id, edges.keys()
           ))
         )
 
@@ -226,7 +189,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     # convienience method to register a forward method
     self.forward = python_callable
 
-  node_info = None
+  node = Node()
   source_edges = None
 
   def __call__(self, *args, **kwargs):
@@ -257,28 +220,34 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
       if key in inputs:
         input_dict[key] = value
 
-    if self.node_info != None:
-      self.node_info["run_status"]["start"] = datetime.now().isoformat()
-      self.node_info["run_status"]["inputs"] = {k: str(type(v)) for k, v in input_dict.items()}
-      self._tracer(self.node_info)
+    logger.debug(f"Calling operator: {self.__class__.__name__}")
+    self.node.run_status.MergeFrom(RunStatus(
+      start = Timestamp(seconds=int(datetime.utcnow().timestamp()), nanos=0),
+      inputs = {k: str(type(v)) for k, v in input_dict.items()},
+    ))
+    self._tracer(self.node)
 
-    # ----input
-    out = self.forward(**input_dict) # pass this through the user defined forward()
-    # ----output
+    # ---- USER SEPERATION BOUNDARY ---- #
 
-    if self.node_info != None:
-      outputs = {}
-      if out == None:
-        outputs = {"out_0": type(None)}
-      elif isinstance(out, dict):
-        outputs = {k: type(v) for k, v in out.items()}
-      elif isinstance(out, (list, tuple)):
-        outputs = {f"out_{i}": type(v) for i, v in enumerate(out)}
-      else:
-        outputs = {"out_0": type(out)}
-      self.node_info["run_status"]["end"] = datetime.now().isoformat()
-      self.node_info["run_status"]["outputs"] = outputs
-      self._tracer(self.node_info)
+    out = self.forward(**input_dict)
+
+    # ---- USER SEPERATION BOUNDARY ---- #
+    outputs = {}
+    if out == None:
+      outputs = {"out_0": str(type(None))}
+    elif isinstance(out, dict):
+      outputs = {k: str(type(v)) for k, v in out.items()}
+    elif isinstance(out, (list, tuple)):
+      outputs = {f"out_{i}": str(type(v)) for i, v in enumerate(out)}
+    else:
+      outputs = {"out_0": str(type(out))}
+
+    logger.debug(f"Ending operator: {self.__class__.__name__}")
+    self.node.run_status.MergeFrom(RunStatus(
+      end = Timestamp(seconds=int(datetime.utcnow().timestamp()), nanos=0),
+      outputs = outputs,
+    ))
+    self._tracer(self.node)
 
     return out
 
@@ -292,8 +261,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     schedule: Cron = None,
     cache_dir: str = None,
     *,
-    _return_data = False
-  ) -> Job:
+    _unittest = False
+  ):
     """_summary_
 
     Args:
@@ -302,26 +271,23 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
         job (Union[str, int], optional): Name or ID of the job
         schedule (Cron, optional): If ``None`` will run only once, so be careful
         cache_dir (str, optional): Folder where to put the zipped file, if None will be tempdir
-        _return_data (bool, optional): Internal
+        _unittest (bool, optional): Internal
 
     Returns:
         Job: Job object
     """
-    if workspace_id == None:
-      stub_all_jobs = nbox_ws_v1.user.jobs
-    else:
-      stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
-    
-    jobs = list(filter(
-      lambda x: x["job_id"] == job_id_or_name,
-      stub_all_jobs()["data"]
-    ))
-    if len(jobs) == 0:
-      job_nane =  job_id_or_name
-    elif len(jobs) > 1:
-      raise ValueError(f"Multiple jobs found for '{job_id_or_name}'")
-    data = jobs[0]
-    stub_job: Sub30 = stub_all_jobs.u(data["job_id"])
+    # if workspace_id == None:
+    #   stub_all_jobs = nbox_ws_v1.user.jobs
+    # else:
+    #   stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
+
+    # jobs = list(filter(lambda x: x["job_id"] == job_id_or_name, stub_all_jobs()["data"]))
+    # if len(jobs) == 0:
+    #   job_nane =  job_id_or_name
+    # elif len(jobs) > 1:
+    #   raise ValueError(f"Multiple jobs found for '{job_id_or_name}'")
+    # data = jobs[0]
+    # stub_job: Sub30 = stub_all_jobs.u(data["job_id"])
     # if job_id == None else job
 
     # check if this is a valid folder or not
@@ -335,62 +301,54 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
       raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
 
     # flowchart-alpha
-    dag = get_nbx_flow(self.forward)
-    try:
-      from json import dumps
-      dumps(dag) # check if works
-    except:
-      logger.error("Cannot perform pre-building, only live updates will be available!")
-      logger.debug("Please raise an issue on chat to get this fixed")
-      dag = {"flowchart": {}, "symbols": {}}
-
-    for _, n in dag["flowchart"]["nodes"].items():
-      name = n["name"]
+    dag: DAG = get_nbx_flow(self.forward)
+    for _id, node in dag.flowchart.nodes.items():
+      name = node.name
       if name.startswith("self."):
         name = name[5:]
       operator_name = "CodeBlock" # default
       cls_item = getattr(self, name, None)
       if cls_item and cls_item.__class__.__base__ == Operator:
         operator_name = cls_item.__class__.__name__
-      n["operator_name"] = operator_name
+      node.operator = operator_name
 
     if schedule != None:
       logger.debug(f"Schedule: {schedule.get_dict}")
 
-    data = {
-      "dag": dag,
-      "schedule": schedule.get_dict() if schedule != None else None,
-      "job_id": job_id,
-      "job_name": job_name,
-      "created": datetime.now().isoformat(),
-    }
+    job_proto = JobProto(
+      id = None,
+      name = "hello world",
+      created_at = Timestamp(seconds=int(datetime.utcnow().timestamp()), nanos=0),
+      resource = Resource(),
+      auth_info = NBXAuthInfo(workspace_id = workspace_id,),
+      schedule = schedule.get_message() if schedule != None else None,
+      dag = dag,
+    )
 
-    if _return_data:
-      # pp(dag, indent=2)
-      # _flow = Node()
-      # node = dag["flowchart"]["nodes"][next(iter(dag["flowchart"]["nodes"]))]
-      # pp(node)
-
-      # _flow = Flowchart.Edge()
-      # edge = dag["flowchart"]["edges"][next(iter(dag["flowchart"]["edges"]))]
-      # dag = ParseDict(edge, _flow, ignore_unknown_fields=True)
-
-      flow_chart = Flowchart()
-      return _flow
-
-    with open(U.join(init_folder, "meta.json"), "w") as f:
-      f.write(dumps(data))
+    with open(U.join(init_folder, "job_proto.msg"), "wb") as f:
+      f.write(job_proto.SerializeToString())
 
     # zip all the files folder
     all_f = U.get_files_in_folder(init_folder)
     all_f = [f[len(init_folder)+1:] for f in all_f] # remove the init_folder from zip
 
-    zip_path = U.join(cache_dir if cache_dir else gettempdir(), "project.zip")
-    logger.info(f"Zipping project to '{zip_path}'")
+    for f in all_f:
+      hash_ = sha256()
+      with open(f, "rb") as f:
+        for c in iter(lambda: f.read(2 ** 20), b""):
+          hash_.update(c)
+    hash_ = hash_.hexdigest()
+    logger.info(f"SHA256 ( {init_folder} ): {hash_}")
+
+    zip_path = U.join(cache_dir if cache_dir else gettempdir(), f"project-{hash_}.nbox")
+    logger.info(f"Packing project to '{zip_path}'")
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
       for f in all_f:
         zip_file.write(f)
-    
+
+    if _unittest:
+      return job_proto
+
     return deploy_job(zip_path = zip_path, schedule = schedule, data = data, workspace = workspace)
 
   # /nbx
