@@ -36,7 +36,6 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
-    self._tracer = Tracer()
 
   # mixin/
 
@@ -220,11 +219,9 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
       if key in inputs:
         input_dict[key] = value
 
-    logger.debug(f"Calling operator: {self.__class__.__name__}")
-    self.node.run_status.MergeFrom(RunStatus(
-      start = Timestamp(seconds=int(datetime.utcnow().timestamp()), nanos=0),
-      inputs = {k: str(type(v)) for k, v in input_dict.items()},
-    ))
+    logger.debug(f"Calling operator: {self.__class__.__name__}: {self.node.id}")
+    _ts = Timestamp(); _ts.GetCurrentTime()
+    self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
     self._tracer(self.node)
 
     # ---- USER SEPERATION BOUNDARY ---- #
@@ -242,11 +239,9 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     else:
       outputs = {"out_0": str(type(out))}
 
-    logger.debug(f"Ending operator: {self.__class__.__name__}")
-    self.node.run_status.MergeFrom(RunStatus(
-      end = Timestamp(seconds=int(datetime.utcnow().timestamp()), nanos=0),
-      outputs = outputs,
-    ))
+    logger.debug(f"Ending operator: {self.__class__.__name__}: {self.node.id}")
+    _ts = Timestamp(); _ts.GetCurrentTime()
+    self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = outputs,))
     self._tracer(self.node)
 
     return out
@@ -315,10 +310,10 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     if schedule != None:
       logger.debug(f"Schedule: {schedule.get_dict}")
 
+    _starts = Timestamp(); _starts.GetCurrentTime()
     job_proto = JobProto(
-      id = None,
-      name = "hello world",
-      created_at = Timestamp(seconds=int(datetime.utcnow().timestamp()), nanos=0),
+      name = U.get_random_name(True).split("-")[0],
+      created_at = _starts,
       resource = Resource(),
       auth_info = NBXAuthInfo(workspace_id = workspace_id,),
       schedule = schedule.get_message() if schedule != None else None,
@@ -349,6 +344,9 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     if _unittest:
       return job_proto
 
-    return deploy_job(zip_path = zip_path, schedule = schedule, data = data, workspace = workspace)
+    return deploy_job(
+      zip_path = zip_path,
+      job_proto = job_proto
+    )
 
   # /nbx

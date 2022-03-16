@@ -14,13 +14,14 @@ from .utils import logger
 from .subway import Sub30
 from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
 
-
 def get_stub() -> WSJobServiceStub:
-  creds = grpc.access_token_call_credentials(secret.get("access_token"))
-  creds = grpc.composite_channel_credentials(grpc.local_channel_credentials(grpc.LocalConnectionType.UDS), creds)
-  channel = grpc.secure_channel("unix:///tmp/jobs-ws.sock", creds)
+  token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
+  ssl_creds = grpc.ssl_channel_credentials()
+  creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
+  channel = grpc.secure_channel("grpc.revamp-online.test-2.nimblebox.ai:443", creds)
+  stub = WSJobServiceStub(channel)
 
-  TIMEOUT = 1
+  TIMEOUT = 6
 
   logger.info(f"Checking connection on channel for {TIMEOUT}s")
   try:
@@ -29,8 +30,8 @@ def get_stub() -> WSJobServiceStub:
     logger.warn(f"gRPC server timeout, some functionality might not work")
     return None
 
-  nbx_stub = WSJobServiceStub(channel)
-  return nbx_stub
+  logger.info(f"Connected using stub: {stub}")
+  return stub
 
 def create_webserver_subway(version = "v1"):
   _version_specific_url = secret.get("nbx_url") + f"/api/{version}"

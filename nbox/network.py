@@ -10,6 +10,17 @@ from datetime import datetime, timedelta
 from google.protobuf.json_format import MessageToJson
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from grpc import RpcError
+from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
+from .hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
+from .hyperloop.dag_pb2 import DAG, Flowchart
+
+from google.protobuf.json_format import MessageToDict
+
+from .init import nbox_grpc_stub
+from .auth import secret
+from .jobs import Job
+
 from .framework.model_spec_pb2 import ModelSpec
 from .subway import Sub30
 from .utils import logger
@@ -332,11 +343,9 @@ class Cron:
     }
 
   def get_message(self) -> JobProto.Schedule:
-    return JobProto.Schedule(
-      start = Timestamp(seconds=int(self.starts.timestamp()), nanos=0),
-      end = Timestamp(seconds=int(self.ends.timestamp()), nanos=0),
-      cron = self.cron
-    )
+    _starts = Timestamp(); _starts.GetCurrentTime()
+    _ends = Timestamp(); _ends.FromDatetime(self.ends)
+    return JobProto.Schedule(start = _starts, end = _ends, cron = self.cron)
 
   def __repr__(self):
     return str(self.get_dict())
@@ -344,9 +353,7 @@ class Cron:
 
 def deploy_job(
   zip_path: str,
-  schedule: Cron,
-  data: dict,
-  workspace: str
+  job_proto: JobProto
 ):
   """Deploy an NBX-Job
 
@@ -354,75 +361,34 @@ def deploy_job(
       zip_path (str): Path to the zip file
       schedule (Cron): Schedule of the job
       data (dict): Metadata generated for the job
-      workspace (str): Name of the workspace this is to be deployed at
-
   Returns:
       nbox.Job: the job object
   """
 
-  from grpc import RpcError
-  from google.protobuf.timestamp_pb2 import Timestamp
-  from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
-  from .hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
-  from .hyperloop.dag_pb2 import DAG, Flowchart
-
-  from google.protobuf.json_format import MessageToDict
-
-  from .init import nbox_grpc_stub
-  from .auth import secret
-  from .jobs import Job
-
   URL = secret.get("nbx_url")
-  file_size = os.stat(zip_path).st_size // (1024 ** 2) # in MBs
+  file_size = int(os.stat(zip_path).st_size // (1024 ** 2)) # in MBs
 
   # intialise the console logger
   logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
 
+  code = JobProto.Code(size = max(file_size, 1), type = JobProto.Code.Type.ZIP)
+  logger.info(code)
+  job_proto.code.MergeFrom(code)
+
   try:
-    job = JobProto(
-      code = JobProto.Code(
-        size = file_size,
-        type = JobProto.Code.Type.NBOX
-      ),
-      dag = DAG(
-        flowchart=Flowchart(
-          nodes = data["dag"]["flowchart"]["nodes"],
-          edges = data["dag"]["flowchart"]["edges"]
-        ),
-        symbols = data["dag"]["symbols"]
-      ),
-      schedule = JobProto.Schedule(
-        start = Timestamp(
-          seconds = int(schedule.starts.timestamp()),
-          nanos = 0
-        ),
-        end = Timestamp(
-          seconds = int(schedule.ends.timestamp()),
-          nanos = 0
-        ),
-        cron = schedule.cron
-      ) if schedule != None else schedule
+    response: JobProto = nbox_grpc_stub.UploadJobCode(
+      UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
     )
-
-    if data["job_id"] != None:
-      job.id = data["job_id"]
-    else:
-      job.name = data["job_name"]
-
-    job: JobProto = nbox_grpc_stub.UploadJobCode(
-      UploadCodeRequest(job = job, auth = NBXAuthInfo(username = secret.get("username"), workspace_id = workspace)),
-    )
-
+    job_proto.MergeFrom(response)
   except RpcError as e:
     logger.error(f"Failed to deploy job: {e.details()}")
     raise e
 
-  job_code = MessageToDict(job.code)
-  s3_url = job_code["s3Url"]
-  s3_meta = job_code["s3Meta"]
-  job_id = job.id
-  logger.debug(f"job_id: {job_id}")
+  s3_url = job_proto.code.s3_url
+  s3_meta = job_proto.code.s3_meta
+  logger.debug(f"job_id: {job_proto.id}")
+  logger.info(s3_meta)
 
   # upload the file to a S3 -> don't raise for status here
   logger.debug("Uploading model to S3 ...")
@@ -433,18 +399,21 @@ def deploy_job(
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
 
-  if data["job_id"] != None:
-    logger.info(f"Job {job_id} already present")
-    # if this jobs is already present, there is no need to create another entry
-    # simply return this job and any changes to this should be done via Job
-    return job
+  # if job_proto.id != None:
+  #   logger.info(f"Job {job_id} already present")
+  #   # if this jobs is already present, there is no need to create another entry
+  #   # simply return this job and any changes to this should be done via Job
+  #   return job
 
   # Otherwise we are creating a new job
   logger.debug("Creating new job ...")
 
   try:
-    job = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job))
+    response = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job_proto))
+    job_proto.MergeFrom(response)
   except RpcError as e:
     logger.error(f"Failed to create job: {e.details()}")
 
-  return Job(job_id)
+  logger.info(f"Job creation started, please check FE")
+
+  return Job(job_proto.id, job_proto.auth_info.workspace_id)

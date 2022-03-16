@@ -11,12 +11,10 @@
 # IDE and intuitively used by the users by just filling the variable in it.
 
 from typing import Union, Any
-from datetime import datetime
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from .model_spec_pb2 import ModelSpec, Framework
 from .on_ml import NboxOptions
-from ..utils import isthere
 {%for (data, frm, cond_fn) in frameworks%}
 # --------- {{frm}} --------- #
 {%for item in data.messages%}
@@ -53,13 +51,14 @@ class Framework_{{frm}}:
       when serialising the model returns ``ModelSpec`` else returns the ``model`` in ``nbox.Model``
     '''
     from .on_ml import {{fn.processor_fn}}
+    exported_time = Timestamp(); exported_time.GetCurrentTime()
     spec=ModelSpec(
       source=Framework(package="{{frm}}", method="Framework_{{frm}}.{{fn.stub_name}}"),
       {%if fn.target_processor_name%}target=Framework(package="{{fn.target}}", method="Framework_{{fn.target}}.{{fn.target_processor_name}}"),{%else%}target=None, # this function has not been defined to throw any output{%endif%}
       folder=nbox_options.folder,
       name=nbox_options.model_name,
       requirements=["{{fn.dependencies|join('","')}}"], # contents inside requirements.txt file
-      exported_time=Timestamp(seconds=int(datetime.utcnow().timestamp()), nanos=0),
+      exported_time=exported_time,
       inputs=[],
       outputs=[],
     )

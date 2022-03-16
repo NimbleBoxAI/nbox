@@ -12,16 +12,22 @@ import jinja2
 from .utils import logger
 from . import utils as U
 from .init import nbox_grpc_stub
-from .network import Cron
 from .auth import secret
+
+import tabulate
+
 
 from google.protobuf.field_mask_pb2 import FieldMask
 from google.protobuf.json_format import MessageToDict
 
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
-from .hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, UpdateJobRequest
+from .hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
 from .hyperloop.nbox_ws_pb2 import JobInfo
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+  from .network import Cron
 
 ################################################################################
 # NBX-Jobs Functions
@@ -96,13 +102,22 @@ def open_home():
 def get_job_list(workspace_id: str = None):
   auth_info = NBXAuthInfo(workspace_id = workspace_id)
   try:
-    out = nbox_grpc_stub.ListJobs(ListJobsRequest(auth_info = auth_info))
+    out: ListJobsResponse = nbox_grpc_stub.ListJobs(ListJobsRequest(auth_info = auth_info))
   except grpc.RpcError as e:
     logger.error(f"{e.details()}")
     sys.exit(1)
 
   out = MessageToDict(out)
-  print(out)
+  if len(out) == 0:
+    logger.info("No jobs found")
+  
+  headers=list(out["Jobs"][0].keys())
+  data = []
+  for j in out["Jobs"]:
+    data.append([j[x] for x in headers])
+  for l in tabulate.tabulate(data, headers).splitlines():
+    logger.info(l)
+
 
 
 ################################################################################
@@ -121,24 +136,26 @@ class Job:
         workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
     self.id = id
+    self.job_proto = JobProto(id = id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
     self.workspace_id = workspace_id
-    self.auth_info = NBXAuthInfo(workspace_id = self.workspace_id)
-    self.update()
 
   # static methods
   new = staticmethod(new)
   home = staticmethod(open_home)
   status = staticmethod(get_job_list)
 
-  def change_schedule(self, new_schedule: Cron):
+  def change_schedule(self, new_schedule: 'Cron'):
     # nbox should only request and server should check if possible or not
     pass
+
+  def __repr__(self) -> str:
+    return f"nbox.Job('{self.id}', '{self.workspace_id}')"
 
   def stream_logs(self, f = sys.stdout):
     # this function will stream the logs of the job in anything that can be written to
     logger.info(f"Streaming logs of job {self.id}")
     try:
-      log_iter = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = self._this_job))
+      log_iter = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = self.job_proto))
     except grpc.RpcError as e:
       logger.error(f"Could not get logs of job {self.id}")
       logger.error("Error:", e.details())
@@ -152,7 +169,7 @@ class Job:
   def delete(self):
     logger.info(f"Deleting job {self.id}")
     try:
-      nbox_grpc_stub.DeleteJob(JobInfo(job = self._this_job,))
+      nbox_grpc_stub.DeleteJob(JobInfo(job = self.job_proto,))
     except grpc.RpcError as e:
       logger.error(f"Could not delete job {self.id}")
       logger.error("Error:", e.details())
@@ -161,20 +178,20 @@ class Job:
   def update(self):
     logger.info("Updating job info")
     try:
-      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info = self.auth_info)))
+      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info = self.job_proto.auth_info)))
     except grpc.RpcError as e:
       logger.error(f"Could not get job {id}")
       logger.error("Error:", e.details())
       raise e
     for descriptor, value in job.ListFields():
       setattr(self, descriptor.name, value)
-    self._this_job = job
-    self._this_job.auth_info.CopyFrom(self.auth_info)
+    self.job_proto = job
+    self.job_proto.auth_info.CopyFrom(self.job_proto.auth_info)
 
   def trigger(self):
     logger.info(f"Triggering job {self.id}")
     try:
-      nbox_grpc_stub.TriggerJob(JobInfo(job=self._this_job))
+      nbox_grpc_stub.TriggerJob(JobInfo(job=self.job_proto))
     except grpc.RpcError as e:
       logger.error(f"Could not trigger job {self.id}")
       logger.error("Error:", e.details())
@@ -183,7 +200,7 @@ class Job:
   def pause(self):    
     logger.info(f"Pausing job {self.id}")
     try:
-      job: JobProto = self._this_job
+      job: JobProto = self.job_proto
       job.status = JobProto.Status.PAUSED
       job.paused = True
       update_mask = FieldMask(paths=["status", "paused"])
@@ -197,7 +214,7 @@ class Job:
   def resume(self):
     logger.info(f"Resuming job {self.id}")
     try:
-      job: JobProto = self._this_job
+      job: JobProto = self.job_proto
       job.status = JobProto.Status.SCHEDULED
       job.paused = False
       update_mask = FieldMask(paths=["status", "paused"])
