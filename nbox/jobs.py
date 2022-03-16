@@ -21,10 +21,10 @@ from google.protobuf.field_mask_pb2 import FieldMask
 from google.protobuf.json_format import MessageToDict
 
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
-from .hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
+from .hyperloop.nbox_ws_pb2 import JobLog, ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
 from .hyperloop.nbox_ws_pb2 import JobInfo
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List
 
 if TYPE_CHECKING:
   from .network import Cron
@@ -91,7 +91,8 @@ def new(project_name):
         scheduled = scheduled,
     ))
 
-  open("requirements.txt", "w").close() # ~ touch requirements.txt
+  with open("requirements.txt", "w") as f:
+    f.write("nbox==0.8.8a0")
 
   logger.debug("Completed")
 
@@ -99,7 +100,7 @@ def open_home():
   import webbrowser
   webbrowser.open(secret.get("nbx_url")+"/"+"jobs")
 
-def get_job_list(workspace_id: str = None):
+def get_job_list(workspace_id: str = None, filters = "*"):
   auth_info = NBXAuthInfo(workspace_id = workspace_id)
   try:
     out: ListJobsResponse = nbox_grpc_stub.ListJobs(ListJobsRequest(auth_info = auth_info))
@@ -114,7 +115,10 @@ def get_job_list(workspace_id: str = None):
   headers=list(out["Jobs"][0].keys())
   data = []
   for j in out["Jobs"]:
-    data.append([j[x] for x in headers])
+    if filters == "*":
+      data.append([j[x] for x in headers])
+    if j["status"] in filters:
+      data.append([j[x] for x in headers])
   for l in tabulate.tabulate(data, headers).splitlines():
     logger.info(l)
 
@@ -136,8 +140,10 @@ class Job:
         workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
     self.id = id
-    self.job_proto = JobProto(id = id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
     self.workspace_id = workspace_id
+    auth_info = NBXAuthInfo(workspace_id = workspace_id)
+    self.job_proto = JobProto(id = id, auth_info = auth_info)
+    self.update()
 
   # static methods
   new = staticmethod(new)
@@ -149,56 +155,54 @@ class Job:
     pass
 
   def __repr__(self) -> str:
-    return f"nbox.Job('{self.id}', '{self.workspace_id}')"
+    return f"nbox.Job('{self.job_proto.id}', '{self.job_proto.auth_info.workspace_id}')"
 
   def stream_logs(self, f = sys.stdout):
     # this function will stream the logs of the job in anything that can be written to
-    logger.info(f"Streaming logs of job {self.id}")
+    logger.info(f"Streaming logs of job {self.job_proto.id}")
     try:
-      log_iter = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = self.job_proto))
+      log_iter: List[JobLog] = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = JobInfo(job = self.job_proto)))
+      for job_log in log_iter:
+        for log in job_log.log:
+          f.write(log + "\n")
+          f.flush()
     except grpc.RpcError as e:
-      logger.error(f"Could not get logs of job {self.id}")
-      logger.error("Error:", e.details())
-      raise e
-
-    for job_log in log_iter:
-      for log in job_log.log:
-        f.write(log)
-        f.flush()
+      logger.error(f"Could not get logs of job {self.job_proto.id}, is your job complete?")
+      logger.error(e.details())
 
   def delete(self):
-    logger.info(f"Deleting job {self.id}")
+    logger.info(f"Deleting job {self.job_proto.id}")
     try:
       nbox_grpc_stub.DeleteJob(JobInfo(job = self.job_proto,))
     except grpc.RpcError as e:
-      logger.error(f"Could not delete job {self.id}")
-      logger.error("Error:", e.details())
+      logger.error(f"Could not delete job {self.job_proto.id}")
+      logger.error(e.details())
       raise e
 
   def update(self):
     logger.info("Updating job info")
     try:
-      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = JobProto(id = self.id, auth_info = self.job_proto.auth_info)))
+      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = self.job_proto))
     except grpc.RpcError as e:
-      logger.error(f"Could not get job {id}")
-      logger.error("Error:", e.details())
+      logger.error(f"Could not get job {self.job_proto.id}")
+      logger.error(e.details())
       raise e
     for descriptor, value in job.ListFields():
       setattr(self, descriptor.name, value)
     self.job_proto = job
-    self.job_proto.auth_info.CopyFrom(self.job_proto.auth_info)
+    self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
 
   def trigger(self):
-    logger.info(f"Triggering job {self.id}")
+    logger.info(f"Triggering job {self.job_proto.id}")
     try:
       nbox_grpc_stub.TriggerJob(JobInfo(job=self.job_proto))
     except grpc.RpcError as e:
-      logger.error(f"Could not trigger job {self.id}")
-      logger.error("Error:", e.details())
+      logger.error(f"Could not trigger job {self.job_proto.id}")
+      logger.error(e.details())
       raise e
   
   def pause(self):    
-    logger.info(f"Pausing job {self.id}")
+    logger.info(f"Pausing job {self.job_proto.id}")
     try:
       job: JobProto = self.job_proto
       job.status = JobProto.Status.PAUSED
@@ -206,13 +210,13 @@ class Job:
       update_mask = FieldMask(paths=["status", "paused"])
       nbox_grpc_stub.UpdateJob(UpdateJobRequest(job=job, update_mask=update_mask))
     except grpc.RpcError as e:
-      logger.error(f"Could not pause job {self.id}")
-      logger.error("Error:", e.details())
+      logger.error(f"Could not pause job {self.job_proto.id}")
+      logger.error(e.details())
       raise e
-    logger.info(f"Paused job {self.id}")
+    logger.info(f"Paused job {self.job_proto.id}")
   
   def resume(self):
-    logger.info(f"Resuming job {self.id}")
+    logger.info(f"Resuming job {self.job_proto.id}")
     try:
       job: JobProto = self.job_proto
       job.status = JobProto.Status.SCHEDULED
@@ -220,7 +224,7 @@ class Job:
       update_mask = FieldMask(paths=["status", "paused"])
       nbox_grpc_stub.UpdateJob(UpdateJobRequest(job=job, update_mask=update_mask))
     except grpc.RpcError as e:
-      logger.error(f"Could not resume job {self.id}")
-      logger.error("Error:", e.details())
+      logger.error(f"Could not resume job {self.job_proto.id}")
+      logger.error(e.details())
       raise e
-    logger.info(f"Resumed job {self.id}")
+    logger.info(f"Resumed job {self.job_proto.id}")
