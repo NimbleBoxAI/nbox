@@ -11,4 +11,4 @@ from .auth import AWSClient, GCPClient, OCIClient, DOClient, AzureClient
 from .operator import Operator
 from .subway import Sub30
 
-__version__ = "0.8.7"
+__version__ = "0.8.8-alpha"
