@@ -21,7 +21,7 @@ class NBXAPIError(Exception):
 
 def deploy_model(
   export_model_path,
-  ws_stub: Sub30,
+  stub_all_depl: Sub30,
   model_spec: ModelSpec,
   wait_for_deployment=False,
 ):
@@ -67,40 +67,54 @@ def deploy_model(
 
   # get bucket URL and upload the data
 
-  # r = requests.get(
-  #   url=f"{ws_stub._url}/api/model/get_upload_url",
-  #   params={
-  #   },
-  #   headers={"Authorization": f"Bearer {access_token}"},
-  # )
-  # try:
-  #   r.raise_for_status()
-  # except:
-  #   raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
-  # out = r.json()
-
-  out = ws_stub.get_upload_url(
-    file_size = file_size,
-    file_type = "nbox",
-    model_name = model_name,
-    convert_args = None,
-    nbox_meta = MessageToJson(
-      model_spec,
-      including_default_value_fields=True,
-      preserving_proto_field_name=True,
-      sort_keys=False,
-      use_integers_for_enums=True,
-      float_precision=4
-    ), # annoying, but otherwise only the first key would be sent
-    deployment_type = deployment_type, # "nbox" or "ovms2"
-    deployment_id = deployment_id,
-    deployment_name = deployment_name,
+  r = requests.get(
+    url=f"{stub_all_depl._url}/get_upload_url",
+    params=dict(
+      file_size = file_size,
+      file_type = "nbox",
+      model_name = model_name,
+      convert_args = None,
+      nbox_meta = MessageToJson(
+        model_spec,
+        including_default_value_fields=True,
+        preserving_proto_field_name=True,
+        sort_keys=False,
+        use_integers_for_enums=True,
+        float_precision=4
+      ), # annoying, but otherwise only the first key would be sent
+      deployment_type = deployment_type, # "nbox" or "ovms2"
+      deployment_id = deployment_id,
+      deployment_name = deployment_name,
+    ),
+    headers={"Authorization": f"Bearer {access_token}"},
   )
+  try:
+    r.raise_for_status()
+  except:
+    raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
+  out = r.json()
+
+  # out = stub_all_depl.get_upload_url(
+  #   file_size = file_size,
+  #   file_type = "nbox",
+  #   model_name = model_name,
+  #   convert_args = None,
+  #   nbox_meta = MessageToJson(
+  #     model_spec,
+  #     including_default_value_fields=True,
+  #     preserving_proto_field_name=True,
+  #     sort_keys=False,
+  #     use_integers_for_enums=True,
+  #     float_precision=4
+  #   ), # annoying, but otherwise only the first key would be sent
+  #   deployment_type = deployment_type, # "nbox" or "ovms2"
+  #   deployment_id = deployment_id,
+  #   deployment_name = deployment_name,
+  # )
   model_id = out["fields"]["x-amz-meta-model_id"]
   deployment_id = out["fields"]["x-amz-meta-deployment_id"]
   logger.debug(f"model_id: {model_id}")
   logger.debug(f"deployment_id: {deployment_id}")
-  ws_stub_model = ws_stub.models.u(model_id) # eager create the stub
 
   # upload the file to a S3 -> don't raise for status here
   logger.debug("Uploading model to S3 ...")
@@ -116,12 +130,11 @@ def deploy_model(
   # )
 
   logger.debug("Verifying upload ...")
-  ws_stub_model.update(
-    _method = "post",
-    upload = True if r.status_code == 204 else False,
-    model_id = model_id,
-    deployment_id = deployment_id
-  )
+  ws_stub_model = stub_all_depl.u(model_spec.deploy.id).models.u(model_id) # eager create the stub
+  try:
+    ws_stub_model.update(_method = "post", status = r.status_code == 204)
+  except:
+    pass
 
   # polling
   endpoint = None
@@ -154,14 +167,6 @@ def deploy_model(
 
     logger.debug(f"Getting updates ...")
     updates = ws_stub_model.history()["data"]
-    try:
-      r.raise_for_status()
-      updates = r.json()
-    except:
-      pp(r.content)
-      raise NBXAPIError("This should not happen, please raise an issue at https://github.com/NimbleBoxAI/nbox/issues with above log!")
-
-    # go over all the status updates and check if the deployment is done
     for st in updates["model_history"]:
       curr_st = st["status"]
       if curr_st in _stat_done:
@@ -178,7 +183,6 @@ def deploy_model(
       # if we do not have api key then query web server for it
       if access_key is None:
         endpoint = updates["model_data"]["api_url"]
-
         if endpoint is None:
           if wait_for_deployment:
             continue
@@ -187,18 +191,22 @@ def deploy_model(
           break
 
     elif curr_st == "deployment.ready":
-      r = requests.get(
-        url=f"{URL}/api/model/get_deployment_access_key",
-        headers={"Authorization": f"Bearer {access_token}"},
-        params={"deployment_id": deployment_id},
-      )
-      try:
-        r.raise_for_status()
-        access_key = r.json()["access_key"]
-        logger.debug(f"nbx-key: {access_key}")
-      except:
-        pp(r.content.decode("utf-8"))
-        raise ValueError(f"Failed to get access_key, please check status at: {URL}/oneclick")
+      
+      # r = requests.get(
+      #   url=f"{URL}/api/model/get_deployment_access_key",
+      #   headers={"Authorization": f"Bearer {access_token}"},
+      #   params={"deployment_id": deployment_id},
+      # )
+      # try:
+      #   r.raise_for_status()
+      #   access_key = r.json()
+      #   logger.debug(f"nbx-key: {access_key}")
+      # except:
+      #   pp(r.content.decode("utf-8"))
+      #   raise ValueError(f"Failed to get access_key, please check status at: {URL}/oneclick")
+
+      out = stub_all_depl.u(model_spec.deploy.id).get_access_key()
+      access_key = out["access_key"]
 
       # keep hitting /metadata and see if model is ready or not
       r = requests.get(url=f"{endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})

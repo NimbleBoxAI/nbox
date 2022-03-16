@@ -132,7 +132,9 @@ class Sub30:
             assert p in kwargs, f"{p} is required but not provided"
             json[p] = kwargs[p]
           else:
-            json[p] = kwargs[p] if p in kwargs else schema_ref["properties"][p]["default"]
+            if not p in kwargs and not "default" in schema_ref["properties"][p]:
+              assert False, f"{p} is not provided"
+            json[p] = kwargs[p]
       # elif "plain/text" in content_type:
 
     # call and return

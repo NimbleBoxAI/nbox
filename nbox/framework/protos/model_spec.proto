@@ -22,13 +22,14 @@ message Tensor {
 
 message Deployment {
   string id = 1; // ID for the deployment
-  string workspace_id = 2; // Workspace ID, if None assume in user workspace
+  string name = 2; // name of the deployment
+  string workspace_id = 3; // Workspace ID, if None assume in user workspace
 
   // Deployment type 
   enum DeploymentTypes {
     NBOX_SERVING = 0; // vanilla nbox serving with fastapi
   }
-  DeploymentTypes type = 3;
+  DeploymentTypes type = 4;
 }
 
 message ModelSpec {

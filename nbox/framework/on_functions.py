@@ -203,6 +203,8 @@ def parse_args(node):
 def get_name(node):
   if isinstance(node, ast.Name):
     return node.id
+  elif isinstance(node, ast.Constant):
+    return node.value
   elif isinstance(node, ast.Attribute):
     return get_name(node.value) + "." + node.attr
   elif isinstance(node, ast.Call):
@@ -261,25 +263,26 @@ def node_assign_or_expr(node, lines, node_proto: Node) -> Union[Node, None]:
       else [parse_kwargs(targets, lines)
     ]
 
-  # return ExpressionNodeInfo(
-  #   name = name,
-  #   inputs = inputs,
-  #   outputs = outputs,
-  #   nbox_string = 
-  #   code = get_code_portion(lines, **node.__dict__),
-  #   lineno = node.lineno,
-  #   col_offset = node.col_offset,
-  #   end_lineno = node.end_lineno,
-  #   end_col_offset = node.end_col_offset,
-  # )
-  node_proto.operator = Node.NodeTypes.LOOP
+  nbox_string = nbxl.function(name, inputs, outputs)
 
-  # updates for NodeInfo
-  node_proto.info.name = name
-  node_proto.info.nbox_string = nbxl.function(name, inputs, outputs),
+  node_proto.MergeFrom(Node(
+    name = name,
+    type = Node.NodeTypes.OP,
+    info = NodeInfo(
+      name = name,
+      nbox_string = nbox_string,
+      code = get_code_portion(lines, **node.__dict__),
+      lineno = node.lineno,
+      col_offset = node.col_offset,
+      end_lineno = node.end_lineno,
+      end_col_offset = node.end_col_offset,
+      inputs = {str(x["kwarg"]): str(x["value"]) for x in inputs},
+      outputs = {x: "" for x in outputs},
+    )
+  ))
+  return node_proto
 
-
-def node_if_expr(node, lines, node_proto: Node) -> Node:
+def node_if_expr(node: ast.IfExp, lines: list, node_proto: Node) -> Node:
   def get_conditions(node, lines, conds = []):
     if not hasattr(node, "test"):
       else_cond = list(filter(lambda x: x["condition"] == "else", conds))
@@ -314,8 +317,6 @@ def node_if_expr(node, lines, node_proto: Node) -> Node:
         get_conditions(x, lines, conds)
 
     return conds
-  
-  # get all the conditions and structure as ExpressionNodeInfo
 
   all_conditions = get_conditions(node, lines, conds = [])
   ends = []
@@ -330,7 +331,7 @@ def node_if_expr(node, lines, node_proto: Node) -> Node:
     }
   ends += [all_conditions[-1]["code"]]
 
-  conditions = {}
+  conditions = []
   for i, c in enumerate(all_conditions):
     box = ends[i]
     _node = NodeInfo(
@@ -343,37 +344,73 @@ def node_if_expr(node, lines, node_proto: Node) -> Node:
       inputs = [],
       outputs = [],
     )
-    conditions[_node.name] = _node
+    conditions.append(_node)
 
-  node_proto.info.nbox_string = "IF: { " + ", ".join(x.nbox_string for x in conditions) + " }"
-  node_proto.info.conditions = conditions
-  # return IfNodeInfo(
-  #   conditions = conditions,
-  #   nbox_string = nbox_string,
-  #   inputs = [],
-  #   outputs = []
-  # )
+  # update the node_proto
+  node_proto.MergeFrom(Node(
+    name = "if",
+    type = Node.NodeTypes.BRANCHING,
+    info = NodeInfo(
+      name = "if",
+      nbox_string = "IF: { " + ", ".join(x.nbox_string for x in conditions) + " }",
+      lineno = node.lineno,
+      col_offset = node.col_offset,
+      end_lineno = node.end_lineno,
+      end_col_offset = node.end_col_offset,
+      inputs = {},
+      outputs = {},
+      conditions = conditions,
+    )
+  ))
   return node_proto
 
-def node_for_expr(node, lines, node_proto: Node) -> Node:
-  node_proto.info.nbox_string = nbxl.for_loop(get_code_portion(lines, **node.value.__dict__))
-  node_proto.name = f"for-{i}"
-  node_proto.operator = Node.NodeTypes.LOOP
-  # targets = [x.id for x in node.target.elts]
-  # iter_str = get_code_portion(lines, **node.iter.__dict__)
-  # code = get_code_portion(lines, **node.body[0].__dict__)
-  # return ForNodeInfo(
-  #   targets = targets,
-  #   iter_str = iter_str,
-  #   code = code,
-  #   nbox_string = nbxl.for_loop(iter_str, targets),
-  # )
+def node_for_expr(node: ast.For, lines: list, node_proto: Node) -> Node:
+  iter_str = get_code_portion(lines, **node.iter.__dict__)
+  if isinstance(node.target, ast.Tuple):
+    targets = [x.id for x in node.target.elts]
+  else:
+    targets = [get_name(node.target)]
+  code_ = get_code_portion(lines, **node.__dict__)
+  nbox_string = nbxl.for_loop(iter_str, targets)
+
+  # update node_proto
+  node_proto.MergeFrom(Node(
+    name = "for",
+    type = Node.NodeTypes.LOOP,
+    info = NodeInfo(
+      name = "for",
+      code = code_,
+      nbox_string = nbox_string,
+      lineno = node.lineno,
+      col_offset = node.col_offset,
+      end_lineno = node.end_lineno,
+      end_col_offset = node.end_col_offset,
+      inputs = {},
+      outputs = {'None':x for x in targets},
+    )
+  ))
   return node_proto
 
-def node_return(node, lines, node_proto: Node) -> Node:
-  node_proto.info.nbox_string = nbxl.return_statement(get_code_portion(lines, **node.value.__dict__))
-  node_proto.name = f"return"
-  node_proto.operator = Node.NodeTypes.RETURN
+def node_return(node: ast.Return, lines, node_proto: Node) -> Node:
+  if isinstance(node.value, ast.Tuple):
+    returns = [x.id for x in node.value.elts]
+  else:
+    returns = [get_name(node.value)]
+  node_proto.MergeFrom(Node(
+    name = "return",
+    # type = Node.NodeTypes.RETURN,
+    info = NodeInfo(
+      name = "return",
+      code = get_code_portion(lines, **node.__dict__),
+      nbox_string = nbxl.return_statement(returns),
+      lineno = node.lineno,
+      col_offset = node.col_offset,
+      end_lineno = node.end_lineno,
+      end_col_offset = node.end_col_offset,
+      inputs = {},
+      outputs = {'None':'None'},
+    )
+  ))
   return node_proto
 
 def def_func_or_class(node, lines):
@@ -453,55 +490,45 @@ def get_nbx_flow(forward):
   nodes = {} # this is the operators
   symbols_to_nodes = {} # this is things that are defined at runtime
 
-  for i, expr in enumerate(node.body[0].body):
-    # create the empty node that will be used everywhere
-    if not type(expr) in type_wise_logic:
-      node.info = code_node(i, expr, code_lines)
-      nodes[node.id] = node
-      continue
+  try:
 
-    output = type_wise_logic[type(expr)](expr, code_lines, node)
-    if output is None:
-      continue
+    for i, expr in enumerate(node.body[0].body):
+      # create the empty node that will be used everywhere
+      if not type(expr) in type_wise_logic:
+        node.info = code_node(i, expr, code_lines)
+        nodes[node.id] = node
+        continue
 
-    if "def" in output["type"]:
-      symbols_to_nodes[output['name']] = {
-        "info": output,
-        "execution_index": i,
-        "nbox_string": nbxl.define(output["name"], output["inputs"])
-      }
-      continue
+      # define an initial proto and then then other functions will fill it up
+      node_proto = Node(id = str(uuid4()), execution_index = i, run_status = Node.RunStatus())
+      output = type_wise_logic[type(expr)](expr, code_lines, node_proto)
+      if output is None:
+        continue
+      elif not isinstance(output, Node) and "def" in output["type"]:
+        symbols_to_nodes[output['name']] = {
+          "info": output,
+          "execution_index": i,
+          "nbox_string": nbxl.define(output["name"], output["inputs"])
+        }
+      else:
+        nodes[node_proto.id] = node_proto
 
-    # if isinstance(output, ExpressionNodeInfo):
-    
-    # elif isinstance(output, IfNodeInfo):
-    #   node_.name = f"if-{i}"
-    #   node_.operator = Node.NodeTypes.BRANCHING
-    #   node_.nbox_string = output.nbox_string
-    
-    # elif isinstance(output, ForNodeInfo):
-      
-    
-    # elif isinstance(output, ReturnNodeInfo):
-      
-
-    # nodes[node_.id] = node_
-
-  # edges for execution order can be added
-  _node_ids = tuple(nodes.keys())
-  for op0, op1 in zip(_node_ids[:-1], _node_ids[1:]):
-    _id = f"edge-{op0}-X-{op1}"
-    edges[_id] = Flowchart.Edge(
-      id = _id,
-      source = op0,
-      target = op1,
-      type = "execution-order",
-      nbox_string = None
-    )
-
-  # from pprint import pprint
-  # pprint(edges)
-  # pprint(nodes)
+    # edges for execution order can be added
+    _node_ids = tuple(nodes.keys())
+    for op0, op1 in zip(_node_ids[:-1], _node_ids[1:]):
+      _id = f"edge-{op0}-X-{op1}"
+      edges[_id] = Edge(
+        id = _id,
+        source = op0,
+        target = op1,
+        type = "execution-order",
+        nbox_string = None
+      )
+  except:
+    logger.error("Some error in parsing the job-flow")
+    nodes = {}
+    edges = {}
+    symbols_to_nodes = {}
 
   return DAG(
     flowchart = Flowchart(

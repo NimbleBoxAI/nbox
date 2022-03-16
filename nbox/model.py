@@ -139,7 +139,7 @@ class Model:
     model_spec: ModelSpec,
     deployment_id_or_name: str = None,
     workspace_id: str = None,
-    wait_for_deployment=False,
+    wait_for_deployment=True,
     *,
     _unittest = False
   ):
@@ -166,25 +166,30 @@ class Model:
       stub_all_depl = nbox_ws_v1.user.deployments
     else:
       stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
+    logger.debug(f"deployments stub: {stub_all_depl}")
+
+    _deploy_proto = Deployment(
+      workspace_id = workspace_id,
+      type = Deployment.DeploymentTypes.NBOX_SERVING # ignored for now
+    )
 
     deployments = list(filter(
       lambda x: x["deployment_id"] == deployment_id_or_name or x["deployment_name"] == deployment_id_or_name,
       stub_all_depl()["data"]
     ))
     if len(deployments) == 0:
-      raise ValueError(f"Deployment '{deployment_id_or_name}' not found")
+      logger.warning(f"No deployment found with id '{deployment_id_or_name}', creating one with same name")
+      _deploy_proto.id = None
+      _deploy_proto.name = deployment_id_or_name
     elif len(deployments) > 1:
       raise ValueError(f"Multiple deployments found for '{deployment_id_or_name}'")
-    
-    data = deployments[0]
-    stub_depl: Sub30 = stub_all_depl.u(data["deployment_id"])
+    else:
+      data = deployments[0]
+      _deploy_proto.id = data["deployment_id"]
+      _deploy_proto.name = data["deployment_name"]
 
     # update model spec with deployment related information
-    model_spec.deploy.CopyFrom(Deployment(
-      id = deployment_id_or_name,
-      workspace_id = workspace_id,
-      type = Deployment.DeploymentTypes.NBOX_SERVING # ignored for now
-    ))
+    model_spec.deploy.CopyFrom(_deploy_proto)
 
     # pack everything nicely
     folder = model_spec.folder
@@ -225,7 +230,7 @@ class Model:
     # OCD baby!
     return deploy_model(
       export_model_path=nbx_path,
-      ws_stub=stub_depl,
+      stub_all_depl=stub_all_depl,
       model_spec=model_spec,
       wait_for_deployment=wait_for_deployment,
     )

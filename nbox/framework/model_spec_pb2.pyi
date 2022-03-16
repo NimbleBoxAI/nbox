@@ -109,10 +109,14 @@ class Deployment(google.protobuf.message.Message):
 
 
     ID_FIELD_NUMBER: builtins.int
+    NAME_FIELD_NUMBER: builtins.int
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     TYPE_FIELD_NUMBER: builtins.int
     id: typing.Text
     """ID for the deployment"""
+
+    name: typing.Text
+    """name of the deployment"""
 
     workspace_id: typing.Text
     """Workspace ID, if None assume in user workspace"""
@@ -121,10 +125,11 @@ class Deployment(google.protobuf.message.Message):
     def __init__(self,
         *,
         id: typing.Text = ...,
+        name: typing.Text = ...,
         workspace_id: typing.Text = ...,
         type: global___Deployment.DeploymentTypes.ValueType = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["id",b"id","type",b"type","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["id",b"id","name",b"name","type",b"type","workspace_id",b"workspace_id"]) -> None: ...
 global___Deployment = Deployment
 
 class ModelSpec(google.protobuf.message.Message):

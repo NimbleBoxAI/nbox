@@ -20,7 +20,7 @@ DESCRIPTOR = _descriptor.FileDescriptor(
   syntax='proto3',
   serialized_options=None,
   create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n&nbox/framework/protos/model_spec.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x01\n\tFramework\x12\x0f\n\x07package\x18\x01 \x01(\t\x12\x0c\n\x04path\x18\x02 \x01(\t\x12\x0e\n\x06method\x18\x03 \x01(\t\x12&\n\x06kwargs\x18\x04 \x03(\x0b\x32\x16.Framework.KwargsEntry\x1a-\n\x0bKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"M\n\x06Tensor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05shape\x18\x02 \x03(\x03\x12\x17\n\x0f\x64imension_names\x18\x03 \x03(\t\x12\r\n\x05\x64type\x18\x05 \x01(\t\"~\n\nDeployment\x12\n\n\x02id\x18\x01 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x02 \x01(\t\x12)\n\x04type\x18\x03 \x01(\x0e\x32\x1b.Deployment.DeploymentTypes\"#\n\x0f\x44\x65ploymentTypes\x12\x10\n\x0cNBOX_SERVING\x10\x00\"\x86\x02\n\tModelSpec\x12\x1a\n\x06source\x18\x01 \x01(\x0b\x32\n.Framework\x12\x1a\n\x06target\x18\x02 \x01(\x0b\x32\n.Framework\x12\x0e\n\x06\x66older\x18\x03 \x01(\t\x12\x0c\n\x04name\x18\x04 \x01(\t\x12\n\n\x02id\x18\x05 \x01(\t\x12\x14\n\x0crequirements\x18\x0b \x03(\t\x12\x31\n\rexported_time\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x06inputs\x18\r \x03(\x0b\x32\x07.Tensor\x12\x18\n\x07outputs\x18\x0e \x03(\x0b\x32\x07.Tensor\x12\x1b\n\x06\x64\x65ploy\x18\x0f \x01(\x0b\x32\x0b.Deploymentb\x06proto3'
+  serialized_pb=b'\n&nbox/framework/protos/model_spec.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x91\x01\n\tFramework\x12\x0f\n\x07package\x18\x01 \x01(\t\x12\x0c\n\x04path\x18\x02 \x01(\t\x12\x0e\n\x06method\x18\x03 \x01(\t\x12&\n\x06kwargs\x18\x04 \x03(\x0b\x32\x16.Framework.KwargsEntry\x1a-\n\x0bKwargsEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t:\x02\x38\x01\"M\n\x06Tensor\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05shape\x18\x02 \x03(\x03\x12\x17\n\x0f\x64imension_names\x18\x03 \x03(\t\x12\r\n\x05\x64type\x18\x05 \x01(\t\"\x8c\x01\n\nDeployment\x12\n\n\x02id\x18\x01 \x01(\t\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x14\n\x0cworkspace_id\x18\x03 \x01(\t\x12)\n\x04type\x18\x04 \x01(\x0e\x32\x1b.Deployment.DeploymentTypes\"#\n\x0f\x44\x65ploymentTypes\x12\x10\n\x0cNBOX_SERVING\x10\x00\"\x86\x02\n\tModelSpec\x12\x1a\n\x06source\x18\x01 \x01(\x0b\x32\n.Framework\x12\x1a\n\x06target\x18\x02 \x01(\x0b\x32\n.Framework\x12\x0e\n\x06\x66older\x18\x03 \x01(\t\x12\x0c\n\x04name\x18\x04 \x01(\t\x12\n\n\x02id\x18\x05 \x01(\t\x12\x14\n\x0crequirements\x18\x0b \x03(\t\x12\x31\n\rexported_time\x18\x0c \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x17\n\x06inputs\x18\r \x03(\x0b\x32\x07.Tensor\x12\x18\n\x07outputs\x18\x0e \x03(\x0b\x32\x07.Tensor\x12\x1b\n\x06\x64\x65ploy\x18\x0f \x01(\x0b\x32\x0b.Deploymentb\x06proto3'
   ,
   dependencies=[google_dot_protobuf_dot_timestamp__pb2.DESCRIPTOR,])
 
@@ -41,8 +41,8 @@ _DEPLOYMENT_DEPLOYMENTTYPES = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   serialized_options=None,
-  serialized_start=393,
-  serialized_end=428,
+  serialized_start=408,
+  serialized_end=443,
 )
 _sym_db.RegisterEnumDescriptor(_DEPLOYMENT_DEPLOYMENTTYPES)
 
@@ -207,15 +207,22 @@ _DEPLOYMENT = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='workspace_id', full_name='Deployment.workspace_id', index=1,
+      name='name', full_name='Deployment.name', index=1,
       number=2, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=b"".decode('utf-8'),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
     _descriptor.FieldDescriptor(
-      name='type', full_name='Deployment.type', index=2,
-      number=3, type=14, cpp_type=8, label=1,
+      name='workspace_id', full_name='Deployment.workspace_id', index=2,
+      number=3, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=b"".decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    _descriptor.FieldDescriptor(
+      name='type', full_name='Deployment.type', index=3,
+      number=4, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -233,8 +240,8 @@ _DEPLOYMENT = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=302,
-  serialized_end=428,
+  serialized_start=303,
+  serialized_end=443,
 )
 
 
@@ -328,8 +335,8 @@ _MODELSPEC = _descriptor.Descriptor(
   extension_ranges=[],
   oneofs=[
   ],
-  serialized_start=431,
-  serialized_end=693,
+  serialized_start=446,
+  serialized_end=708,
 )
 
 _FRAMEWORK_KWARGSENTRY.containing_type = _FRAMEWORK

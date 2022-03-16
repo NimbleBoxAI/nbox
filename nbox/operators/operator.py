@@ -5,26 +5,31 @@
 import os
 import json
 import zipfile
-from typing import Callable, Union
+from grpc import RpcError
 from functools import partial
-from tempfile import gettempdir, mkdtemp
+from typing import Callable, Union
 from collections import OrderedDict
+from tempfile import gettempdir, mkdtemp
 from datetime import datetime, timedelta
 
+
 from ..network import deploy_job, Cron
-from ..utils import logger
 from .. import utils as U
+from ..utils import logger
+from ..subway import Sub30
 from ..framework import AirflowMixin, PrefectMixin, LuigiMixin
 from ..framework.on_functions import get_nbx_flow, DBase
 from ..init import nbox_grpc_stub, nbox_ws_v1
 from ..jobs import Job
+from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from ..hyperloop.job_pb2 import NBXAuthInfo
 
 
 class StateDictModel(DBase):
   __slots__ = [
-    "state", # :str
-    "data", # :dict
-    "inputs", # :dict
+    "state",   # :str
+    "data",    # :dict
+    "inputs",  # :dict
     "outputs", # :dict
   ]
 
@@ -32,31 +37,23 @@ class StateDictModel(DBase):
 class Tracer:
   def __init__(self, tracer = None):
     self.job_id = os.getenv("JOB_ID", None)
+    self.workspace_id = os.getenv("WORKSPACE_ID", None)
     self.job_id = self.job_id.upper() if self.job_id else None
     if tracer == "stub":
       # when job is running on NBX, gRPC stubs are used
-      if nbox_grpc_stub == None:
-        raise RuntimeError("nbox_grpc_stub is not initialized")
+      self.auth_info = NBXAuthInfo(workspace_id=self.workspace_id)
     self.tracer = tracer
 
   def __call__(self, dag_update):
     if self.tracer == "stub":
-      from grpc import RpcError
-      from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest
-      from ..hyperloop.job_pb2 import NBXAuthInfo
-
       dag = dag_update["dag"]
-      print(dag)
       try:
-        response = nbox_grpc_stub.UpdateRun(
-          UpdateRunRequest(job=Job(
-            id=self.job_id, dag=dag, auth_info=NBXAuthInfo(workspace_id="zcxdpqlk")
-          ))
-        )
+        nbox_grpc_stub.UpdateRun(UpdateRunRequest(
+          job=Job(id=self.job_id, dag=dag, auth_info=self.auth_info
+        )))
       except RpcError as e:
         logger.error(f"Could not update job {self.id}")
         raise e
-      return response
     else:
       logger.info(dag_update)
 
@@ -289,9 +286,9 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
 
   def deploy(
     self,
-    workspace: str,
     init_folder: str,
-    job: Union[str, int],
+    job_id_or_name: str = None,
+    workspace_id: str = None,
     schedule: Cron = None,
     cache_dir: str = None,
     *,
@@ -310,22 +307,22 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     Returns:
         Job: Job object
     """
-    logger.info(f"Deploying {self.__class__.__name__} -> '{job}'")
+    if workspace_id == None:
+      stub_all_jobs = nbox_ws_v1.user.jobs
+    else:
+      stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
     
-    # TODO: @yashbonde add job -> job id/name resolver support after revamp
-    # TODO: @yashbonde add workspace -> workspace id/name resolver support after revamp
-    # data = nbox_ws_v1.workspace.u(workspace).jobs() # get all the jobs for this user
-    # data = list(filter(lambda x: x["id"] == job or x["name"] == job, data)) # filter by name
-    # if not len(data):
-    #   raise ValueError(f"No job found with name or id '{job}'")
-    # if len(data) > 1:
-    #   raise ValueError(f"Multiple jobs found with name or id '{job}', please enter job id")
-    # this_job = data[0]
-    # job_id = this_job["id"]
-    # job_name = this_job["name"]
-
-    job_id = job
-    job_name = U.get_random_name(True).split("-")[0] if job_id == None else job
+    jobs = list(filter(
+      lambda x: x["job_id"] == job_id_or_name,
+      stub_all_jobs()["data"]
+    ))
+    if len(jobs) == 0:
+      job_nane =  job_id_or_name
+    elif len(jobs) > 1:
+      raise ValueError(f"Multiple jobs found for '{job_id_or_name}'")
+    data = jobs[0]
+    stub_job: Sub30 = stub_all_jobs.u(data["job_id"])
+    # if job_id == None else job
 
     # check if this is a valid folder or not
     if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
