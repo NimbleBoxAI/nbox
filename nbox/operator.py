@@ -28,7 +28,7 @@ from .framework.on_functions import get_nbx_flow
 from .hyperloop.nbox_ws_pb2 import UpdateRunRequest
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from .hyperloop.dag_pb2 import DAG, Node, RunStatus
-from .lib.tracer import Tracer
+from .nbxlib.tracer import Tracer
 
 class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   _version: int = 1 # always try to keep this an i32
