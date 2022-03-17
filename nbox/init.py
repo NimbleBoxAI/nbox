@@ -20,9 +20,7 @@ def get_stub() -> WSJobServiceStub:
   creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
   channel = grpc.secure_channel("grpc.revamp-online.test-2.nimblebox.ai:443", creds)
   stub = WSJobServiceStub(channel)
-
   TIMEOUT = 6
-
   logger.info(f"Checking connection on channel for {TIMEOUT}s")
   try:
     grpc.channel_ready_future(channel).result(TIMEOUT)
@@ -30,20 +28,21 @@ def get_stub() -> WSJobServiceStub:
     logger.warn(f"gRPC server timeout, some functionality might not work")
     return None
 
-  logger.info(f"Connected using stub: {stub}")
+  logger.info(f"Connected using stub: {stub.__class__.__name__}")
   return stub
 
-def create_webserver_subway(version = "v1"):
+def create_webserver_subway(version = "v1", session = None):
   _version_specific_url = secret.get("nbx_url") + f"/api/{version}"
-  r = nbox_session.get(_version_specific_url + "/openapi.json")
+  session = session if session != None else nbox_session # select correct session
+  r = session.get(_version_specific_url + "/openapi.json")
   try:
     r.raise_for_status()
   except Exception as e:
     logger.error(f"Could not connect to webserver at {secret.get('nbx_url')}")
     logger.error(e)
     return None
-  out = Sub30(_version_specific_url, r.json(), nbox_session)
-  logger.debug(f"Connected to webserver at {out}")
+  out = Sub30(_version_specific_url, r.json(), session)
+  logger.info(f"Connected to webserver at {out}")
   return out
 
 

@@ -1,5 +1,4 @@
 import os
-from grpc import RpcError
 
 from nbox.jobs import Job
 
@@ -8,7 +7,8 @@ from .. import utils as U
 from ..init import nbox_grpc_stub
 from ..hyperloop.dag_pb2 import Node
 from ..hyperloop.job_pb2 import NBXAuthInfo, Job
-from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest, JobInfo
+from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from ..messages import rpc
 
 class Tracer:
   def __init__(self):
@@ -41,11 +41,9 @@ class Tracer:
         logger.debug(node)
       return
     self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this
-    try:
-      nbox_grpc_stub.UpdateRun(UpdateRunRequest(
-        token = self.token, job=self.job_proto, updated_at=node.run_status.end
-      ))
-    except RpcError as e:
-      logger.error(e)
-      logger.error(f"Could not update job {self.job_proto.id}")
+    rpc(
+      nbox_grpc_stub.UpdateRun,
+      UpdateRunRequest(token = self.token, job=self.job_proto, updated_at=node.run_status.end),
+      f"Could not update job {self.job_proto.id}"
+    )
 

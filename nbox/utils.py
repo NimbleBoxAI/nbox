@@ -19,9 +19,19 @@ from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_compl
 
 
 def get_logger():
+  class NullLogger:
+    def __init__(self):
+      self.debug = self.info = self.warning = self.error = self.critical = self.exception = self.log = self.warning = self.__call__
+
+    def __call__(self, *_, **__):
+      pass
+
   from pythonjsonlogger import jsonlogger
   logger = logging.getLogger("utils")
   logger.setLevel(logging.DEBUG)
+
+  if os.environ.get("NBOX_NO_OUTPUT", False):
+    return NullLogger()
 
   if os.environ.get("NBOX_JSON_LOG", False):
     logHandler = logging.StreamHandler()
@@ -32,7 +42,7 @@ def get_logger():
     logger.addHandler(logHandler)
   else:
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.INFO)
 
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(logging.Formatter(

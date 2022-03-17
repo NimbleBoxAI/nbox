@@ -20,7 +20,7 @@ from google.protobuf.json_format import MessageToDict
 from .init import nbox_grpc_stub
 from .auth import secret
 from .jobs import Job
-
+from .messages import rpc
 from .framework.model_spec_pb2 import ModelSpec
 from .subway import Sub30
 from .utils import logger
@@ -376,15 +376,13 @@ def deploy_job(
   logger.info(code)
   job_proto.code.MergeFrom(code)
 
-  try:
-    response: JobProto = nbox_grpc_stub.UploadJobCode(
-      UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
-    )
-    job_proto.MergeFrom(response)
-  except RpcError as e:
-    logger.error(f"Failed to deploy job: {e.details()}")
-    raise e
+  response: JobProto = rpc(
+    nbox_grpc_stub.UploadJobCode,
+    UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
+    f"Failed to deploy job: {job_proto.id}"
+  )
 
+  job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
   logger.debug(f"job_id: {job_proto.id}")
@@ -407,13 +405,7 @@ def deploy_job(
 
   # Otherwise we are creating a new job
   logger.debug("Creating new job ...")
-
-  try:
-    response = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job_proto))
-    job_proto.MergeFrom(response)
-  except RpcError as e:
-    logger.error(f"Failed to create job: {e.details()}")
-
+  rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job: {job_proto.id}")
   logger.info(f"Job creation started, please check FE")
 
   return Job(job_proto.id, job_proto.auth_info.workspace_id)

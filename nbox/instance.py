@@ -13,15 +13,16 @@ the second step towards YoCo and CasH, read more
 import sys
 import time
 import shlex
+from copy import deepcopy
 from functools import partial
 from tabulate import tabulate
 from tempfile import gettempdir
 from requests.sessions import Session
 
-from .subway import SpecSubway, Subway, TIMEOUT_CALLS
+from .subway import SpecSubway, Sub30, Subway, TIMEOUT_CALLS
 from . import utils as U
 from .utils import NBOX_HOME_DIR, logger
-from .init import nbox_session, nbox_ws_v1
+from .init import nbox_ws_v1, create_webserver_subway
 from .auth import secret
 
 
@@ -33,24 +34,15 @@ from .auth import secret
 ################################################################################
 
 def print_status(workspace_id: str = None):
+  logger.info("Getting NBX-Build details")
   if workspace_id == None:
     stub_projects = nbox_ws_v1.user.projects
   else:
     stub_projects = nbox_ws_v1.workspace.u(workspace_id).projects
 
-  # url = secret.get("nbx_url")
-  # r = nbox_session.get(f"{url}/api/instance/get_user_instances")
-  # r.raise_for_status()
-  # message = r.json()["msg"]
-  # if message != "success":
-  #   raise Exception(message)
-
   data = stub_projects()["data"]
-
-  money = data["nbBucks"]
-  data = [{k: x[k] for k in Instance.useful_keys} for x in data["data"]]
-
-  logger.info(f"Total NimbleBox.ai credits left: {money}")
+  projects = data["project_details"]
+  data = [{k: projects[x][k] for k in Instance.useful_keys} for x in projects]
   data_table = [[x[k] for k in Instance.useful_keys] for x in data]
   for x in tabulate(data_table, headers=Instance.useful_keys).splitlines():
     logger.info(x)
@@ -64,95 +56,99 @@ def print_status(workspace_id: str = None):
 
 class Instance():
   # each instance has a lot of data against it, we need to store only a few as attributes
-  useful_keys = ["state", "used_size", "total_size", "public", "instance_id", "name"]
+  useful_keys = ["project_id", "project_name", "size_used", "size", "state",]
 
-  def __init__(self, i, cs_endpoint = "server"):
-    super().__init__()
+  def __init__(self, i: str, workspace_id: int = None, cs_endpoint = "server"):
+    if i == None:
+      raise ValueError("Instance id must be provided, try --i='8h57f9'")
+    i = str(i)
+
+    # create a new session for communication with the compute server, avoid using single
+    # session for conlficting headers
+    sess = Session()
+    sess.headers.update({"Authorization": secret.get("access_token")})
+    stub_ws_instance = create_webserver_subway("v1", sess)
 
     self.status = None # this is the status string
+    if workspace_id == None:
+      stub_projects = stub_ws_instance.user.projects
+    else:
+      stub_projects = stub_ws_instance.workspace.u(workspace_id).projects
+
+    project_details = stub_projects()["data"]["project_details"]
+    if i not in project_details:
+      by_name = list(filter(lambda x: x['project_name'] == i, list(project_details.values())))
+      if len(by_name) == 0:
+        raise ValueError(f"Instance '{i}' not found")
+      elif len(by_name) > 1:
+        raise ValueError(f"Multiple instances with name '{i}' found")
+      data = by_name[0]
+    else:
+      data = project_details[i]
+    logger.info(f"Found instance '{data['project_name']}' ({data['project_id']})")
+
+    for x in self.useful_keys:
+      setattr(self, x, data[x])
 
     self.url = secret.get('nbx_url')
     self.cs_url = None
     self.cs_endpoint = cs_endpoint
-    self.session = Session()
-    self.session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
-    self.web_server = Subway(f"{self.url}/api/instance", self.session)
-    # self.web_server = nbox_ws_v1.api.instance # wesbserver RPC stub
-    logger.debug(f"WS: {self.web_server}")
 
-    self.instance_id = None
+    self.stub_ws_instance = stub_ws_instance.u(self.project_id)
+    logger.debug(f"WS: {self.stub_ws_instance}")
     self.__opened = False
     self.running_scripts = []
-
-    self.refresh(i)
-    logger.debug(f"Instance added: {self.name} ({self.instance_id})")
-
-    if self.state == "RUNNING":
-      self.start()
+    self.refresh()
+    # if self.state == "RUNNING":
+    #   self.start()
 
   __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
   status = staticmethod(print_status)
 
-  @classmethod
-  def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
-    if workspace_id == None:
-      stub_all_projects = nbox_ws_v1.user.projects
-    else:
-      stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
-    out = stub_all_projects(_method = "post", project_name = project_name, storage_limit = storage_limit, project_type = project_type)
-    return cls(project_name, url)
+  # @classmethod
+  # def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
+  #   if workspace_id == None:
+  #     stub_all_projects = nbox_ws_v1.user.projects
+  #   else:
+  #     stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
+  #   out = stub_all_projects(_method = "post", project_name = project_name, storage_limit = storage_limit, project_type = project_type)
+  #   return cls(project_name, url)
 
   mv = None # atleast registered
 
-  def refresh(self, id_or_name = None):
-    id_or_name = id_or_name or self.instance_id
-    if not isinstance(id_or_name, (int, str)):
+  def refresh(self):
+    if not isinstance(self.project_id, (int, str)):
       raise ValueError("Instance id must be an integer or a string")
-
-    r = self.session.get(f"{self.url}/api/instance/get_user_instances")
-    r.raise_for_status()
-    resp = r.json()
-
-    if len(resp["data"]) == 0:
-      raise ValueError(f"No instance: '{id_or_name}' found, create manually from the dashboard or Instance.new(...)")
-
-    key = "instance_id" if isinstance(id_or_name, int) else "name"
-    instance = list(filter(lambda x: x[key] == id_or_name, resp["data"]))
-    if len(instance) == 0:
-      raise KeyError(id_or_name)
-    instance = instance[0] # pick the first one
-
-    for k,v in instance.items():
+    print(self.stub_ws_instance)
+    data = self.stub_ws_instance() # GET /user/projects/{project_id}
+    for k,v in data.items():
       if k in self.useful_keys:
         setattr(self, k, v)
-    self.data = instance
+    self.data = data
 
-    if self.state == "RUNNING":
-      self.start()
-
-  def start(self, cpu_only = True, cpu_count = 2, gpu = "p100", gpu_count = 1, region = "asia-south-1"):
-    """``cpu_count`` should be one of [2, 4, 8]"""
-    # if self.__opened:
-    #   logger.debug(f"Instance {self.name} ({self.instance_id}) is already opened")
-    #   return
+  def start(self, cpu: int = 2, gpu: str = "p100", gpu_count: int = 0, auto_shutdown: int = 6, dedicated_hw: bool = False, zone = "asia-south-1"):
+    """
+    * ``cpu`` should be one of [2, 4, 8]
+    * if ``gpu == 0``, cpu only instance is started
+    * if ``auto_shutdown == 0`` then only no autoshutdown will be done
+    """
+    if auto_shutdown < 0:
+      raise ValueError("auto_shutdown must be a positive integer (hours)")
 
     if not self.state == "RUNNING":
       logger.debug(f"Starting instance {self.name} ({self.instance_id})")
-      message = self.web_server.start_instance(
-        "post",
-        data = {
-          "instance_id": self.instance_id,
-          "hw":"cpu" if cpu_only else "gpu",
-          "hw_config":{
-            "cpu":f"n1-standard-{cpu_count}",
-            "gpu":f"nvidia-tesla-{gpu}",
-            "gpuCount": gpu_count,
-          },
-          "region": region,
-        }
-      )["msg"]
-      if not message == "success":
-        raise ValueError(message)
+      self.stub_ws_instance.start(
+        auto_shutdown = auto_shutdown == 0,
+        auto_shutdown_value = auto_shutdown,
+        dedicated_hw = dedicated_hw,
+        hw = gpu_count == 0,
+        hw_config = {
+          "cpu":f"n1-standard-{cpu}",
+          "gpu":f"nvidia-tesla-{gpu}",
+          "gpuCount": gpu_count,
+        },
+        zone = zone
+      )
 
       logger.debug(f"Waiting for instance {self.name} ({self.instance_id}) to start")
       _i = 0
@@ -164,14 +160,15 @@ class Instance():
           raise TimeoutError("Instance did not start within timeout, please check dashboard")
       logger.debug(f"Instance {self.name} ({self.instance_id}) started")
     else:
+      # TODO: @yashbonde: inform user in case of hardware mismatch?
       logger.debug(f"Instance {self.name} ({self.instance_id}) is already running")
 
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
     logger.debug(f"Opening instance {self.name} ({self.instance_id})")
-    self.open_data = self.web_server.open_instance(
-      "post", data = {"instance_id":self.instance_id}
-    )
+    self.open_data = self.stub_ws_instance.launch(_method = "post")
+    print(self.open_data)
+
     instance_url = self.open_data["base_url"].lstrip("/").rstrip("/")
     self.cs_url = f"{self.url}/{instance_url}"
     if self.cs_endpoint:

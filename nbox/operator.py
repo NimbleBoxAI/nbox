@@ -3,29 +3,19 @@
 # due to requirements of stability, some type enforcing is performed
 
 import os
-import json
 import zipfile
-from grpc import RpcError
 from hashlib import sha256
-from functools import partial
-from typing import Callable, Union
+from typing import Callable
 from collections import OrderedDict
-from tempfile import gettempdir, mkdtemp
-from datetime import datetime
-
-from google.protobuf.json_format import MessageToJson
+from tempfile import gettempdir
 from google.protobuf.timestamp_pb2 import Timestamp
 
 
 from . import utils as U
 from .utils import logger
-from .init import nbox_grpc_stub
-from .jobs import Job
-from .subway import Sub30
 from .network import deploy_job, Cron
-from .framework import AirflowMixin, PrefectMixin, LuigiMixin
 from .framework.on_functions import get_nbx_flow
-from .hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from .framework import AirflowMixin, PrefectMixin, LuigiMixin
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from .hyperloop.dag_pb2 import DAG, Node, RunStatus
 from .nbxlib.tracer import Tracer
@@ -36,6 +26,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   def __init__(self) -> None:
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
+    self._tracer: Tracer = None
 
   # mixin/
 

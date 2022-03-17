@@ -4,7 +4,6 @@ import os
 import tarfile
 from typing import Any, Dict
 from types import SimpleNamespace
-from google.protobuf.json_format import MessageToJson, ParseDict
 
 
 from . import utils as U
@@ -12,10 +11,10 @@ from .utils import logger
 from .init import nbox_ws_v1
 from .network import deploy_model
 from .instance import Instance
-from .subway import Sub30, NboxModelSubway
+from .subway import NboxModelSubway
 from .framework import get_model_functions
 from .framework import ModelSpec, Deployment, NboxOptions
-
+from .messages import message_to_json, dict_to_message
 
 # model/
 
@@ -118,8 +117,7 @@ class Model:
     """load spec and files in the folder to start running the model."""
     if isinstance(model_spec, dict):
       _model_spec = ModelSpec()
-      ParseDict(model_spec, _model_spec)
-      model_spec = _model_spec
+      model_spec = dict_to_message(model_spec, _model_spec)
     logger.info(f"{model_spec}")
     init_data = U.from_pickle(U.join(folder, "model.extras.pkl"))
 
@@ -205,15 +203,7 @@ class Model:
     meta_path = U.join(folder, f"nbox_config.json")
     with open(meta_path, "w") as f:
       logger.info(f"Writing nbox.meta: {meta_path}")
-      f.write(MessageToJson(
-        model_spec,
-        including_default_value_fields=True,
-        preserving_proto_field_name=True,
-        indent=2,
-        sort_keys=False,
-        use_integers_for_enums=True,
-        float_precision=4
-      ))
+      f.write(message_to_json(model_spec))
 
     nbx_path = U.join(folder, f"{folder}.nbox")
     all_files = U.get_files_in_folder(folder)

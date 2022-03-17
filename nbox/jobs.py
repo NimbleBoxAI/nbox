@@ -5,29 +5,25 @@ Jobs
 ``nbox.Job`` is a wrapper to the APIs that's it.
 """
 
+import re
 import sys
-import grpc
+import os, re
 import jinja2
+import tabulate
+from datetime import datetime
+from google.protobuf.field_mask_pb2 import FieldMask
 
+from .version import __version__
 from .utils import logger
 from . import utils as U
 from .init import nbox_grpc_stub
 from .auth import secret
-
-import tabulate
-
-
-from google.protobuf.field_mask_pb2 import FieldMask
-from google.protobuf.json_format import MessageToDict
-
+from .instance import Instance
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
-from .hyperloop.nbox_ws_pb2 import JobLog, ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
+from .hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
 from .hyperloop.nbox_ws_pb2 import JobInfo
+from .messages import message_to_dict, rpc, streaming_rpc
 
-from typing import TYPE_CHECKING, List
-
-if TYPE_CHECKING:
-  from .network import Cron
 
 ################################################################################
 # NBX-Jobs Functions
@@ -35,64 +31,123 @@ if TYPE_CHECKING:
 # These functions are assigned as static functions to the ``nbox.Job`` class.
 ################################################################################
 
-def new(project_name):
-  import os, re
-  from datetime import datetime
+def _nbx_job(project_name: str, workspace_id: str = None):
+  from .network import Cron
   created_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") + " UTC"
 
-  out = re.findall("^[a-zA-Z_]+$", project_name)
+  job_id_or_name = input("> Job ID or name: ")
+
+  scheduled = None
+  logger.info("This job will run on NBX-Jobs")
+  scheduled = input("> Is this a recurring job (y/N)? ").lower() == "y"
+  cron_instr = None
+  if scheduled:
+    logger.info("\Calendar Instructions:")
+    logger.info("\"   every 4:30 at friday\": Cron(4, 30, ['fri'])")
+    logger.info("\"every 12:00 on weekends\": Cron(12, 0, ['sat', 'sun'])")
+    logger.info("\"         every 10 hours\": Cron(10)")
+    logger.info("\"      every 420 minutes\": Cron(minute = 420)")
+    logger.info("> Enter the calender instruction: ")
+    cron_instr = input("> ").strip()
+    try:
+      eval(cron_instr, {'Cron': Cron})
+    except Exception as e:
+      logger.error(f"Invalid calender instruction: {e}")
+      sys.exit(1)
+
+  logger.info("This job will be scheduled to run on a recurring basis" if scheduled else "This job will run once")
+  logger.info(f"Creating a folder: {project_name}")
+  os.mkdir(project_name)
+  os.chdir(project_name)
+  py_data = dict(
+    import_string_nbox = "from nbox.network import Cron" if scheduled else None,
+    job_id_or_name = job_id_or_name,
+    workspace_id = workspace_id,
+    scheduled = cron_instr,
+    project_name = project_name,
+    created_time = created_time,
+  )
+  py_f_data = {k:v for k,v in py_data.items() if v is not None}
+
+  assets = U.join(U.folder(__file__), "assets")
+  path = U.join(assets, "job_new.jinja")
+  with open(path, "r") as f, open("exe.py", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**py_f_data))
+
+  md_data = dict(
+    project_name = project_name,
+    created_time = created_time,
+    scheduled = scheduled,
+  )
+
+  path = U.join(assets, "job_new_readme.jinja")
+  with open(path, "r") as f, open("README.md", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**md_data))
+
+def _build_job(project_name, workspace_id):
+  created_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") + " UTC"
+  inst = Instance(project_name, workspace_id = workspace_id)
+  cpu, gpu_name, gpu_count = None, None, None
+  if not inst.status == "RUNNING":
+    logger.info("H/W Config Options:")
+    logger.info("Since the instance is not running, you can select the hardware config for this job.")
+    logger.info("there are two options (if no gpu is provided runs on cpu only):")
+    logger.info("--cpu=2 [--gpu='<gpu_name>:<gpu_count>']")
+    hw_config = input("> ").strip()
+    splits = hw_config.split()
+    if len(hw_config) < 3:
+      logger.error(f"Invalid hardware config: {hw_config}")
+      sys.exit(1)
+
+    cpu = splits[0]
+    gpu = None if len(splits) == 1 else splits[1]
+    try:
+      cpu = re.findall("^--cpu=(\d+)$", cpu)
+      cpu = int(cpu)
+      if gpu:
+        gpu_name, gpu_count = re.findall("^--gpu='(.+):(\d+)'$", gpu)
+        gpu_count = int(gpu_count)
+    except:
+      logger.error(f"Invalid hardware config: {hw_config}")
+      sys.exit(1)
+  
+  py_data = dict(
+    run_on_build = None,
+    instance = None,
+    import_string_others = "import subprocess",
+    import_string_nbox = "from nbox.jobs import Instance",
+    not_running = inst.status != "RUNNING",
+    cpu_only = cpu and not gpu,
+    cpu_count = cpu,
+    gpu = gpu_name,
+    gpu_count = gpu_count,
+    workspace_id = workspace_id,
+    project_name = project_name,
+    created_time = created_time,
+  )
+
+def new(project_name, b: bool = False, workspace_id: str = None):
+  """Create a new job folder.
+
+  Args:
+    project_name (str): The name of the job folder
+    b (bool, def. 'False'): If True, then job will run on an instance
+    workspace_id (str, def. 'None'): If defined, that workspace will be used
+      else personal workspace will be used
+  """
+  project_name = str(project_name)
+  out = re.findall("^[a-zA-Z0-9_]+$", project_name)
   if not out:
     raise ValueError("Project name can only contain letters and underscore")
 
   if os.path.exists(project_name):
     raise ValueError(f"Project {project_name} already exists")
 
-  # ask user requirements here for customisation
-  run_on_build = input("> Is this a run on build job? (y/N) ").lower() == "y"
-
-  scheduled = None
-  instance = None
-  if run_on_build:
-    # in this case the job will be run on a nbx-build instance (internal testing)
-    # real advantage is ability to run on GPUs and persistent storage
-    logger.info("This job will run on NBX-Build")
-    instance = input("> Instance name or ID: ").strip()
-  else:
-    logger.info("This job will run on NBX-Jobs")
-    scheduled = input("> Is this a recurring job (y/N)? ").lower() == "y"
-    if scheduled:
-      logger.info("This job will be scheduled to run on a recurring basis")
-    else:
-      logger.info(f"This job will run only once")
-  
-  logger.info(f"Creating a folder: {project_name}")
-  os.mkdir(project_name)
-  os.chdir(project_name)
-
-  # jinja is cool
-  assets = U.join(U.folder(__file__), "assets")
-  path = U.join(assets, "job_new.jinja")
-  with open(path, "r") as f, open("exe.py", "w") as f2:
-    f2.write(
-      jinja2.Template(f.read()).render(
-        run_on_build = run_on_build,
-        project_name = project_name,
-        created_time = created_time,
-        scheduled = scheduled,
-        instance = instance
-    ))
-
-  path = U.join(assets, "job_new_readme.jinja")
-  with open(path, "r") as f, open("README.md", "w") as f2:
-    f2.write(
-      jinja2.Template(f.read()).render(
-        project_name = project_name,
-        created_time = created_time,
-        scheduled = scheduled,
-    ))
+  fn = _build_job if b else _nbx_job
+  fn(project_name, workspace_id)
 
   with open("requirements.txt", "w") as f:
-    f.write("nbox==0.8.8a0")
+    f.write(f"nbox=={__version__}")
 
   logger.debug("Completed")
 
@@ -100,28 +155,36 @@ def open_home():
   import webbrowser
   webbrowser.open(secret.get("nbx_url")+"/"+"jobs")
 
-def get_job_list(workspace_id: str = None, filters = "*"):
+def get_job_list(workspace_id: str = None):
+  """Get list of jobs, optionally in a workspace"""
   auth_info = NBXAuthInfo(workspace_id = workspace_id)
-  try:
-    out: ListJobsResponse = nbox_grpc_stub.ListJobs(ListJobsRequest(auth_info = auth_info))
-  except grpc.RpcError as e:
-    logger.error(f"{e.details()}")
-    sys.exit(1)
+  out: ListJobsResponse = rpc(
+    nbox_grpc_stub.ListJobs,
+    ListJobsRequest(auth_info = auth_info),
+    "Could not get job list",
+  )
 
-  out = MessageToDict(out)
+  out = message_to_dict(out)
   if len(out) == 0:
     logger.info("No jobs found")
-  
+
+  # filters = [f.upper() for f in filters]
   headers=list(out["Jobs"][0].keys())
   data = []
   for j in out["Jobs"]:
-    if filters == "*":
-      data.append([j[x] for x in headers])
-    if j["status"] in filters:
-      data.append([j[x] for x in headers])
+    _row = []
+    for x in headers:
+      if x == "status":
+        _row.append(JobProto.Status.keys()[j[x]])
+        continue
+      _row.append(j[x])
+      # if "*" in filters:
+      #   _row.append(j[x])
+      # if j["status"] in filters:
+      #   _row.append(j[x])
+    data.append(_row)
   for l in tabulate.tabulate(data, headers).splitlines():
     logger.info(l)
-
 
 
 ################################################################################
@@ -141,8 +204,8 @@ class Job:
     """
     self.id = id
     self.workspace_id = workspace_id
-    auth_info = NBXAuthInfo(workspace_id = workspace_id)
-    self.job_proto = JobProto(id = id, auth_info = auth_info)
+    self.job_proto = JobProto(id = id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
+    self.job_info = JobInfo(job=self.job_proto)
     self.update()
 
   # static methods
@@ -155,76 +218,53 @@ class Job:
     pass
 
   def __repr__(self) -> str:
-    return f"nbox.Job('{self.job_proto.id}', '{self.job_proto.auth_info.workspace_id}')"
+    return f"nbox.Job('{self.job_proto.id}', '{self.job_proto.auth_info.workspace_id}'): {self.job_proto.status}"
 
-  def stream_logs(self, f = sys.stdout):
+  def logs(self, f = sys.stdout):
     # this function will stream the logs of the job in anything that can be written to
     logger.info(f"Streaming logs of job {self.job_proto.id}")
-    try:
-      log_iter: List[JobLog] = nbox_grpc_stub.GetJobLogs(JobLogsRequest(job = JobInfo(job = self.job_proto)))
-      for job_log in log_iter:
-        for log in job_log.log:
-          f.write(log + "\n")
-          f.flush()
-    except grpc.RpcError as e:
-      logger.error(f"Could not get logs of job {self.job_proto.id}, is your job complete?")
-      logger.error(e.details())
+    for job_log in streaming_rpc(
+      nbox_grpc_stub.GetJobLogs,
+      JobLogsRequest(job = JobInfo(job = self.job_proto)),
+      f"Could not get logs of job {self.job_proto.id}, is your job complete?",
+      True
+    ):
+      for log in job_log.log:
+        f.write(log + "\n")
+        f.flush()
 
   def delete(self):
     logger.info(f"Deleting job {self.job_proto.id}")
-    try:
-      nbox_grpc_stub.DeleteJob(JobInfo(job = self.job_proto,))
-    except grpc.RpcError as e:
-      logger.error(f"Could not delete job {self.job_proto.id}")
-      logger.error(e.details())
-      raise e
+    rpc(nbox_grpc_stub.DeleteJob, JobInfo(job = self.job_proto,), "Could not delete job", True)
+    logger.info(f"Deleted job {self.job_proto.id}")
 
   def update(self):
-    logger.info("Updating job info")
-    try:
-      job: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = self.job_proto))
-    except grpc.RpcError as e:
-      logger.error(f"Could not get job {self.job_proto.id}")
-      logger.error(e.details())
-      raise e
-    for descriptor, value in job.ListFields():
-      setattr(self, descriptor.name, value)
-    self.job_proto = job
+    logger.info(f"Updating job {self.job_proto.id}")
+    self.job_proto: JobProto = rpc(
+      nbox_grpc_stub.GetJob, JobInfo(job = self.job_proto), f"Could not get job {self.job_proto.id}", True
+    )
+    print(self.job_proto)
     self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
+    self.job_info.CopyFrom(JobInfo(job = self.job_proto))
+    logger.info(f"Updated job {self.job_proto.id}")
 
   def trigger(self):
     logger.info(f"Triggering job {self.job_proto.id}")
-    try:
-      nbox_grpc_stub.TriggerJob(JobInfo(job=self.job_proto))
-    except grpc.RpcError as e:
-      logger.error(f"Could not trigger job {self.job_proto.id}")
-      logger.error(e.details())
-      raise e
-  
+    rpc(nbox_grpc_stub.TriggerJob, JobInfo(job=self.job_proto), f"Could not trigger job {self.job_proto.id}", True)
+    logger.info(f"Triggered job {self.job_proto.id}")
+
   def pause(self):    
     logger.info(f"Pausing job {self.job_proto.id}")
-    try:
-      job: JobProto = self.job_proto
-      job.status = JobProto.Status.PAUSED
-      job.paused = True
-      update_mask = FieldMask(paths=["status", "paused"])
-      nbox_grpc_stub.UpdateJob(UpdateJobRequest(job=job, update_mask=update_mask))
-    except grpc.RpcError as e:
-      logger.error(f"Could not pause job {self.job_proto.id}")
-      logger.error(e.details())
-      raise e
+    job: JobProto = self.job_proto
+    job.status = JobProto.Status.PAUSED
+    job.paused = True
+    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
     logger.info(f"Paused job {self.job_proto.id}")
   
   def resume(self):
     logger.info(f"Resuming job {self.job_proto.id}")
-    try:
-      job: JobProto = self.job_proto
-      job.status = JobProto.Status.SCHEDULED
-      job.paused = False
-      update_mask = FieldMask(paths=["status", "paused"])
-      nbox_grpc_stub.UpdateJob(UpdateJobRequest(job=job, update_mask=update_mask))
-    except grpc.RpcError as e:
-      logger.error(f"Could not resume job {self.job_proto.id}")
-      logger.error(e.details())
-      raise e
+    job: JobProto = self.job_proto
+    job.status = JobProto.Status.SCHEDULED
+    job.paused = False
+    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
     logger.info(f"Resumed job {self.job_proto.id}")

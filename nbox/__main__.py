@@ -13,6 +13,8 @@ The commands are broken down according to the products they are related to.
 
 import sys
 import fire
+from json import dumps
+
 from . import cli as n # nbox-cli
 from .jobs import Job
 from .instance import Instance
@@ -26,29 +28,23 @@ def get(api_end: str, **kwargs):
   Args:
     api_end (str): something like '/v1/api'
   """
+  api_end = api_end.strip("/")
   if nbox_ws_v1 == None:
     raise RuntimeError("Not connected to NimbleBox.ai webserver")
   out = nbox_ws_v1
   for k in api_end.split("/"):
     out = getattr(out, k)
   res = out(_method = "get", **kwargs)
-  sys.stdout.write(repr(res))
+  sys.stdout.write(dumps(res))
   sys.stdout.flush()
 
-def post(api_end: str):
-  """Post any command
-  
-  """
-  pass
-
-
 NBX = dict(
-  instance = Instance            , # nbox instance
+  build = Instance               , # nbox build
   jobs = Job                     , # nbox jobs
   tunnel = ssh.tunnel            , # nbox tunnel
   home = n.open_home             , # nbox home
-  compile = compile,
-  get = get
+  compile = compile              , # nbox compile: internal for autogen code
+  get = get                      , # nbox get "/workspace/88fn83/projects"
 )
 
 if __name__ == "__main__":
