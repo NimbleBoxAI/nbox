@@ -10,7 +10,7 @@ import sys
 import os, re
 import jinja2
 import tabulate
-from datetime import datetime
+from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
 from .version import __version__
@@ -33,7 +33,8 @@ from .messages import message_to_dict, rpc, streaming_rpc
 
 def _nbx_job(project_name: str, workspace_id: str = None):
   from .network import Cron
-  created_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") + " UTC"
+  # https://blog.ganssle.io/articles/2019/11/utcnow.html
+  created_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") + " UTC"
 
   job_id_or_name = input("> Job ID or name: ")
 
@@ -85,7 +86,7 @@ def _nbx_job(project_name: str, workspace_id: str = None):
     f2.write(jinja2.Template(f.read()).render(**md_data))
 
 def _build_job(project_name, workspace_id):
-  created_time = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S") + " UTC"
+  created_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") + " UTC"
   inst = Instance(project_name, workspace_id = workspace_id)
   cpu, gpu_name, gpu_count = None, None, None
   if not inst.status == "RUNNING":
