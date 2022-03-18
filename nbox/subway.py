@@ -1,6 +1,6 @@
 """
-Jobs Utilities
-==============
+Subway
+======
 
 These function are meant to make jobs easier and contain the code for what I am calling
 ``Subway``, which converts any OpenAPI spec into an RPC-like interface.

@@ -15,10 +15,13 @@ from .subway import Sub30
 from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
 
 def get_stub() -> WSJobServiceStub:
+  """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``
+  object which is globally accesible as ``nbox.nbox_grpc_stub``. If you find yourself
+  using this function, you might want to reconsider your design."""
   token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
   ssl_creds = grpc.ssl_channel_credentials()
   creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
-  channel = grpc.secure_channel("grpc.revamp-online.test-2.nimblebox.ai:443", creds)
+  channel = grpc.secure_channel(secret.get("nbx_url").replace("https://", "dns:/")+":443", creds)
   stub = WSJobServiceStub(channel)
   TIMEOUT = 6
   logger.info(f"Checking connection on channel for {TIMEOUT}s")
@@ -31,7 +34,15 @@ def get_stub() -> WSJobServiceStub:
   logger.info(f"Connected using stub: {stub.__class__.__name__}")
   return stub
 
-def create_webserver_subway(version = "v1", session = None):
+def create_webserver_subway(version: str = "v1", session: requests.Session = None) -> Sub30:
+  """Create a Subway object for the NBX Webserver. This is a wrapper around the
+  OpenAPI spec plublished by NBX Webserver. It loads the JSON object in ``Sub30``
+  which allows accesing REST APIs with python "." (dot) notation. If you find yourself
+  using this function, you might want to reconsider your design.
+
+  Returns:
+    Sub30: A Subway object for the NBX Webserver.
+  """
   _version_specific_url = secret.get("nbx_url") + f"/api/{version}"
   session = session if session != None else nbox_session # select correct session
   r = session.get(_version_specific_url + "/openapi.json")
@@ -50,7 +61,7 @@ def create_webserver_subway(version = "v1", session = None):
 nbox_session = requests.Session()
 nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 nbox_grpc_stub: WSJobServiceStub  = get_stub()
-nbox_ws_v1: Sub30 = create_webserver_subway("v1")
+nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
 
 # add code here to warn user of nbox deprecation -> not sure how to implement this yet
 # raise_old_version_warning()

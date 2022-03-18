@@ -7,20 +7,15 @@ from time import sleep
 from pprint import pprint as pp
 from datetime import datetime, timedelta
 
-from google.protobuf.json_format import MessageToJson
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from grpc import RpcError
-from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest
-from .hyperloop.job_pb2 import Job as JobProto, NBXAuthInfo
-from .hyperloop.dag_pb2 import DAG, Flowchart
-
-from google.protobuf.json_format import MessageToDict
+from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
+from .hyperloop.job_pb2 import Job as JobProto
 
 from .init import nbox_grpc_stub
 from .auth import secret
 from .jobs import Job
-from .messages import rpc
+from .messages import message_to_json, rpc
 from .framework.model_spec_pb2 import ModelSpec
 from .subway import Sub30
 from .utils import logger
@@ -32,25 +27,22 @@ class NBXAPIError(Exception):
   pass
 
 
-def deploy_model(
+def deploy_serving(
   export_model_path,
   stub_all_depl: Sub30,
   model_spec: ModelSpec,
   wait_for_deployment=False,
 ):
-  """One-Click-Deploy method v3 that takes in a .nbox file and deploys it to the nbox server.
-  Avoid using this function manually and use ``model.deploy()`` or nboxCLI instead.
+  """One-Click-Deploy API to serve items on a NBX-Deploy
 
   Args:
     export_model_path (str): path to the file to upload
-    nbox_meta (dict, optional): metadata for the nbox.Model() object being deployed
+    stub_all_depl (nbox.Sub30): Subway RPC stub for ``/deployments``
+    model_spec (nbox.ModelSpec): ModelSpec object
     wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
 
   Returns:
-    endpoint (str, None): if ``wait_for_deployment == True``, returns the URL endpoint of the deployed
-      model
-    access_key(str, None): if ``wait_for_deployment == True``, returns the data access key of
-      the deployed model
+    if ``wait_for_deployment == True`` returns ``(url, key)`` pair
   """
   from nbox.auth import secret # it can refresh so add it in the method
   access_token = secret.get("access_token")
@@ -87,14 +79,7 @@ def deploy_model(
       file_type = "nbox",
       model_name = model_name,
       convert_args = None,
-      nbox_meta = MessageToJson(
-        model_spec,
-        including_default_value_fields=True,
-        preserving_proto_field_name=True,
-        sort_keys=False,
-        use_integers_for_enums=True,
-        float_precision=4
-      ), # annoying, but otherwise only the first key would be sent
+      nbox_meta = message_to_json(model_spec), # annoying, but otherwise only the first key would be sent
       deployment_type = deployment_type, # "nbox" or "ovms2"
       deployment_id = deployment_id,
       deployment_name = deployment_name,
@@ -112,14 +97,7 @@ def deploy_model(
   #   file_type = "nbox",
   #   model_name = model_name,
   #   convert_args = None,
-  #   nbox_meta = MessageToJson(
-  #     model_spec,
-  #     including_default_value_fields=True,
-  #     preserving_proto_field_name=True,
-  #     sort_keys=False,
-  #     use_integers_for_enums=True,
-  #     float_precision=4
-  #   ), # annoying, but otherwise only the first key would be sent
+  #   nbox_meta = message_to_json(model_spec), # annoying, but otherwise only the first key would be sent
   #   deployment_type = deployment_type, # "nbox" or "ovms2"
   #   deployment_id = deployment_id,
   #   deployment_name = deployment_name,
@@ -135,14 +113,6 @@ def deploy_model(
 
   # checking if file is successfully uploaded on S3 and tell webserver
   # whether upload is completed or not because client tells
-
-  # requests.post(
-  #   url=f"{URL}/api/model/update_model_status",
-  #   json={"upload": True if },
-  #   headers={"Authorization": f"Bearer {access_token}"},
-  # )
-
-  logger.debug("Verifying upload ...")
   ws_stub_model = stub_all_depl.u(model_spec.deploy.id).models.u(model_id) # eager create the stub
   try:
     ws_stub_model.update(_method = "post", status = r.status_code == 204)
@@ -236,7 +206,7 @@ def deploy_model(
   logger.debug("NBX Deploy")
   return endpoint, access_key
 
-class Cron:
+class Schedule:
   _days = {
     k:str(i) for i,k in enumerate(
       ["sun","mon","tue","wed","thu","fri","sat"]
@@ -257,8 +227,7 @@ class Cron:
     starts: datetime = None,
     ends: datetime = None,
   ):
-    """Scheduling is nothing but a type of data sturcture that should be able to process
-    all patterns that the users can throw at this.
+    """Make scheduling natural.
 
     Usage
     -----
@@ -266,23 +235,23 @@ class Cron:
     .. code-block:: python
 
       # 4:20 everyday
-      Cron(4, 0)
+      Schedule(4, 0)
 
       # 4:20 every friday
-      Cron(4, 20, ["fri"])
+      Schedule(4, 20, ["fri"])
 
       # 4:20 every friday from jan to feb
-      Cron(4, 20, ["fri"], ["jan", "feb"])
+      Schedule(4, 20, ["fri"], ["jan", "feb"])
 
       # 4:20 everyday starting in 2 days and runs for 3 days
       starts = datetime.utcnow() + timedelta(days = 2) # NOTE: that time is in UTC
-      Cron(4, 20, starts = starts, ends = starts + timedelta(days = 3))
+      Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
 
       # Every 1 hour
-      Cron(1)
+      Schedule(1)
 
       # Every 69 minutes
-      Cron(minute = 69)
+      Schedule(minute = 69)
 
     Args:
         hour (int): Hour of the day, if only this value is passed it will run every ``hour``
@@ -343,6 +312,7 @@ class Cron:
     }
 
   def get_message(self) -> JobProto.Schedule:
+    """Get the JobProto.Schedule object for this Schedule"""
     _starts = Timestamp(); _starts.GetCurrentTime()
     _ends = Timestamp(); _ends.FromDatetime(self.ends)
     return JobProto.Schedule(start = _starts, end = _ends, cron = self.cron)
@@ -351,16 +321,12 @@ class Cron:
     return str(self.get_dict())
 
 
-def deploy_job(
-  zip_path: str,
-  job_proto: JobProto
-):
+def deploy_job(zip_path: str, job_proto: JobProto):
   """Deploy an NBX-Job
 
   Args:
       zip_path (str): Path to the zip file
-      schedule (Cron): Schedule of the job
-      data (dict): Metadata generated for the job
+      schedule (Schedule): Schedule of the job
   Returns:
       nbox.Job: the job object
   """
@@ -376,6 +342,7 @@ def deploy_job(
   logger.info(code)
   job_proto.code.MergeFrom(code)
 
+  _job_is_present = job_proto.id
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
     UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
@@ -397,15 +364,13 @@ def deploy_job(
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
 
-  # if job_proto.id != None:
-  #   logger.info(f"Job {job_id} already present")
-  #   # if this jobs is already present, there is no need to create another entry
-  #   # simply return this job and any changes to this should be done via Job
-  #   return job
-
-  # Otherwise we are creating a new job
-  logger.debug("Creating new job ...")
-  rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job: {job_proto.id}")
-  logger.info(f"Job creation started, please check FE")
+  if not _job_is_present:
+    logger.info("Creating new job ...")
+    rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job: {job_proto.id}")
+    logger.info(f"Job creation started, please check FE")
+  else:
+    logger.info("Updating job ...")
+    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job = job_proto), f"Failed to update job: {job_proto.id}")
+    logger.info(f"Job updated, please check FE")
 
   return Job(job_proto.id, job_proto.auth_info.workspace_id)

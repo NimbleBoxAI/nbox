@@ -1,21 +1,28 @@
+from json import loads
 from grpc import RpcError
 from google.protobuf.json_format import MessageToDict, MessageToJson, ParseDict
 
 from .utils import logger
 
-def rpc(stub: callable, message, err_msg: str, raise_on_error: bool = False):
+def rpc(stub: callable, message, err_msg: str, raise_on_error: bool = True):
   """convienience function for calling a gRPC stub"""
   try:
     resp = stub(message)
   except RpcError as e:
     logger.error(err_msg)
-    logger.error(e.details())
+    err_ = loads(e.debug_error_string())
+    if "value" in err_:
+      if int(err_["value"]) > 500:
+        logger.error("There is something wrong from our side. Your files are safe on your local machine.")
+      elif int(err_["value"]) > 400:
+        logger.error("There is something wrong in nbox. Raise an issue on github: https://github.com/NimbleBoxAI/nbox/issues")
+    logger.error(err_["grpc_message"])
     if raise_on_error:
-      raise e
+      raise RpcError("NBX-RPC error, see above for details")
   else:
     return resp
 
-def streaming_rpc(stub: callable, message, err_msg: str, raise_on_error: bool = False):
+def streaming_rpc(stub: callable, message, err_msg: str, raise_on_error: bool = True):
   """convienience function for streaming from a gRPC stub"""
   try:
     data_iter = stub(message)

@@ -27,7 +27,7 @@ from nbox.nbxlib.tracer import Tracer
 from nbox import Operator, nbox_grpc_stub
 from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 from nbox.hyperloop.job_pb2 import Job
-from nbox.message import rpc
+from nbox.messages import rpc
 {{ import_string_nbox}}
 
 def get_op() -> Operator:
@@ -73,7 +73,8 @@ def run():
   op: Operator = get_op(){% if run_on_build %}
   subprocess.run(["pip", "install", "-r", U.join(U.folder(__file__), "requirements.txt")]){% endif %}
   op.propagate(_tracer = Tracer())
-  op.thaw(op._tracer.job_proto)
+  if hasattr(op._tracer, "job_proto"):
+    op.thaw(op._tracer.job_proto)
 
   try:{% if scheduled %}
     op() # your operator is recurring avoid passing any values here{% else %}
@@ -82,10 +83,14 @@ def run():
     ){% endif %}
   except Exception as e:
     U.logger.error(e)
-    op._tracer.job_proto.status = Job.Status.ERROR
+    if hasattr(op._tracer, "job_proto"):
+      op._tracer.job_proto.status = Job.Status.ERROR
   else:
-    op._tracer.job_proto.status = Job.Status.COMPLETED
-  rpc(nbox_grpc_stub.UpdateRun, UpdateRunRequest(token = op._tracer.token, job=op._tracer.job_proto), "Failed to end job!")
+    if hasattr(op._tracer, "job_proto"):
+      op._tracer.job_proto.status = Job.Status.COMPLETED
+      rpc(
+        nbox_grpc_stub.UpdateRun, UpdateRunRequest(token = op._tracer.token, job=op._tracer.job_proto), "Failed to end job!"
+      )
 
 if __name__ == "__main__":
   Fire({"deploy": deploy, "run": run})

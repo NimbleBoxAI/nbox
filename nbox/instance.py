@@ -13,7 +13,7 @@ the second step towards YoCo and CasH, read more
 import sys
 import time
 import shlex
-from copy import deepcopy
+from typing import List
 from functools import partial
 from tabulate import tabulate
 from tempfile import gettempdir
@@ -33,18 +33,22 @@ from .auth import secret
 # make the entire process functional.
 ################################################################################
 
-def print_status(workspace_id: str = None):
+def print_status(workspace_id: str = None, fields: List[str] = None):
+  """Print complete status of NBX-Build instances. If ``workspace_id`` is not provided
+  personal workspace will be used."""
   logger.info("Getting NBX-Build details")
   if workspace_id == None:
     stub_projects = nbox_ws_v1.user.projects
   else:
     stub_projects = nbox_ws_v1.workspace.u(workspace_id).projects
 
+  fields = fields if fields != None else Instance.useful_keys
+
   data = stub_projects()["data"]
   projects = data["project_details"]
-  data = [{k: projects[x][k] for k in Instance.useful_keys} for x in projects]
-  data_table = [[x[k] for k in Instance.useful_keys] for x in data]
-  for x in tabulate(data_table, headers=Instance.useful_keys).splitlines():
+  data = [{k: projects[x][k] for k in fields} for x in projects]
+  data_table = [[x[k] for k in fields] for x in data]
+  for x in tabulate(data_table, headers=fields).splitlines():
     logger.info(x)
 
 ################################################################################
@@ -59,9 +63,27 @@ class Instance():
   useful_keys = ["project_id", "project_name", "size_used", "size", "state",]
 
   def __init__(self, i: str, workspace_id: int = None, cs_endpoint = "server"):
+    """NBX-Build Instance class manages the both individual instance, but provides
+    webserver functionality using ``nbox_ws_v1``, such as starting and stopping,
+    deletion and more.
+
+    Args:
+        i (str): name or ``project_id`` of the instance
+        workspace_id (int, optional): id of the workspace to use, if not provided
+            personal workspace will be used.
+        cs_endpoint (str, optional): endpoint to use for the webserver, this will connect
+          to the custom ports functionality of the instance. Defaults to ``server``, 
+    """
     if i == None:
       raise ValueError("Instance id must be provided, try --i='8h57f9'")
     i = str(i)
+
+    # simply add useful keys to the instance
+    self.project_id: str = None
+    self.project_name: str = None
+    self.size_used: float = None
+    self.size: float = None
+    self.state: str = None
 
     # create a new session for communication with the compute server, avoid using single
     # session for conlficting headers
@@ -117,20 +139,33 @@ class Instance():
   mv = None # atleast registered
 
   def refresh(self):
-    if not isinstance(self.project_id, (int, str)):
-      raise ValueError("Instance id must be an integer or a string")
-    print(self.stub_ws_instance)
-    data = self.stub_ws_instance() # GET /user/projects/{project_id}
-    for k,v in data.items():
-      if k in self.useful_keys:
-        setattr(self, k, v)
-    self.data = data
+    """Update the data, get latest state"""
+    self.data = self.stub_ws_instance() # GET /user/projects/{project_id}
+    for k in self.useful_keys:
+      setattr(self, k, self.data[k])
 
-  def start(self, cpu: int = 2, gpu: str = "p100", gpu_count: int = 0, auto_shutdown: int = 6, dedicated_hw: bool = False, zone = "asia-south-1"):
-    """
-    * ``cpu`` should be one of [2, 4, 8]
-    * if ``gpu == 0``, cpu only instance is started
-    * if ``auto_shutdown == 0`` then only no autoshutdown will be done
+  def start(
+    self,
+    cpu: int = 2,
+    gpu: str = "p100",
+    gpu_count: int = 0,
+    auto_shutdown: int = 6,
+    dedicated_hw: bool = False,
+    zone = "asia-south-1"
+  ):
+    """Start instance.
+
+    Args:
+        cpu (int, optional): CPU count should be one of ``[2, 4, 8]``. Defaults to 2.
+        gpu (str, optional): GPU name should be one of ``["p100", "v100", ""]``. Defaults
+            to "p100".
+        gpu_count (int, optional): If ``gpu == 0``, cpu only instance is started. Defaults
+            to 0.
+        auto_shutdown (int, optional): If ``auto_shutdown == 0`` then only no autoshutdown
+            will be done. Defaults to 6.
+        dedicated_hw (bool, optional): If ``dedicated_hw == True`` then only dedicated hardware
+        zone (str, optional): Zone to use, should be one of ``["asia-south-1", "asia-east-1"]``.
+            Defaults to "asia-south-1".
     """
     if auto_shutdown < 0:
       raise ValueError("auto_shutdown must be a positive integer (hours)")
@@ -169,7 +204,7 @@ class Instance():
     self.open_data = self.stub_ws_instance.launch(_method = "post")
     print(self.open_data)
 
-    instance_url = self.open_data["base_url"].lstrip("/").rstrip("/")
+    instance_url = self.open_data["base_url"].strip("/")
     self.cs_url = f"{self.url}/{instance_url}"
     if self.cs_endpoint:
       self.cs_url += f"/{self.cs_endpoint}"

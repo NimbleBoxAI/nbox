@@ -9,12 +9,26 @@ from .utils import join, NBOX_HOME_DIR, isthere, logger
 
 class AWSClient:
   @isthere("boto3", "botocore", soft = False)
-  def __init__(self, aws_access_key_id, aws_secret_access_key, region_name):
+  def __init__(self, aws_access_key_id: str, aws_secret_access_key: str, region_name: str):
+    """Template for creating your own AWS authentication class.
+
+    EXPERIMENTAL: This is not yet ready for use.
+
+    Args:
+        aws_access_key_id (str): AWS access key ID
+        aws_secret_access_key (str): AWS secret access key
+        region_name (str): AWS region name
+    """
     self.aws_access_key_id = aws_access_key_id
     self.aws_secret_access_key = aws_secret_access_key
     self.region_name = region_name
 
-  def get_client(self, service_name = "s3", **boto_config_kwargs):
+  def get_client(self, service_name: str = "s3", **boto_config_kwargs):
+    """Get the client object for the given service
+
+    Args:
+        service_name (str): _description_. Defaults to "s3".
+    """
     import boto3
     from botocore.client import Config as BotoConfig
 
@@ -33,7 +47,16 @@ class AWSClient:
 
 class GCPClient:
   @isthere("google-cloud-sdk", "google-cloud-storage", soft = False)
-  def __init__(self, project_id, credentials_file):
+  def __init__(self, project_id: str, credentials_file):
+    """Template for creating your own authentication class.
+
+    EXPERIMENTAL: This is not yet ready for use.
+
+    Args:
+        project_id (str): GCP project ID
+        credentials_file: GCP credentials python object, must support .read() method
+    """
+
     from google.oauth2 import service_account
     
     self.project_id = project_id
@@ -43,7 +66,12 @@ class GCPClient:
       scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
 
-  def get_client(self, service_name = "storage", **gcp_config_kwargs):
+  def get_client(self, service_name: str = "storage", **gcp_config_kwargs):
+    """Get the client object for the given service
+
+    Args:
+        service_name (str): GCP service name
+    """
     if service_name == "storage":
       from google.cloud import storage
       return storage.Client(
@@ -58,6 +86,11 @@ class GCPClient:
 class AzureClient:
   @isthere("azure-storage-blob", soft = False)
   def __init__(self):
+    """
+    Microsoft Azure
+
+    EXPERIMENTAL: This is not yet ready for use.
+    """
     from azure.storage.blob import BlobServiceClient
     from azure.identity import DefaultAzureCredential
 
@@ -80,6 +113,11 @@ class AzureClient:
 class OCIClient:
   @isthere("oci", "oci-py", soft = False)
   def __init__(self, config_file):
+    """
+    Oracle Cloud Infrastructure
+
+    EXPERIMENTAL: This is not yet ready for use.
+    """
     from oci.config import from_file
     from oci.signer import Signer
 
@@ -112,6 +150,11 @@ class OCIClient:
 class DOClient:
   @isthere("doctl", soft = False)
   def __init__(self, config_file):
+    """
+    Digital Ocean
+
+    EXPERIMENTAL: This is not yet ready for use.
+    """
     from doctl.doctl_client import DictCursor
     from doctl.doctl_client import DoctlClient
 
@@ -166,6 +209,7 @@ class NBXClient:
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(fp):
       # get the secrets JSON
+      # TODO: @yashbonde: Set default initialisation from workspace
       try:
         self.secrets = json.loads(requests.get(
           "https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/sample_config.json"
@@ -198,9 +242,8 @@ class NBXClient:
     return self.secrets[item]
 
 # function for manual trigger
-
 def init_secret():
+  # add any logic here for creating secrets
   return NBXClient()
 
 secret = init_secret()
-

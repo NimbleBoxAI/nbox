@@ -2,14 +2,14 @@
 
 import os
 import tarfile
-from typing import Any, Dict
+from typing import Any, Dict, Union
 from types import SimpleNamespace
 
 
 from . import utils as U
 from .utils import logger
 from .init import nbox_ws_v1
-from .network import deploy_model
+from .network import deploy_serving
 from .instance import Instance
 from .subway import NboxModelSubway
 from .framework import get_model_functions
@@ -25,8 +25,8 @@ class Model:
     method: str = None,
     pre: callable = None,
     post: callable = None,
-    model_spec = None,
-    verbose = False
+    model_spec: ModelSpec = None,
+    verbose: bool = False
   ):
     """Top of the stack Model class.
 
@@ -37,10 +37,8 @@ class Model:
         Defaults to None.
       pre (callable): preprocessing function to be applied to the ``input_object``
       post (callable): postprocessing function to be applied to the model prediction
+      model_spec (ModelSpec, optional): ModelSpec object to be used for the model.
       verbose (bool, optional): If true provides detailed prints. Defaults to False.
-
-    Raises:
-      ValueError: If any category is "text" and tokenizer is not provided.
     """
 
     if model == NboxModelSubway:
@@ -95,14 +93,14 @@ class Model:
 
   ################################################################################
   # Functions here are the services that NBX provides to the user and no longer
-  # >v0.8.8-alpha the implementation of processing logic.
+  # >v0.8.8a1 the implementation of processing logic.
   ################################################################################
 
   def __call__(self, input_object) -> Any:
-    r"""Caller is the most important UI/UX. The ``input_object`` can be anything from
+    r"""Call is the most important UI/UX. The ``input_object`` can be anything from
     a tensor, an image file, filepath as string, string and is processed by ``pre`` function.
 
-    The entire purpose of this package is to make inference chill.
+    The entire purpose of this package is to make ML chill.
 
     Args:
       input_object (Any): input to be processed
@@ -113,8 +111,13 @@ class Model:
     return post_out
 
   @classmethod
-  def deserialise(cls, model_spec, folder) -> 'Model':
-    """load spec and files in the folder to start running the model."""
+  def deserialise(cls, model_spec: Union[ModelSpec, Dict], folder) -> 'Model':
+    """Load ``ModelSpec`` and ``folder`` with the files in it and return a ``Model`` object.
+    
+    Args:
+      model_spec (Union[ModelSpec, Dict]): ModelSpec object or dictionary of the model_spec
+      folder (str): folder where the model files are stored
+    """
     if isinstance(model_spec, dict):
       _model_spec = ModelSpec()
       model_spec = dict_to_message(model_spec, _model_spec)
@@ -141,24 +144,15 @@ class Model:
     *,
     _unittest = False
   ):
-    """NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
-
-    This deploys the current model onto our managed K8s clusters. This tight product service integration
-    is very crucial for us and is the best way to make deploy a model for usage.
-
-    Raises appropriate assertion errors for strict checking of inputs
+    """Serve your model on NBX-Deploy `read more <https://nimbleboxai.github.io/nbox/nbox.model.html>`_
 
     Args:
-      model_spec (nbox.framework.ModelSpec): what the name says!
-      export_type (str, optional): Export type for the model, check documentation for more details
-      wait_for_deployment (bool, optional): wait for deployment to complete
-      deployment_id (str, optional): ``deployment_id`` to put this model under, if you do not pass this
-        it will automatically create a new deployment check `platform <https://nimblebox.ai/oneclick>`_
-        for more info or check the logs.
-      deployment_name (str, optional): if ``deployment_id`` is not given and you want to create a new
-        deployment group (ie. webserver will create a new ``deployment_id``) you can tell what name you
-        want, be default it will create a random name.
-      **ser_kwargs (Any, optional): keyword arguments to be passed to ``serialise`` function
+      model_spec (nbox.framework.ModelSpec): ModelSpec object
+      deployment_id_or_name (str, optional): Deployment information through ID or name, if not
+        provided will create a new deployment group with a random name.
+      workspace_id (str, optional): Workspace ID to deploy the model to. If not provided
+        will use the personal workspace.
+      wait_for_deployment (bool, optional): Block thread till deployment to be ready.
     """
     if workspace_id == None:
       stub_all_depl = nbox_ws_v1.user.deployments
@@ -218,7 +212,7 @@ class Model:
       return model_spec, folder
 
     # OCD baby!
-    return deploy_model(
+    return deploy_serving(
       export_model_path=nbx_path,
       stub_all_depl=stub_all_depl,
       model_spec=model_spec,

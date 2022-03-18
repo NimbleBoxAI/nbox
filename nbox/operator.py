@@ -5,15 +5,16 @@
 import os
 import zipfile
 from hashlib import sha256
-from typing import Callable
-from collections import OrderedDict
 from tempfile import gettempdir
+from collections import OrderedDict
+from typing import Callable, Iterable, List
 from google.protobuf.timestamp_pb2 import Timestamp
-
 
 from . import utils as U
 from .utils import logger
-from .network import deploy_job, Cron
+from .subway import Sub30
+from .init import nbox_ws_v1
+from .network import deploy_job, Schedule
 from .framework.on_functions import get_nbx_flow
 from .framework import AirflowMixin, PrefectMixin, LuigiMixin
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
@@ -24,6 +25,36 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   _version: int = 1 # always try to keep this an i32
 
   def __init__(self) -> None:
+    """Create an operator, which abstracts your code into sharable, bulding blocks which
+    can then deployed on either NBX-Jobs or NBX-Deploy.
+    
+    Usage
+    -----
+
+    .. code-block:: python
+      
+      class MyOperator(Operator):
+        def __init__(self, ...):
+          ... # initialisation of job happens here
+
+          # use prebuilt operators to define the entire process
+          from .nbxlib.ops import Shell
+          self.download_binary = Shell("wget https://nbox.ai/{hash}")
+
+          # keep a library of organisation wide operators
+          from .nbx_internal.operators import TrainGPT
+          self.train_model: Operator = TrainGPT(...)
+
+        def forward(self, ...):
+          # pass any inputs you want at runtime
+          ... # execute code in any arbitrary order, free from DAGs
+
+          self.download_binary(hash="my_binary") # pass relevant data at runtime
+          self.train_model() # run any operation and get full visibility on platform
+
+      # to convert operator is 
+      job: Operator = MyOperator(...)
+    """
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
     self._tracer: Tracer = None
@@ -110,8 +141,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
       yield module
 
   def named_operators(self, memo = None, prefix: str = '', remove_duplicate: bool = True):
-    r"""Returns an iterator over all modules in the network, yielding
-    both the name of the module as well as the module itself."""
+    r"""Returns an iterator over all modules in the network, yielding both the name of the module
+    as well as the module itself."""
     if memo is None:
       memo = set()
     if self not in memo:
@@ -126,7 +157,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
           yield m
 
   @property
-  def children(self):
+  def children(self) -> Iterable['Operator']:
+    """Get children of the operator."""
     return self._operators.values()
 
   # user can manually define inputs if they want, avoid this user if you don't know how this system works
@@ -149,12 +181,14 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
   # information passing/
 
   def propagate(self, **kwargs):
+    """Set kwargs for each child in the Operator"""
     for c in self.children:
       c.propagate(**kwargs)
     for k, v in kwargs.items():
       setattr(self, k, v)
 
   def thaw(self, job: JobProto):
+    """Load JobProto into this Operator"""
     nodes = job.dag.flowchart.nodes
     edges = job.dag.flowchart.edges
     for _id, node in nodes.items():
@@ -176,25 +210,14 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     raise NotImplementedError("User must implement forward()")
 
   def _register_forward(self, python_callable: Callable):
-    # convienience method to register a forward method
+    """convienience method to register a forward method"""
     self.forward = python_callable
 
+  # define these here, it's okay to waste some memory
   node = Node()
-  source_edges = None
+  source_edges: List[Node] = None
 
   def __call__(self, *args, **kwargs):
-    # blank comment so docstring below is not loaded
-
-    """There is no need to perform ``self.is_dag`` check here, since it is
-    a declarative model not an imperative one, so existance of DAG's is
-    irrelevant.
-
-    This function will has the code for the following:
-    1. Input checks, we want to enforce that
-    2. Tracing, we want to trace the execution of the model
-    3. Networking, when required to execute like RPC
-    """
-
     # Type Checking and create input dicts
     inputs = self.inputs
     len_inputs = len(args) + len(kwargs)
@@ -244,37 +267,41 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     init_folder: str,
     job_id_or_name: str = None,
     workspace_id: str = None,
-    schedule: Cron = None,
+    schedule: Schedule = None,
     cache_dir: str = None,
     *,
     _unittest = False
   ):
-    """_summary_
+    """Deploy this job on NBX-Jobs.
 
     Args:
-        workspace (str): Name of the workspace to be a part of this
         init_folder (str, optional): Name the folder to zip
-        job (Union[str, int], optional): Name or ID of the job
-        schedule (Cron, optional): If ``None`` will run only once, so be careful
-        cache_dir (str, optional): Folder where to put the zipped file, if None will be tempdir
-        _unittest (bool, optional): Internal
-
+        job_id_or_name (Union[str, int], optional): Name or ID of the job
+        workspace_id (str): Workspace ID to deploy to, if not specified, will use the personal workspace
+        schedule (Schedule, optional): If ``None`` will run only once, else will schedule the job
+        cache_dir (str, optional): Folder where to put the zipped file, if ``None`` will be ``tempdir``
     Returns:
         Job: Job object
     """
-    # if workspace_id == None:
-    #   stub_all_jobs = nbox_ws_v1.user.jobs
-    # else:
-    #   stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
+    if workspace_id == None:
+      stub_all_jobs = nbox_ws_v1.user.jobs
+    else:
+      stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
 
-    # jobs = list(filter(lambda x: x["job_id"] == job_id_or_name, stub_all_jobs()["data"]))
-    # if len(jobs) == 0:
-    #   job_nane =  job_id_or_name
-    # elif len(jobs) > 1:
-    #   raise ValueError(f"Multiple jobs found for '{job_id_or_name}'")
-    # data = jobs[0]
-    # stub_job: Sub30 = stub_all_jobs.u(data["job_id"])
-    # if job_id == None else job
+    jobs = list(filter(lambda x: x["job_id"] == job_id_or_name, stub_all_jobs()["data"]))
+    if len(jobs) == 0:
+      logger.info(f"No Job found with ID or name: {job_id_or_name}, will create a new one")
+      job_name =  job_id_or_name
+      job_id = None
+    elif len(jobs) > 1:
+      raise ValueError(f"Multiple jobs found for '{job_id_or_name}'")
+    else:
+      data = jobs[0]
+      job_name = data["name"]
+      job_id = data["job_id"]
+    
+    logger.info(f"Deploying job: {job_name}")
+    logger.info(f"Job ID: {job_id}")
 
     # check if this is a valid folder or not
     if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
@@ -303,7 +330,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
 
     _starts = Timestamp(); _starts.GetCurrentTime()
     job_proto = JobProto(
-      name = U.get_random_name(True).split("-")[0],
+      id = job_id,
+      name = job_name if job_name else U.get_random_name(True).split("-")[0],
       created_at = _starts,
       resource = Resource(),
       auth_info = NBXAuthInfo(workspace_id = workspace_id,),
@@ -327,17 +355,17 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     logger.info(f"SHA256 ( {init_folder} ): {hash_}")
 
     zip_path = U.join(cache_dir if cache_dir else gettempdir(), f"project-{hash_}.nbox")
-    logger.info(f"Packing project to '{zip_path}'")
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-      for f in all_f:
-        zip_file.write(f)
+    if not os.path.exists(zip_path):
+      logger.info(f"Packing project to '{zip_path}'")
+      with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for f in all_f:
+          zip_file.write(f)
+    else:
+      logger.info(f"Found existing project zip file, will not re-pack: '{zip_path}'")
 
     if _unittest:
       return job_proto
 
-    return deploy_job(
-      zip_path = zip_path,
-      job_proto = job_proto
-    )
+    return deploy_job(zip_path = zip_path, job_proto = job_proto)
 
   # /nbx
