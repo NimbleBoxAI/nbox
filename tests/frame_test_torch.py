@@ -57,7 +57,7 @@ def test_feedforward():
       TorchToTorchscript(func = src_model.model, example_inputs = x,),
 
       # create a folder /tmp/nbox_testing
-      NboxOptions(model_name = "test69", folder = U.join(gettempdir(), "nbox_testing"), create_folder = True)
+      NboxOptions(model_name = None, folder = U.join(gettempdir(), "nbox_testing"), create_folder = True)
     )
   print(model_spec)
 

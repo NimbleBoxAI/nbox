@@ -2,6 +2,7 @@ import os
 
 from nbox.jobs import Job
 
+from ..auth import secret
 from ..utils import logger
 from .. import utils as U
 from ..init import nbox_grpc_stub

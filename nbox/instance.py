@@ -88,7 +88,7 @@ class Instance():
     # create a new session for communication with the compute server, avoid using single
     # session for conlficting headers
     sess = Session()
-    sess.headers.update({"Authorization": secret.get("access_token")})
+    sess.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
     stub_ws_instance = create_webserver_subway("v1", sess)
 
     self.status = None # this is the status string
@@ -116,13 +116,14 @@ class Instance():
     self.cs_url = None
     self.cs_endpoint = cs_endpoint
 
-    self.stub_ws_instance = stub_ws_instance.u(self.project_id)
+    self.stub_ws_instance = stub_projects.u(self.project_id) # .../build/{project_id}
     logger.debug(f"WS: {self.stub_ws_instance}")
     self.__opened = False
     self.running_scripts = []
     self.refresh()
     # if self.state == "RUNNING":
     #   self.start()
+    logger.debug(f"Instance: {self}")
 
   __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
   status = staticmethod(print_status)
@@ -140,7 +141,7 @@ class Instance():
 
   def refresh(self):
     """Update the data, get latest state"""
-    self.data = self.stub_ws_instance() # GET /user/projects/{project_id}
+    self.data = self.stub_ws_instance()["data"] # GET /user/projects/{project_id}
     for k in self.useful_keys:
       setattr(self, k, self.data[k])
 
@@ -282,10 +283,11 @@ class Instance():
   def delete(self, force = False):
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
-    logger.debug(f"Deleting instance {self.name} ({self.instance_id})")
-    message = self.web_server.delete_instance("post", data = {"instance_id":self.instance_id})["msg"]
-    if not message == "success":
-      raise ValueError(message)
+    logger.warning(f"Deleting instance {self.project_name} ({self.project_id})")
+    if input(f"> Are you sure you want to delete '{self.project_name}'? (y/N): ") == "y":
+      self.stub_ws_instance("delete")
+    else:
+      logger.warning("Aborted")
 
   def run_py(self, fp: str, *args, write_fp = sys.stdout):
     fp = fp.replace("nbx://", "/mnt/disks/user/project/")

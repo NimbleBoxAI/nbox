@@ -30,9 +30,6 @@ def get_logger():
   logger = logging.getLogger("utils")
   logger.setLevel(logging.DEBUG)
 
-  if os.environ.get("NBOX_NO_OUTPUT", False):
-    return NullLogger()
-
   if os.environ.get("NBOX_JSON_LOG", False):
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(jsonlogger.JsonFormatter(
@@ -41,9 +38,6 @@ def get_logger():
     ))
     logger.addHandler(logHandler)
   else:
-    logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
-
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(logging.Formatter(
       '[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s',

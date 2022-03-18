@@ -117,7 +117,7 @@ class Sub30:
     )
     body = p[method]
 
-    if "parameters" in body:
+    if "parameters" in body and "requestBody" not in body:
       # likely a GET call
       params = kwargs
 

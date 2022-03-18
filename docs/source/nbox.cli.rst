@@ -1,7 +1,7 @@
 How to nboxCLI
 ==============
 
-``nbox`` provides a simple and effective CLI commands that you can add to your current CI/CD pipeline.
+``nbox`` CLI is built on top of `python-fire <https://github.com/google/python-fire>`_ that manages the 
 
 As of this writing there is only one task that ``nbox`` CLI does, deployment of models. It directly calls the
 ``nbox.network.deploy_model`` method along, if needed with authentication for single line in your CI/CD.

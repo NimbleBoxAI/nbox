@@ -34,7 +34,8 @@ from .autogen import ml_register
 from .model_spec_pb2 import ModelSpec, Tensor
 
 class NboxOptions:
-  def __init__(self, model_name: str, folder: str = None, create_folder = False):
+  def __init__(self, model_name: str = None, folder: str = None, create_folder = False):
+    model_name = model_name or U.get_random_name().replace("-", "_")
     if create_folder:
       self.folder = U.join(folder if folder != None else U.NBOX_HOME_DIR, model_name)
       self.model_name = model_name

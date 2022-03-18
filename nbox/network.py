@@ -15,7 +15,7 @@ from .hyperloop.job_pb2 import Job as JobProto
 from .init import nbox_grpc_stub
 from .auth import secret
 from .jobs import Job
-from .messages import message_to_json, rpc
+from .messages import message_to_dict, message_to_json, rpc
 from .framework.model_spec_pb2 import ModelSpec
 from .subway import Sub30
 from .utils import logger
@@ -44,6 +44,7 @@ def deploy_serving(
   Returns:
     if ``wait_for_deployment == True`` returns ``(url, key)`` pair
   """
+  logger.info(f"stub_all_depl: {stub_all_depl}")
   from nbox.auth import secret # it can refresh so add it in the method
   access_token = secret.get("access_token")
   URL = secret.get("nbx_url")
@@ -55,7 +56,7 @@ def deploy_serving(
   # TODO: @yashbonde figure out protobuf way of storing deployment_id strings
   deployment_type = "nbox" # model_spec.deploy.type
   deployment_id = model_spec.deploy.id
-  deployment_name = "" # model_spec.deploy.name
+  deployment_name = model_spec.deploy.name
   model_name = model_spec.name
 
   logger.debug(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
@@ -71,37 +72,18 @@ def deploy_serving(
   logger.debug("Getting bucket URL")
 
   # get bucket URL and upload the data
-
-  r = requests.get(
-    url=f"{stub_all_depl._url}/get_upload_url",
-    params=dict(
-      file_size = file_size,
-      file_type = "nbox",
-      model_name = model_name,
-      convert_args = None,
-      nbox_meta = message_to_json(model_spec), # annoying, but otherwise only the first key would be sent
-      deployment_type = deployment_type, # "nbox" or "ovms2"
-      deployment_id = deployment_id,
-      deployment_name = deployment_name,
-    ),
-    headers={"Authorization": f"Bearer {access_token}"},
+  out = stub_all_depl.u(deployment_id).get_upload_url(
+    _method = "put",
+    convert_args = "",
+    deployment_meta = {},
+    deployment_name = deployment_name,
+    deployment_type = deployment_type, # "nbox" or "ovms2"
+    file_size = str(file_size),
+    file_type = "nbox",
+    model_name = model_name,
+    nbox_meta = message_to_dict(model_spec) , # message_to_json(model_spec), # annoying, but otherwise only the first key would be sent
+    # deployment_id = deployment_id,
   )
-  try:
-    r.raise_for_status()
-  except:
-    raise ValueError(f"Could not fetch upload URL: {r.content.decode('utf-8')}")
-  out = r.json()
-
-  # out = stub_all_depl.get_upload_url(
-  #   file_size = file_size,
-  #   file_type = "nbox",
-  #   model_name = model_name,
-  #   convert_args = None,
-  #   nbox_meta = message_to_json(model_spec), # annoying, but otherwise only the first key would be sent
-  #   deployment_type = deployment_type, # "nbox" or "ovms2"
-  #   deployment_id = deployment_id,
-  #   deployment_name = deployment_name,
-  # )
   model_id = out["fields"]["x-amz-meta-model_id"]
   deployment_id = out["fields"]["x-amz-meta-deployment_id"]
   logger.debug(f"model_id: {model_id}")
@@ -114,10 +96,7 @@ def deploy_serving(
   # checking if file is successfully uploaded on S3 and tell webserver
   # whether upload is completed or not because client tells
   ws_stub_model = stub_all_depl.u(model_spec.deploy.id).models.u(model_id) # eager create the stub
-  try:
-    ws_stub_model.update(_method = "post", status = r.status_code == 204)
-  except:
-    pass
+  ws_stub_model.update(_method = "post", status = r.status_code == 204)
 
   # polling
   endpoint = None
@@ -141,32 +120,21 @@ def deploy_serving(
     sleep(5)
 
     # get the status update
-
-    # r = requests.get(
-    #   url=f"{URL}/api/model/get_model_history",
-    #   params={"model_id": model_id, "deployment_id": deployment_id},
-    #   headers={"Authorization": f"Bearer {access_token}"},
-    # )
-
     logger.debug(f"Getting updates ...")
     updates = ws_stub_model.history()["data"]
     for st in updates["model_history"]:
       curr_st = st["status"]
+      logger.debug(f"Status: {curr_st}")
       if curr_st in _stat_done:
         continue
-
-      # # only when this is a new status
-      # col = {"failed": console.T.fail, "in-progress": console.T.inp, "success": console.T.st, "ready": console.T.st}[
-      #   curr_st.split(".")[-1]
-      # ]
-      logger.debug(f"Status: {curr_st}")
+      logger.info(f"Status: {curr_st}")
       _stat_done.append(curr_st)
 
     if curr_st == "deployment.success":
       # if we do not have api key then query web server for it
       if access_key is None:
-        endpoint = updates["model_data"]["api_url"]
-        if endpoint is None:
+        server_endpoint = updates["model_data"]["api_url"]
+        if server_endpoint is None:
           if wait_for_deployment:
             continue
           logger.debug("Deployment in progress ...")
@@ -174,25 +142,11 @@ def deploy_serving(
           break
 
     elif curr_st == "deployment.ready":
-      
-      # r = requests.get(
-      #   url=f"{URL}/api/model/get_deployment_access_key",
-      #   headers={"Authorization": f"Bearer {access_token}"},
-      #   params={"deployment_id": deployment_id},
-      # )
-      # try:
-      #   r.raise_for_status()
-      #   access_key = r.json()
-      #   logger.debug(f"nbx-key: {access_key}")
-      # except:
-      #   pp(r.content.decode("utf-8"))
-      #   raise ValueError(f"Failed to get access_key, please check status at: {URL}/oneclick")
-
       out = stub_all_depl.u(model_spec.deploy.id).get_access_key()
       access_key = out["access_key"]
 
       # keep hitting /metadata and see if model is ready or not
-      r = requests.get(url=f"{endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})
+      r = requests.get(url=f"{server_endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})
       if r.status_code == 200:
         logger.debug(f"Model is ready")
         break
@@ -204,7 +158,7 @@ def deploy_serving(
 
   logger.debug("Process Complete")
   logger.debug("NBX Deploy")
-  return endpoint, access_key
+  return server_endpoint, access_key
 
 class Schedule:
   _days = {

@@ -251,6 +251,7 @@ class Job:
     logger.info(f"Deleting job {self.job_proto.id}")
     rpc(nbox_grpc_stub.DeleteJob, JobInfo(job = self.job_proto,), "Could not delete job")
     logger.info(f"Deleted job {self.job_proto.id}")
+    self.refresh()
 
   def refresh(self):
     """Refresh Job statistics"""
@@ -261,12 +262,14 @@ class Job:
     self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
     self.job_info.CopyFrom(JobInfo(job = self.job_proto))
     logger.info(f"Updated job {self.job_proto.id}")
+    self.refresh()
 
   def trigger(self):
     """Manually triger this job"""
     logger.info(f"Triggering job {self.job_proto.id}")
     rpc(nbox_grpc_stub.TriggerJob, JobInfo(job=self.job_proto), f"Could not trigger job {self.job_proto.id}")
     logger.info(f"Triggered job {self.job_proto.id}")
+    self.refresh()
 
   def pause(self):
     """Pause the execution of this job.
@@ -275,15 +278,15 @@ class Job:
     logger.info(f"Pausing job {self.job_proto.id}")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.PAUSED
-    job.paused = True
     rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
     logger.info(f"Paused job {self.job_proto.id}")
+    self.refresh()
   
   def resume(self):
     """Resume the Job with the current schedule, if provided else simlpy sets status as ACTIVE"""
     logger.info(f"Resuming job {self.job_proto.id}")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.SCHEDULED
-    job.paused = False
     rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
     logger.info(f"Resumed job {self.job_proto.id}")
+    self.refresh()
