@@ -19,8 +19,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '.
 # -- Project information -----------------------------------------------------
 
 project = "nbox"
-copyright = "2021, nimblebox.ai"
-author = "nimblebox.ai"
+copyright = "2021-22, nimblebox.ai"
+author = "research@nimblebox.ai"
 
 # The full version, including alpha/beta/rc tags
 release = "0.8.8a1"
@@ -32,10 +32,10 @@ release = "0.8.8a1"
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    "sphinx.ext.autodoc",  # Core library for html generation from docstrings
-    "sphinx.ext.autosummary",  # Create neat summary tables
-    "sphinx.ext.napoleon",  # Support for NumPy and Google style docstrings
-    "sphinx.ext.viewcode",  # Support for viewing source code
+    "sphinx.ext.autodoc",          # Core library for html generation from docstrings
+    "sphinx.ext.autosummary",      # Create neat summary tables
+    "sphinx.ext.napoleon",         # Support for NumPy and Google style docstrings
+    "sphinx.ext.viewcode",         # Support for viewing source code
     "sphinx.ext.autosectionlabel", # Support for section labels
 ]
 autosummary_generate = True  # Turn on sphinx.ext.autosummary
@@ -64,6 +64,7 @@ autodoc_mock_imports = [
     "scikit_learn"
     "skl2onnx",
     "sklearn",
+    "_tkinter"
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -85,4 +86,4 @@ html_theme = "furo"
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ["static"]
+html_static_path = ["_static"]

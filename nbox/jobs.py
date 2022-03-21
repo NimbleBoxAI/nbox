@@ -209,6 +209,9 @@ def get_job_list(workspace_id: str = None):
 ################################################################################
 
 class Job:
+  new = staticmethod(new)
+  status = staticmethod(get_job_list)
+
   def __init__(self, id, workspace_id = None):
     """Python wrapper for NBX-Jobs gRPC API
 
@@ -222,9 +225,6 @@ class Job:
     self.job_info = JobInfo(job=self.job_proto)
     self.refresh()
 
-  # static methods
-  new = staticmethod(new)
-  status = staticmethod(get_job_list)
 
   def change_schedule(self, new_schedule: 'Schedule'):
     # nbox should only request and server should check if possible or not

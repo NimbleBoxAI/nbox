@@ -1,4 +1,9 @@
-# this file has the code for nbox.Model that is the holy grail of the project
+"""
+nbox.Model
+==========
+
+This file has the code to run ``nbox.Model``
+"""
 
 import os
 import tarfile
@@ -149,7 +154,7 @@ class Model:
     Args:
       model_spec (nbox.framework.ModelSpec): ModelSpec object
       deployment_id_or_name (str, optional): Deployment information through ID or name, if not
-        provided will create a new deployment group with a random name.
+        provided will create a new deployment group with the given name
       workspace_id (str, optional): Workspace ID to deploy the model to. If not provided
         will use the personal workspace.
       wait_for_deployment (bool, optional): Block thread till deployment to be ready.
@@ -174,7 +179,7 @@ class Model:
       _deploy_proto.id = None
       _deploy_proto.name = deployment_id_or_name
     elif len(deployments) > 1:
-      raise ValueError(f"Multiple deployments found for '{deployment_id_or_name}'")
+      raise ValueError(f"Multiple deployments found for '{deployment_id_or_name}', try passing ID")
     else:
       data = deployments[0]
       _deploy_proto.id = data["deployment_id"]
@@ -274,3 +279,16 @@ class Model:
 
     if shutdown_once_done:
       instance.stop()
+
+  @staticmethod
+  def train_on_job():
+    """Train this model on NBX-Jobs. This same experience can be given by creating a new job
+    that then can then be populated how we currently create a new job using NBX-Jobs CLI
+    ```
+    nbx jobs new --help
+    ```
+    So should we really add this, is the question!
+    
+    EXPERIMENTAL: FEATURES MIGHT BREAK
+    """
+    pass

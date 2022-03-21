@@ -4,11 +4,6 @@ nboxCLI
 
 This is CLI for ``nbox``, it is meant to be as simple to use as possible.
 The commands are broken down according to the products they are related to.
-
-.. code-block::
-
-  nbox instance [nbox.Instance] **init_kwargs [actions] **acton_kwargs
-  nbox jobs [new/deploy/open]
 """
 
 import sys

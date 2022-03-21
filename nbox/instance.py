@@ -59,6 +59,8 @@ def print_status(workspace_id: str = None, fields: List[str] = None):
 ################################################################################
 
 class Instance():
+  status = staticmethod(print_status)
+
   # each instance has a lot of data against it, we need to store only a few as attributes
   useful_keys = ["project_id", "project_name", "size_used", "size", "state",]
 
@@ -126,7 +128,6 @@ class Instance():
     logger.debug(f"Instance: {self}")
 
   __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
-  status = staticmethod(print_status)
 
   # @classmethod
   # def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':

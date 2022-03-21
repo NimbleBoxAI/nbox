@@ -54,13 +54,13 @@ def torch_condition(model):
 @ml_register.register(
   framework = "torch",
   target = "torch",
-  target_processor_name = "torchscript_to_torch",
   stub_name = "torch_to_torchscript",
   message_name = "TorchToTorchscript",
+  target_processor_name = "torchscript_to_torch",
   export_fn_import = "from torch.jit import trace",
   dependencies = ["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
 )
-def torch_export_torchscript(user_options, nbox_options, spec):
+def torch_export_torchscript(user_options, nbox_options, spec: ModelSpec):
   import torch
   from torch.jit import trace
   traced_model = trace(**user_options.__dict__)
@@ -87,7 +87,7 @@ def torch_export_torchscript(user_options, nbox_options, spec):
   dependencies = ["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
   ignore_args= ["f"],
 )
-def torch_import_torchscript(user_options, nbox_options, spec):
+def torch_import_torchscript(user_options, nbox_options, spec: ModelSpec):
   from torch.jit import load
   model = load(U.join(nbox_options.folder, "model.pt"), map_location="cpu")
   return model
@@ -102,7 +102,7 @@ def torch_import_torchscript(user_options, nbox_options, spec):
   dependencies=["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
   ignore_args = ["f"],
 )
-def torch_export_onnx(user_options, nbox_options, spec):
+def torch_export_onnx(user_options, nbox_options, spec: ModelSpec):
   import torch
   from torch.onnx import export
   user_options.f = nbox_options.filepath # override the folder

@@ -1,5 +1,6 @@
 from functools import partial
 from tempfile import gettempdir
+from typing import Dict
 
 from nbox import Model
 import nbox.utils as U
@@ -10,7 +11,7 @@ from nbox.framework.model_spec_pb2 import ModelSpec
 import numpy as np
 import torch
 
-def pre_fn(x):
+def pre_fn(x) -> Dict:
   from torchvision.transforms import functional as trfn
   from nbox import utils as U
   

@@ -1,3 +1,15 @@
+"""
+Auth
+====
+
+This code is used to manage the authentication of the entire ``nbox`` package. For authentication
+it will create a ``.nbx`` in the user's home directory (``~/.nbx``, in case of linux) and store
+a file called ``secrets.json``. This folder will also contain more information and files that
+are used elsewhere as well ex. files generated when takling to any instance.
+
+Functions
+---------
+"""
 import os
 import json
 import requests
