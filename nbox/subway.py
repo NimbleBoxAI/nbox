@@ -3,7 +3,25 @@ Subway
 ======
 
 These function are meant to make jobs easier and contain the code for what I am calling
-``Subway``, which converts any OpenAPI spec into an RPC-like interface.
+``Subway``, which converts any OpenAPI spec into an RPC-like interface. At the end of the
+day, each API call is really nothing but a functional call with added steps like
+serialisation and networking combined. This kind of added complexity can:
+
+#. Make code look really ugly, think try-catches and ``r.raise_for_request()``
+#. Easy to develop because information has to be packaged as different parts for each\
+    type of function call (GET, POST, ...). The true intent was always to pass it the\
+    relevant information and forget about underlying details.
+#. API endpoints are just strings and it's easy to have a typo in the URL. When the\
+    ``Subway``is loaded with the OpenAPI spec, it will disallow incorrect URLs. while\
+    managing the parameters correctly.
+#. A more pythonic way of programming where you can use the dot notation.
+
+Based os these ideas there are three types of subways:
+
+#. ``Subway``: Does not load OpenAPI spec and will blindly call the API, avoid this
+#. ``Sub30``: Built for OpenAPI v3.0.0, this becomes ``nbox_ws_v1``
+#. ``SpecSubway``: This is used with the FastAPI's OpenAPI spec, this is used in systems\
+    that use FastAPI (eg. Compute Server)
 """
 
 import re
@@ -152,7 +170,7 @@ class Sub30:
 
 class SpecSubway():
   def __init__(self, _url, _session, _spec, __name = None):
-    """Subway but for """
+    """Subway but for fastAPI OpenAPI spec."""
     self._url = _url.rstrip('/')
     self._session = _session
     self._spec = _spec
@@ -291,7 +309,8 @@ class SpecSubway():
 ################################################################################
 
 class NboxModelSubway:
-  def __init__(self, x):
+  def __init__(self, x: str):
+    """Vanilla nbox-serving fastapi server"""
     from requests import Session
 
     url, key = self.pattern(x)

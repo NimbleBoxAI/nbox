@@ -1,10 +1,14 @@
-# this file has methods for netorking related things
+"""
+Network functions are gateway between NBX-Services. If you find yourself using this
+you might want to reach out to us <research-at-nimblebox-dot-ai>!
+
+But for the curious mind, many of our services work on gRPC and Protobufs. This network.py
+manages the quirkyness of our backend and packs multiple steps as one function.
+"""
 
 import os
-import json
 import requests
 from time import sleep
-from pprint import pprint as pp
 from datetime import datetime, timedelta
 
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -15,7 +19,7 @@ from .hyperloop.job_pb2 import Job as JobProto
 from .init import nbox_grpc_stub
 from .auth import secret
 from .jobs import Job
-from .messages import message_to_dict, message_to_json, rpc
+from .messages import message_to_dict, rpc
 from .framework.model_spec_pb2 import ModelSpec
 from .subway import Sub30
 from .utils import logger
@@ -183,8 +187,7 @@ class Schedule:
   ):
     """Make scheduling natural.
 
-    Usage
-    -----
+    Usage:
 
     .. code-block:: python
 

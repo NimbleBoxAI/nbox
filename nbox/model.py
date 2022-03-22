@@ -1,8 +1,108 @@
 """
-nbox.Model
-==========
+This file has the code to run ``nbox.Model`` which is top of the stack class. It can load
+any arbitrary model and run it, deploy it (if possible to export), train it (WIP). It has gone
+through it's fare share of refactoring and is now much simpler, in terms of functions while
+providing very abstract value.
 
-This file has the code to run ``nbox.Model``
+tl;dr
+-----
+
+Underneath this system uses a simple and effective strategy. All the supported methods for
+all the frameworks (tensoflow, pytorch, etc) are in a registery, whenever the user sends
+any model, it is matched and all functions for that framework (eg. ``sklearn_to_pickle``)
+are loaded. This then provides first class support eg. ``delay_forecaster.torch_to_onnx()``,
+combined with the protobuf style message stub system this provides all configurations to
+user and leaves us incharge of simply executing it.
+
+Story Mode
+----------
+
+Let's just say your organisation is working on project for predicting "User Fraud Prevention",
+and you already have a working baseline in scikit learn. You have already trained the model
+and now want to deploy it to production.
+
+.. code-block:: python
+
+  # get your baseline model
+  sklearn_model: 'SklearnModel' = get_skl_model(...)
+  fraud_scoring: Model = Model(model = sklearn_model, method = "predict_proba")
+
+  # sklearn models consume numpy tesors so we send them those
+  full_matrix: np.ndarray = get_test_data()
+  y_pred: np.ndarray = stock_prediction(x = full_matrix[:, :-1])
+
+Before deploying you can write simple functions that can be used to preprocess and postprocess
+the incoming data. Your function consumes``UserProto`` or a ``Dict`` that can be parsed to
+proto. So you create a new model like this:
+
+.. code-block:: python
+
+  def _pre(user: Union[UserProto, Dict]) -> Dict:
+    if isinstance(str):
+      user = dict_to_message(user, UserProto) # deployment works on REST so load dict to proto
+
+    # maybe you want to update your DB
+    sql.execute(f'INSERT INTO users (id, name) VALUES ({user.id}, {user.name})')
+
+    ... # your business logic here
+
+    return {"X": user.feature_vector.numpy(),} # NOTE: returns dict
+
+  fraud_scoring = Model(
+    model = sklearn_model,
+    method = "predict_proba",
+    pre = _pre
+  )
+
+  # You can now pass both proto and dict to the model
+  user: UserProto = get_user_from_db()
+  prediction: Dict = fraud_scoring(user)
+
+If you want to add a post processing (eg. here I am just converting the prediction to a list):
+
+.. code-block:: python
+
+  def _post(pred: Dict) -> Dict:
+    # maybe you want to update your DB
+    sql.execute(f'UPDATE users SET fraud_score = {pred["fraud_score"]} WHERE id = {pred["user_id"]}')
+
+    ... # your business logic here
+
+    return {k:v.tolist() for k,v in pred} # NOTE: returns json serializable dict
+
+  fraud_scoring = Model(
+    model = sklearn_model,
+    method = "predict_proba",
+    pre = _pre,
+    post = _post
+  )
+
+When you want to deploy the model, you will need to export it to some format. You don't have to
+search through documentation to find out supported models, they are already in the object as
+``extra_fns`` attribute (``fraud_scoring.extra_fns``). You chose to go the reliable way of pickling
+and unpickling.
+
+.. code-block:: python
+
+  from nbox.framework import SklearnToPickle, NboxOptions, ModelSpec
+
+  # get a protobuf dataclass for the spec
+  model_spec: ModelSpec = fraud_scoring.sklearn_to_pickle(
+    SklearnToPickle( ... ), # fill values based on your preferance
+    NboxOptions( ... ) # fill values based on your preferance
+  )
+
+You have the ``ModelSpec`` object and you can now deploy it. All the information is packaged
+in a nice serving that will be put on K8s.
+
+.. code-block:: python
+
+  url, key = fraud_scoring.deploy(
+    model_spec = model_spec,
+    ... # other deployment args
+  )
+
+Here's documentation to the code:
 """
 
 import os

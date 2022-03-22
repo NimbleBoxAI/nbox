@@ -1,13 +1,7 @@
 """
-Jobs
-====
-
-Run arbitrary scripts on NimbleBox.ai instances with simplicity of ``nbox``.
-
-This immensely powerful tool will allow methods to be run in a truly serverless fashion.
-In the background it will spin up a VM, then run a script and close the machine. This is
-the second step towards YoCo and CasH, read more
-`here <https://yashbonde.github.io/general-perceivers/remote.html>`_.
+NBX-Build Instances are APIs to your machines. These APIs can be used to change state of
+the machine (start, stop, etc.), can be used to transfer files to and from the machine
+and to an extent running and managing programs (WIP).
 """
 
 import sys
@@ -19,7 +13,7 @@ from tabulate import tabulate
 from tempfile import gettempdir
 from requests.sessions import Session
 
-from .subway import SpecSubway, Sub30, Subway, TIMEOUT_CALLS
+from .subway import SpecSubway,  TIMEOUT_CALLS
 from . import utils as U
 from .utils import NBOX_HOME_DIR, logger
 from .init import nbox_ws_v1, create_webserver_subway
@@ -35,7 +29,7 @@ from .auth import secret
 
 def print_status(workspace_id: str = None, fields: List[str] = None):
   """Print complete status of NBX-Build instances. If ``workspace_id`` is not provided
-  personal workspace will be used."""
+  personal workspace will be used. Used in CLI"""
   logger.info("Getting NBX-Build details")
   if workspace_id == None:
     stub_projects = nbox_ws_v1.user.projects
@@ -155,19 +149,15 @@ class Instance():
     dedicated_hw: bool = False,
     zone = "asia-south-1"
   ):
-    """Start instance.
+    """Start instance if not already running and loads APIs from the compute server.
 
     Args:
-        cpu (int, optional): CPU count should be one of ``[2, 4, 8]``. Defaults to 2.
-        gpu (str, optional): GPU name should be one of ``["p100", "v100", ""]``. Defaults
-            to "p100".
-        gpu_count (int, optional): If ``gpu == 0``, cpu only instance is started. Defaults
-            to 0.
-        auto_shutdown (int, optional): If ``auto_shutdown == 0`` then only no autoshutdown
-            will be done. Defaults to 6.
-        dedicated_hw (bool, optional): If ``dedicated_hw == True`` then only dedicated hardware
-        zone (str, optional): Zone to use, should be one of ``["asia-south-1", "asia-east-1"]``.
-            Defaults to "asia-south-1".
+        cpu (int, optional): CPU count should be one of ``[2, 4, 8]``
+        gpu (str, optional): GPU name should be one of ``["t5", "p100", "v100", "k80"]``
+        gpu_count (int, optional): When zero, cpu-only instance is started
+        auto_shutdown (int, optional): No autoshutdown if zero, defaults to 6.
+        dedicated_hw (bool, optional): If not spot/pre-emptible like machines used
+        zone (str, optional): GCP cloud regions, defaults to "asia-south-1".
     """
     if auto_shutdown < 0:
       raise ValueError("auto_shutdown must be a positive integer (hours)")
@@ -260,6 +250,7 @@ class Instance():
     self.__opened = True
 
   def stop(self):
+    """Stop Instance"""
     if self.state == "STOPPED":
       logger.debug(f"Instance {self.name} ({self.instance_id}) is already stopped")
       return
@@ -282,6 +273,7 @@ class Instance():
     self.__opened = False
 
   def delete(self, force = False):
+    """Delete Instance"""
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
     logger.warning(f"Deleting instance {self.project_name} ({self.project_id})")
@@ -291,6 +283,9 @@ class Instance():
       logger.warning("Aborted")
 
   def run_py(self, fp: str, *args, write_fp = sys.stdout):
+    """Run any python file
+    
+    EXPERIMENTAL: FEATURES MIGHT BREAK"""
     fp = fp.replace("nbx://", "/mnt/disks/user/project/")
     pid = self(fp)
     from time import sleep
@@ -298,7 +293,9 @@ class Instance():
       sleep(10)
 
   def __call__(self, x: str):
-    """Caller is the most important UI/UX. The letter ``x`` in programming is reserved the most
+    """EXPERIMENTAL: FEATURES MIGHT BREAK
+    
+    Caller is the most important UI/UX. The letter ``x`` in programming is reserved the most
     arbitrary thing, and this ``nbox.Instance`` is the gateway to a cloud instance. You can:
     1. run a script on the cloud
     2. run a local script on the cloud

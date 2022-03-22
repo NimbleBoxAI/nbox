@@ -1,7 +1,9 @@
-# MIT-License code for all operators that are open sourced
+"""MIT-License code for all operators that are open sourced"""
+
+import shlex
+import subprocess
 
 from ..operator import Operator
-
 from ..utils import PoolBranch
 from ..instance import Instance
 
@@ -9,6 +11,7 @@ from ..instance import Instance
 
 class NboxInstanceStartOperator(Operator):
   def __init__(self, instances):
+    """Starts multiple instances on nbox in a blocking fashion"""
     super().__init__()
     if not isinstance(instances, list):
       instances = [instances]
@@ -25,6 +28,7 @@ class NboxInstanceStartOperator(Operator):
 
 class NboxModelDeployOperator(Operator):
   def __init__(self, model_name, model_path, model_weights, model_labels):
+    """Simple Operator that wraps the deploy function of ``Model``"""
     super().__init__()
     self.model_name = model_name
     self.model_path = model_path
@@ -42,6 +46,7 @@ class NboxModelDeployOperator(Operator):
 
 class NboxWaitTillJIDComplete(Operator):
   def __init__(self, instance, jid):
+    """Blocks threads while a certain PID is complete on Instance"""
     super().__init__()
     self.instance = instance
     self.jid = jid
@@ -68,6 +73,7 @@ class NboxWaitTillJIDComplete(Operator):
 
 class Sequential():
   def __init__(self, *ops):
+    """Package a list of operators into a sequential pipeline"""
     super().__init__()
     for op in ops:
       assert isinstance(op, Operator), "Operator must be of type Operator"
@@ -87,6 +93,7 @@ class Sequential():
 
 class Python(Operator):
   def __init__(self, func, *args, **kwargs):
+    """Convert a python function into an operator, everything has to be passed at runtime"""
     super().__init__()
     self.fak = (func, args, kwargs)
 
@@ -95,6 +102,7 @@ class Python(Operator):
 
 class GitClone(Operator):
   def __init__(self, url, path = None, branch = None):
+    """Clone a git repository into a path"""
     super().__init__()
     self.url = url
     self.path = path
@@ -114,6 +122,7 @@ class GitClone(Operator):
 
 class ShellCommand(Operator):
   def __init__(self, *commands):
+    """Run multiple shell commands, uses ``shelex`` to prevent injection"""
     super().__init__()
     import string
 
@@ -124,8 +133,6 @@ class ShellCommand(Operator):
     self._inputs = all_in
 
   def forward(self, *args, **kwargs):
-    import shlex
-    import subprocess
     for comm in self.commands:
       comm = comm.format(*args, **kwargs)
       comm = shlex.split(comm)
@@ -144,6 +151,7 @@ class Notify(Operator):
     ms_teams: str = None,
     discord: str = None,
   ):
+    """Notifications"""
     super().__init__()
     self.notify_mode = None
     self.notify_id = None

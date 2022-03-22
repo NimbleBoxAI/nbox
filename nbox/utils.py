@@ -1,3 +1,29 @@
+"""
+Utility objects and functions.
+
+This has a couple of cool things:
+
+#. ``get_logger``: a master logger for nbox, this can be modified to log through anything
+#. ``isthere``: a decorator that checks if a package is installed, if not it raises an error\
+  It is more complicated than it needs to be because it is seedling for a way to package\
+  functions and code together so that it can be used in a more dynamic way.
+#. ``get_files_in_folder``: a function that returns all files in a folder with a certain extension
+#. ``fetch``: a function that fetches a url and caches it in ``tempdir`` for faster loading
+#. ``get_random_name``: a function that returns a random name, if ``True`` is passed returns\
+  an ``uuid4()`` for truly random names :)
+#. ``hash_``: a function that returns a hash of any python object, string is accurate, others\
+  might be anything, but atleast it returns something.
+#. ``folder/join``: to be used in pair, ``join(folder(__file__), "server_temp.jinja")`` means\
+  relative path "../other.py". Scattered throughout the codebase, the super generic name will\
+  bite me.
+#. ``to_pickle/from_pickle``: to be used in pair, ``to_pickle(obj, "path")`` and ``from_pickle("path")``\
+  to save and load python objects to disk.
+#. ``DBase``: सस्ता-protobuf (cheap protobuf), can be nested and ``get_dict`` will get for all\
+  children
+#. ``PoolBranch``: Or how to use multiprocessing, but blocked so you don't have to give a shit\
+  about it.
+"""
+
 ############################################################
 # This file is d0 meaning that this has no dependencies!
 # Do not import anything from rest of nbox here!

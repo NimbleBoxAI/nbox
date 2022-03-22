@@ -1,7 +1,4 @@
 """
-Jobs
-====
-
 ``nbox.Job`` is a wrapper to the APIs that's it.
 """
 
@@ -10,19 +7,17 @@ import sys
 import os, re
 import jinja2
 import tabulate
-import webbrowser
 from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
-from .version import __version__
-from .utils import logger
 from . import utils as U
-from .init import nbox_grpc_stub
-from .auth import secret
+from .utils import logger
 from .instance import Instance
+from .version import __version__
+from .init import nbox_grpc_stub
+from .hyperloop.nbox_ws_pb2 import JobInfo
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
 from .hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
-from .hyperloop.nbox_ws_pb2 import JobInfo
 from .messages import message_to_dict, rpc, streaming_rpc
 
 

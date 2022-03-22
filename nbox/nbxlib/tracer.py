@@ -1,3 +1,6 @@
+# If you have come till here, and you want to work on more things like this, reach out:
+# research@nimblebox.ai
+
 import os
 
 from nbox.jobs import Job

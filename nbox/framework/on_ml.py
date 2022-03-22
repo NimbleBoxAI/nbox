@@ -1,32 +1,26 @@
 """
-ML Framework
-============
-
 I started with the initial assumption that abstracting away the details of
 processing the data was doable but unfortunately I was not able to get it to
-work reliably. I ended up moving back to configured format because that is
-easy to scale and maintain (as @rohanpooniwala keeps saying). All the methods
-are descibed in this single file that then has the methods for:
+work reliably. We redid the entire thing by manually defining the code and
+operations but it was still super hard. So the answer was to generate code
+that the user will have to implement.
 
-1. ``NBX-Deploy``
-2. ``torch``
-3. ``sklearn``
-4. ``onnruntime``
+It loosely works like this, let's just say I am trying to write code for
+``torch_to_onnx`` module. ``ModelSpec`` expects that ``source`` and ``target``
+contain all the required information for running this model in another
+location. Now the actual code is only of two lines, but the many different
+frameworks, with their different functions and different inputs means that
+any scope of manual process is gone out the window. So we basically create a
+registry that can store all the information and pass it along to ``nbox.Model``.
 
-This has a protocol like behaviour where any node is supposed to execute
-certain things in certain fashion. For more information on this read the
+The implementation of the registry is a ``@register`` decorator, which takes
+in all the user information and underneath structures the entire thing and
+stores it, if needed to be written down for compilation.
 
 Read the code for best understanding.
 """
 
-# weird file name, yessir. Why? because
-# from nbox.framework.on_ml import ModelOuput
-# read as "from nbox's framework on ML import ModelOutput"
-
 import os
-import dill
-import inspect
-from typing import Any, Dict, Tuple
 
 from .. import utils as U
 from ..utils import logger

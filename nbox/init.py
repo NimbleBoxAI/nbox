@@ -1,9 +1,13 @@
 """
-Build systems are an extremely important detail of any software project. When they work,
-they can feel like magic: you execute a command, and after a series of potentially
-complicated steps, a working binary (or other artifact) is produced! When they don't work,
-they can feel like confusing, non-transparent roadblocks that you wish didn't exist. This
-is typical for any powerful tool: magic or a headache depending on the day and the task.
+This file loads first and is responsible for setting up all the global networking items.
+
+..
+
+  Build systems are an extremely important detail of any software project. When they work,
+  they can feel like magic: you execute a command, and after a series of potentially
+  complicated steps, a working binary (or other artifact) is produced! When they don't work,
+  they can feel like confusing, non-transparent roadblocks that you wish didn't exist. This
+  is typical for any powerful tool: magic or a headache depending on the day and the task.
 """
 
 import grpc
@@ -13,6 +17,7 @@ from .auth import secret
 from .utils import logger
 from .subway import Sub30
 from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
+from . import version as V
 
 def get_stub() -> WSJobServiceStub:
   """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``
@@ -63,5 +68,5 @@ nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token
 nbox_grpc_stub: WSJobServiceStub  = get_stub()
 nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
 
-# add code here to warn user of nbox deprecation -> not sure how to implement this yet
-# raise_old_version_warning()
+# TODO: @yashbonde: raise deprecation warning for version
+# raise_old_version_warning(V._major, V._minor, V._patch)

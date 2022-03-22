@@ -111,8 +111,6 @@ Or you can see the status by making GET calls from CLI along with ``jq``:
          "editor": "csv2",
          ...
 
-Closing
--------
 
 If you want to see something be added or found bug, `raise an issue <https://github.com/NimbleBoxAI/nbox/issues/new>`_.
 
@@ -128,26 +126,37 @@ Index
    :maxdepth: 2
    :caption: Tutorials
 
-   quick
-   quick_deploy
-   quick_plug
-   quick_skl
+   quick.0
+   quick.deploy
    nbox.cli
-   nbox-serving
+   nbox.nbxlib.ops
 
 .. toctree::
    :maxdepth: 2
-   :caption: Documentations
+   :caption: Commonly used APIs
 
    nbox.model
-   nbox.framework
+   nbox.operator
+   nbox.jobs
+   nbox.instance
+   nbox.framework.ml
+   
 
 .. toctree::
    :maxdepth: 2
    :caption: R&D
 
-   in_progress
-   snippets
+   nbox.subway
+   nbox.framework.rst
+   
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Engineering
+
+   nbox.messages
+   nbox.sub_utils.ssh
+   nbox.auth.rst
 
 
 * :ref:`genindex`

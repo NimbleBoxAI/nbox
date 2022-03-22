@@ -1,6 +1,49 @@
+"""
+``Operators`` is how you write NBX-Jobs. If you are familiar with pytorch, then usage is
+exactly same, for others here's a quick recap:
+
+.. code-block:: python
+
+  class MyOperator(Operator):
+    def __init__(self, a: int, b: str):
+      super().__init__()
+      self.a: int = a
+      self.b: Operator = MyOtherOperator(b) # nested calling
+    
+    def forward(self, x: int) -> int:
+      y = self.a + x
+      y = self.b(y) + x # nested calling
+      return y
+
+  job = MyOperator(1, "hello") # define once
+  res = job(2)                 # use like python, screw DAGs
+
+If you want to use deploy `nbox.Jobs <nbox.jobs.html>`_ is a better documentation.
+
+
+Engineering
+-----------
+
+Fundamentally operators act as a wrapper on user code, sometime abstracting away functions
+by breaking them into ``__init__``s and ``forward``s. But this is a simpler way to wrap
+user function than letting users wrap their own function. It is easy to get false positives,
+and so we explicitly expand things in two. These operators are like ``torch.nn.Modules``
+spiritually as well because modules manage the underlying weights and operators manage the
+underlying user logic.
+
+Operators are combination of several subsystems that are all added in the same class, though
+certainly if we come up with that high abstraction we will refactor this:
+
+#. tree: All operators are really treated like a tree meaning that the execution is nested\
+    and the order of execution is determined by the order of the operators in the tree. DAGs\
+    are fundamentally just trees with some nodes spun togeather, to execute only once.
+#. deploy, ...: All the services in NBX-Jobs.
+#. get_nbx_flow: which is the static code analysis system to understand true user intent and\
+    if possible optimise the logic.
+"""
 # Some parts of the code are based on the pytorch nn.Module class
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
-# due to requirements of stability, some type enforcing is performed
+# modifications: research@nimblebox.ai 2022
 
 import os
 import zipfile
@@ -28,8 +71,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     """Create an operator, which abstracts your code into sharable, bulding blocks which
     can then deployed on either NBX-Jobs or NBX-Deploy.
     
-    Usage
-    -----
+    Usage:
 
     .. code-block:: python
       
