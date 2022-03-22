@@ -1,5 +1,5 @@
-nbox.jobs module
-================
+NBX-Jobs
+========
 
 .. automodule:: nbox.jobs
    :members:

@@ -1,5 +1,5 @@
 """
-gRPC and Protobuf = ♥️
+gRPC + Protobuf = ♥️
 """
 
 from json import loads

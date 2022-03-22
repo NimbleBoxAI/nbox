@@ -1,5 +1,5 @@
-nbox.messages module
-====================
+nbox RPC support
+================
 
 .. automodule:: nbox.messages
    :members:

@@ -1,5 +1,5 @@
-nbox.subway module
-==================
+Subways
+=======
 
 .. automodule:: nbox.subway
    :members:

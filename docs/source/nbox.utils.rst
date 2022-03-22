@@ -1,5 +1,5 @@
-nbox.utils module
-=================
+Utils
+=====
 
 .. automodule:: nbox.utils
    :members:

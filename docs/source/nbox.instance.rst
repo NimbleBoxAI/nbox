@@ -1,5 +1,5 @@
-nbox.instance module
-====================
+NBX-Build Instances
+===================
 
 .. automodule:: nbox.instance
    :members:

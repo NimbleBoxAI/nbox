@@ -1,5 +1,5 @@
-nbox.operator module
-====================
+Operators
+=========
 
 .. automodule:: nbox.operator
    :members:

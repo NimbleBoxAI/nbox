@@ -1,7 +1,4 @@
 """
-Subway
-======
-
 These function are meant to make jobs easier and contain the code for what I am calling
 ``Subway``, which converts any OpenAPI spec into an RPC-like interface. At the end of the
 day, each API call is really nothing but a functional call with added steps like

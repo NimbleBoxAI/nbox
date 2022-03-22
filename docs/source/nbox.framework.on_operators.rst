@@ -1,5 +1,5 @@
-nbox.framework.on\_operators module
-===================================
+Framework on Operators
+======================
 
 .. automodule:: nbox.framework.on_operators
    :members:

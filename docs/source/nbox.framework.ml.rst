@@ -1,5 +1,5 @@
-nbox.framework.ml module
-========================
+nbox.framework.ml
+=================
 
 .. automodule:: nbox.framework.ml
    :members:

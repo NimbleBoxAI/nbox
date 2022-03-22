@@ -1,5 +1,5 @@
-nbox.framework.on\_ml module
-============================
+ML Frameworks
+=============
 
 .. automodule:: nbox.framework.on_ml
    :members:

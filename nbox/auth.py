@@ -1,14 +1,13 @@
 """
-Auth
-====
-
 This code is used to manage the authentication of the entire ``nbox`` package. For authentication
 it will create a ``.nbx`` in the user's home directory (``~/.nbx``, in case of linux) and store
 a file called ``secrets.json``. This folder will also contain more information and files that
 are used elsewhere as well ex. files generated when takling to any instance.
 
-Functions
----------
+We have also provided simple built in methods to connect to your cloud provider service as a part
+of BYOC (bring your own cloud), they are still work on progress, of you are interested in them,
+please raise an issue on Github.
+
 """
 import os
 import json

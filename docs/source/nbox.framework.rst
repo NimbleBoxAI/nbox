@@ -1,5 +1,5 @@
-framework
-=========
+Pushing Understanding
+=====================
 
 .. automodule:: nbox.framework
    :members:

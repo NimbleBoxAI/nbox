@@ -1,5 +1,5 @@
-nbox.load module
-================
+nbox.load
+=========
 
 .. automodule:: nbox.load
    :members:

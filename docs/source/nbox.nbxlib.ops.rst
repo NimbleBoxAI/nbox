@@ -1,5 +1,5 @@
-Opertators Library
-==================
+Operators Library
+=================
 
 .. automodule:: nbox.nbxlib.ops
    :members:
