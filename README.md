@@ -2,7 +2,7 @@
 
 # 🏖️ Nbox
 
-`master` code is working, pypi `nbox` is breaking.
+pypi `nbox` is stable for SSH and other APIs. Check out [v1](https://github.com/NimbleBoxAI/nbox/tree/v1) for the latest code and APIs!
 
 A library that makes using a host of models provided by the opensource community a lot more easier. 
 
