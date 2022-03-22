@@ -99,7 +99,7 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     """
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
-    self._tracer: Tracer = None
+    self._tracer: Tracer = lambda x: x
 
   # mixin/
 
