@@ -52,6 +52,8 @@ model: Model = Model.deserialise(folder=folder, model_spec=config)
 if hasattr(model.model, "eval"):
   model.model.eval()
 
+from nbox.messages import message_to_dict
+
 
 class ModelInput(BaseModel):
   inputs: Any
@@ -74,14 +76,7 @@ class PingRespose(BaseModel):
 
 @lru_cache(1) # fetch only once
 def nbox_meta():
-  from google.protobuf.json_format import MessageToDict
-  data = MessageToDict(
-    model.model_spec,
-    including_default_value_fields=True,
-    preserving_proto_field_name=True,
-    use_integers_for_enums=False,
-    float_precision=4
-  )
+  data = message_to_dict(model.model_spec,)
   return data
 
 app = fa.FastAPI()
