@@ -55,7 +55,6 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from . import utils as U
 from .utils import logger
-from .subway import Sub30
 from .init import nbox_ws_v1
 from .network import deploy_job, Schedule
 from .framework.on_functions import get_nbx_flow
@@ -64,7 +63,7 @@ from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from .hyperloop.dag_pb2 import DAG, Node, RunStatus
 from .nbxlib.tracer import Tracer
 
-class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
+class Operator():
   _version: int = 1 # always try to keep this an i32
 
   def __init__(self) -> None:
@@ -99,32 +98,26 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     """
     self._operators = OrderedDict() # {name: operator}
     self._op_trace = []
-    self._tracer: Tracer = lambda x: x
+    self._tracer: Tracer = None
 
   # mixin/
 
-  # AirflowMixin methods
-  # --------------------
-  # AirflowMixin.to_airflow_operator(self, timeout, **operator_kwargs):
-  # AirflowMixin.to_airflow_dag(self, dag_kwargs, operator_kwargs)
-  # AirflowMixin.from_airflow_operator(cls, air_operator)
-  # AirflowMixin.from_airflow_dag(cls, dag)
-
-  # PrefectMixin methods
-  # --------------------
-  # PrefectMixin.from_prefect_flow()
-  # PrefectMixin.to_prefect_flow()
-  # PrefectMixin.from_prefect_task()
-  # PrefectMixin.to_prefect_task()
-
-  # LuigiMixin methods
-  # -----------------
-  # LuigiMixin.from_luigi_flow()
-  # LuigiMixin.to_luigi_flow()
-  # LuigiMixin.from_luigi_task()
-  # LuigiMixin.to_luigi_task()
+  to_airflow_operator = AirflowMixin.to_airflow_operator
+  to_airflow_dag = AirflowMixin.to_airflow_dag
+  from_airflow_operator = classmethod(AirflowMixin.from_airflow_operator)
+  from_airflow_dag = classmethod(AirflowMixin.from_airflow_dag)
+  to_prefect_task = PrefectMixin.to_prefect_task
+  to_prefect_flow = PrefectMixin.to_prefect_flow
+  from_prefect_task = classmethod(PrefectMixin.from_prefect_task)
+  from_prefect_flow = classmethod(PrefectMixin.from_prefect_flow)
+  to_luigi_task = LuigiMixin.to_luigi_task
+  to_luigi_flow = LuigiMixin.to_luigi_flow
+  from_luigi_task = classmethod(LuigiMixin.from_luigi_task)
+  from_luigi_flow = classmethod(LuigiMixin.from_luigi_flow)
 
   # /mixin
+
+  # information passing/
 
   def __repr__(self):
     # from torch.nn.Module
@@ -175,6 +168,32 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
       self._operators[key] = value
     self.__dict__[key] = value
 
+  def propagate(self, **kwargs):
+    """Set kwargs for each child in the Operator"""
+    for c in self.children:
+      c.propagate(**kwargs)
+    for k, v in kwargs.items():
+      setattr(self, k, v)
+
+  def thaw(self, job: JobProto):
+    """Load JobProto into this Operator"""
+    nodes = job.dag.flowchart.nodes
+    edges = job.dag.flowchart.edges
+    for _id, node in nodes.items():
+      name = node.name
+      if name.startswith("self."):
+        name = name[5:]
+      if hasattr(self, name):
+        op: 'Operator' = getattr(self, name)
+        op.propagate(
+          node = node,
+          source_edges = list(filter(
+            lambda x: edges[x].target == node.id, edges.keys()
+          ))
+        )
+  
+  # /information passing
+
   # properties/
 
   def operators(self):
@@ -220,34 +239,6 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
 
   # /properties
 
-  # information passing/
-
-  def propagate(self, **kwargs):
-    """Set kwargs for each child in the Operator"""
-    for c in self.children:
-      c.propagate(**kwargs)
-    for k, v in kwargs.items():
-      setattr(self, k, v)
-
-  def thaw(self, job: JobProto):
-    """Load JobProto into this Operator"""
-    nodes = job.dag.flowchart.nodes
-    edges = job.dag.flowchart.edges
-    for _id, node in nodes.items():
-      name = node.name
-      if name.startswith("self."):
-        name = name[5:]
-      if hasattr(self, name):
-        op: 'Operator' = getattr(self, name)
-        op.propagate(
-          node = node,
-          source_edges = list(filter(
-            lambda x: edges[x].target == node.id, edges.keys()
-          ))
-        )
-
-  # /information passing
-
   def forward(self):
     raise NotImplementedError("User must implement forward()")
 
@@ -278,7 +269,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     logger.debug(f"Calling operator: {self.__class__.__name__}: {self.node.id}")
     _ts = Timestamp(); _ts.GetCurrentTime()
     self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
-    self._tracer(self.node)
+    if self._tracer != None:
+      self._tracer(self.node)
 
     # ---- USER SEPERATION BOUNDARY ---- #
 
@@ -298,7 +290,8 @@ class Operator(AirflowMixin, PrefectMixin, LuigiMixin):
     logger.debug(f"Ending operator: {self.__class__.__name__}: {self.node.id}")
     _ts = Timestamp(); _ts.GetCurrentTime()
     self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = outputs,))
-    self._tracer(self.node)
+    if self._tracer != None:
+      self._tracer(self.node)
 
     return out
 
