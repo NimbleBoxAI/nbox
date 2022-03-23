@@ -323,19 +323,22 @@ class Operator():
     else:
       stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
 
-    jobs = list(filter(lambda x: x["job_id"] == job_id_or_name, stub_all_jobs()["data"]))
+    all_jobs = stub_all_jobs()["data"]
+
+    jobs = list(filter(lambda x: x["job_id"] == job_id_or_name or x["name"] == job_id_or_name, all_jobs))
     if len(jobs) == 0:
       logger.info(f"No Job found with ID or name: {job_id_or_name}, will create a new one")
       job_name =  job_id_or_name
       job_id = None
     elif len(jobs) > 1:
-      raise ValueError(f"Multiple jobs found for '{job_id_or_name}'")
+      raise ValueError(f"Multiple jobs found for '{job_id_or_name}', try passing ID")
     else:
+      logger.info(f"Found job with ID or name: {job_id_or_name}, will update it")
       data = jobs[0]
       job_name = data["name"]
       job_id = data["job_id"]
     
-    logger.info(f"Deploying job: {job_name}")
+    logger.info(f"Job name: {job_name}")
     logger.info(f"Job ID: {job_id}")
 
     # check if this is a valid folder or not
@@ -361,7 +364,7 @@ class Operator():
       node.operator = operator_name
 
     if schedule != None:
-      logger.debug(f"Schedule: {schedule.get_dict}")
+      logger.debug(f"Schedule: {schedule}")
 
     _starts = Timestamp(); _starts.GetCurrentTime()
     job_proto = JobProto(
@@ -390,17 +393,14 @@ class Operator():
     logger.info(f"SHA256 ( {init_folder} ): {hash_}")
 
     zip_path = U.join(cache_dir if cache_dir else gettempdir(), f"project-{hash_}.nbox")
-    if not os.path.exists(zip_path):
-      logger.info(f"Packing project to '{zip_path}'")
-      with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-        for f in all_f:
-          zip_file.write(f)
-    else:
-      logger.info(f"Found existing project zip file, will not re-pack: '{zip_path}'")
+    logger.info(f"Packing project to '{zip_path}'")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+      for f in all_f:
+        zip_file.write(f)
 
     if _unittest:
       return job_proto
-
+  
     return deploy_job(zip_path = zip_path, job_proto = job_proto)
 
   # /nbx

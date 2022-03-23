@@ -22,7 +22,7 @@ if not os.path.exists(secrets):
     f.write(r.content.decode())
 
 os.environ["NBOX_JOB_FOLDER"] = os.getcwd() # Do not touch
-os.environ["NBOX_LOG_LEVEL"] = 1 # Do not touch
+os.environ["NBOX_LOG_LEVEL"] = "INFO" # Keep it the way you like
 
 import nbox.utils as U
 from nbox.nbxlib.tracer import Tracer

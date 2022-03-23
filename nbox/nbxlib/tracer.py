@@ -27,18 +27,15 @@ class Tracer:
     if not os.path.exists(init_folder):
       raise RuntimeError(f"NBOX_JOB_FOLDER {init_folder} does not exist")
 
+    # get this data from the local secrets file
     self.job_id = run_data["job_id"]
     self.token = run_data["token"]
+    self.workspace_id = secret.get("workspace_id")
     with open(U.join(init_folder, "job_proto.msg"), "rb") as f:
       self.job_proto = Job()
       self.job_proto.ParseFromString(f.read())
 
-    if self.job_proto.id != self.job_id:
-      logger.critical(f"Job ID mismatch: {self.job_proto.id} != {self.job_id}")
-      raise RuntimeError("Job ID mismatch")
-
     self.job_proto.id = self.job_id
-    self.workspace_id = os.getenv("NBOX_WORKSPACE_ID", None)
     self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id=self.workspace_id))
     self.network_tracer = True
     

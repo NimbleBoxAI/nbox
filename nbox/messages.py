@@ -15,13 +15,14 @@ def rpc(stub: callable, message, err_msg: str, raise_on_error: bool = True):
     raise_on_error = False
   except RpcError as e:
     logger.error(err_msg)
-    err_ = loads(e.debug_error_string())
-    if "value" in err_:
-      if int(err_["value"]) > 500:
-        logger.error("There is something wrong from our side. Your files are safe on your local machine.")
-      elif int(err_["value"]) > 400:
-        logger.error("There is something wrong in nbox. Raise an issue on github: https://github.com/NimbleBoxAI/nbox/issues")
-    logger.error(err_["grpc_message"])
+    # err_ = loads(e.debug_error_string())
+    # if "value" in err_:
+    #   if int(err_["value"]) > 500:
+    #     logger.error("There is something wrong from our side. Your files are safe on your local machine.")
+    #   elif int(err_["value"]) > 400:
+    #     logger.error("There is something wrong in nbox. Raise an issue on github: https://github.com/NimbleBoxAI/nbox/issues")
+    # logger.error(err_["grpc_message"])
+    logger.error(e)
   else:
     return resp
   if raise_on_error:

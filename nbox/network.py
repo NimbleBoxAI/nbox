@@ -299,7 +299,6 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   logger.info(code)
   job_proto.code.MergeFrom(code)
 
-  _job_is_present = job_proto.id
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
     UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
@@ -309,8 +308,7 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
-  logger.debug(f"job_id: {job_proto.id}")
-  logger.info(s3_meta)
+  logger.debug(f"Job ID: {job_proto.id}")
 
   # upload the file to a S3 -> don't raise for status here
   logger.debug("Uploading model to S3 ...")
@@ -320,14 +318,8 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   except:
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
-
-  if not _job_is_present:
-    logger.info("Creating new job ...")
-    rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job: {job_proto.id}")
-    logger.info(f"Job creation started, please check FE")
-  else:
-    logger.info("Updating job ...")
-    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job = job_proto), f"Failed to update job: {job_proto.id}")
-    logger.info(f"Job updated, please check FE")
+  
+  logger.info("Creating new run ...")
+  rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job: {job_proto.id}")
 
   return Job(job_proto.id, job_proto.auth_info.workspace_id)
