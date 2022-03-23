@@ -300,7 +300,7 @@ class Operator():
   def deploy(
     self,
     init_folder: str,
-    job_id_or_name: str = None,
+    job_id_or_name: str,
     workspace_id: str = None,
     schedule: Schedule = None,
     cache_dir: str = None,

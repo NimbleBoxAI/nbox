@@ -220,17 +220,21 @@ class Job:
     self.job_info = JobInfo(job=self.job_proto)
     self.refresh()
 
-
   def change_schedule(self, new_schedule: 'Schedule'):
     # nbox should only request and server should check if possible or not
-    raise NotImplementedError("Not implemented")
+    raise NotImplementedError
 
   def __repr__(self) -> str:
-    return f"nbox.Job('{self.job_proto.id}', '{self.job_proto.auth_info.workspace_id}'): {self.job_proto.status}"
+    x = f"nbox.Job('{self.job_proto.id}', '{self.job_proto.auth_info.workspace_id}'): {self.status}"
+    if self.job_proto.schedule.ByteSize != None:
+      x += f" {self.job_proto.schedule}"
+    else:
+      x += " (no schedule)"
+    return x
 
   def logs(self, f = sys.stdout):
     """Stream logs of the job, ``f`` can be anything has a ``.write/.flush`` methods"""
-    logger.info(f"Streaming logs of job {self.job_proto.id}")
+    logger.info(f"Streaming logs of job '{self.job_proto.id}'")
     for job_log in streaming_rpc(
       nbox_grpc_stub.GetJobLogs,
       JobLogsRequest(job = JobInfo(job = self.job_proto)),
@@ -243,45 +247,46 @@ class Job:
 
   def delete(self):
     """Delete this job"""
-    logger.info(f"Deleting job {self.job_proto.id}")
+    logger.info(f"Deleting job '{self.job_proto.id}'")
     rpc(nbox_grpc_stub.DeleteJob, JobInfo(job = self.job_proto,), "Could not delete job")
-    logger.info(f"Deleted job {self.job_proto.id}")
+    logger.info(f"Deleted job '{self.job_proto.id}'")
     self.refresh()
 
   def refresh(self):
     """Refresh Job statistics"""
-    logger.info(f"Updating job {self.job_proto.id}")
+    logger.info(f"Updating job '{self.job_proto.id}'")
     self.job_proto: JobProto = rpc(
       nbox_grpc_stub.GetJob, JobInfo(job = self.job_proto), f"Could not get job {self.job_proto.id}"
     )
     self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
     self.job_info.CopyFrom(JobInfo(job = self.job_proto))
-    logger.info(f"Updated job {self.job_proto.id}")
-    self.refresh()
+    logger.info(f"Updated job '{self.job_proto.id}'")
+
+    self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
   def trigger(self):
     """Manually triger this job"""
-    logger.info(f"Triggering job {self.job_proto.id}")
-    rpc(nbox_grpc_stub.TriggerJob, JobInfo(job=self.job_proto), f"Could not trigger job {self.job_proto.id}")
-    logger.info(f"Triggered job {self.job_proto.id}")
+    logger.info(f"Triggering job '{self.job_proto.id}'")
+    rpc(nbox_grpc_stub.TriggerJob, JobInfo(job=self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
+    logger.info(f"Triggered job '{self.job_proto.id}'")
     self.refresh()
 
   def pause(self):
     """Pause the execution of this job.
     
     WARNING: This will remove all the scheduled runs, if present""" 
-    logger.info(f"Pausing job {self.job_proto.id}")
+    logger.info(f"Pausing job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.PAUSED
     rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
-    logger.info(f"Paused job {self.job_proto.id}")
+    logger.info(f"Paused job '{self.job_proto.id}'")
     self.refresh()
   
   def resume(self):
     """Resume the Job with the current schedule, if provided else simlpy sets status as ACTIVE"""
-    logger.info(f"Resuming job {self.job_proto.id}")
+    logger.info(f"Resuming job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.SCHEDULED
     rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
-    logger.info(f"Resumed job {self.job_proto.id}")
+    logger.info(f"Resumed job '{self.job_proto.id}'")
     self.refresh()

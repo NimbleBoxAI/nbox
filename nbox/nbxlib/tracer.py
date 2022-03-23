@@ -16,22 +16,28 @@ from ..messages import rpc
 
 class Tracer:
   def __init__(self):
-    job_id = os.environ.get("NBOX_JOB_ID", False)
-    if not job_id:
+    run_data = secret.get("run") # user should never have "run" on their local
+    if run_data == None:
       self.network_tracer = False
       return
+    
     init_folder = os.getenv("NBOX_JOB_FOLDER", None)
     if init_folder == None:
       raise RuntimeError("NBOX_JOB_FOLDER not set")
+    if not os.path.exists(init_folder):
+      raise RuntimeError(f"NBOX_JOB_FOLDER {init_folder} does not exist")
 
-    with open(U.join(init_folder, "NBOX_RUN_TOKEN"), "r") as f:
-      self.token = f.read().strip()
-
+    self.job_id = run_data["job_id"]
+    self.token = run_data["token"]
     with open(U.join(init_folder, "job_proto.msg"), "rb") as f:
       self.job_proto = Job()
       self.job_proto.ParseFromString(f.read())
 
-    self.job_proto.id = job_id
+    if self.job_proto.id != self.job_id:
+      logger.critical(f"Job ID mismatch: {self.job_proto.id} != {self.job_id}")
+      raise RuntimeError("Job ID mismatch")
+
+    self.job_proto.id = self.job_id
     self.workspace_id = os.getenv("NBOX_WORKSPACE_ID", None)
     self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id=self.workspace_id))
     self.network_tracer = True

@@ -15,6 +15,7 @@ import requests
 from getpass import getpass
 
 from .utils import join, NBOX_HOME_DIR, isthere, logger
+from .subway import Subway
 
 # ------ AWS Auth ------ #
 
@@ -187,10 +188,12 @@ class DOClient:
 
 class NBXClient:
   @staticmethod
-  def get_access_token(nbx_home_url, username, password=None):
+  def get_access_token(nbx_home_url, email, password=None):
     password = getpass("Password: ") if password is None else password
+    ws = Subway(f"{nbx_home_url}/api/v1", requests.Session())
+    ws.email.validate("post", data = {"email": email, "password": password})
     try:
-      r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
+      r = requests.post(url=None, json={"email": username, "password": password})
     except Exception as e:
       raise Exception(f"Could not connect to NBX | {str(e)}")
 
@@ -230,7 +233,7 @@ class NBXClient:
         raise Exception(f"Could not create secrets file: {e}")
 
       # populate with the first time things
-      nbx_home_url = "https://www.nimblebox.ai"
+      nbx_home_url = "https://app.nimblebox.ai"
       username = input("Username: ")
       access_token = None
       while not access_token:
@@ -249,8 +252,8 @@ class NBXClient:
   def __repr__(self):
     return json.dumps(self.secrets)
 
-  def get(self, item):
-    return self.secrets[item]
+  def get(self, item, default=None):
+    return self.secrets.get(item, default)
 
 # function for manual trigger
 def init_secret():

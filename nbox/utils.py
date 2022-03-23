@@ -41,20 +41,14 @@ import requests
 import tempfile
 import randomname
 from uuid import uuid4
+from pythonjsonlogger import jsonlogger
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 
 def get_logger():
-  class NullLogger:
-    def __init__(self):
-      self.debug = self.info = self.warning = self.error = self.critical = self.exception = self.log = self.warning = self.__call__
-
-    def __call__(self, *_, **__):
-      pass
-
-  from pythonjsonlogger import jsonlogger
   logger = logging.getLogger("utils")
-  logger.setLevel(logging.DEBUG)
+  lvl = os.getenv("NBOX_LOG_LEVEL", "info").upper()
+  logger.setLevel(getattr(logging, lvl))
 
   if os.environ.get("NBOX_JSON_LOG", False):
     logHandler = logging.StreamHandler()

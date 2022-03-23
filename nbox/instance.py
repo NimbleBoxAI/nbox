@@ -123,14 +123,17 @@ class Instance():
 
   __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
-  # @classmethod
-  # def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
-  #   if workspace_id == None:
-  #     stub_all_projects = nbox_ws_v1.user.projects
-  #   else:
-  #     stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
-  #   out = stub_all_projects(_method = "post", project_name = project_name, storage_limit = storage_limit, project_type = project_type)
-  #   return cls(project_name, url)
+  @classmethod
+  def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
+    if workspace_id == None:
+      stub_all_projects = nbox_ws_v1.user.projects
+    else:
+      stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
+    out = stub_all_projects(_method = "post", project_name = project_name, storage_limit = storage_limit, project_type = project_type,
+    github_branch = "", github_link = "", template_id = 0, clone_id = 0
+  )
+    print(out)
+    # return cls(project_name, url)
 
   mv = None # atleast registered
 

@@ -198,7 +198,7 @@ class Model:
 
   ################################################################################
   # Functions here are the services that NBX provides to the user and no longer
-  # >v0.8.8a1 the implementation of processing logic.
+  # >v0.9.1 the implementation of processing logic.
   ################################################################################
 
   def __call__(self, input_object) -> Any:
