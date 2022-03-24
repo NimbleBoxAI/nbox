@@ -39,7 +39,7 @@ certainly if we come up with that high abstraction we will refactor this:
     are fundamentally just trees with some nodes spun togeather, to execute only once.
 #. deploy, ...: All the services in NBX-Jobs.
 #. get_nbx_flow: which is the static code analysis system to understand true user intent and\
-    if possible optimise the logic.
+    if possible (and permission of the user) optimise the logic.
 """
 # Some parts of the code are based on the pytorch nn.Module class
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE

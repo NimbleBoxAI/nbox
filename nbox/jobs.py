@@ -221,8 +221,17 @@ class Job:
     self.refresh()
 
   def change_schedule(self, new_schedule: 'Schedule'):
-    # nbox should only request and server should check if possible or not
-    raise NotImplementedError
+    """Change schedule this job"""
+    logger.info(f"Updating job '{self.job_proto.id}'")
+    self.job_proto.schedule.MergeFrom(new_schedule.get_message())
+    rpc(
+      nbox_grpc_stub.UpdateJob,
+      UpdateJobRequest(job=self.job_proto, update_mask=FieldMask(paths=["schedule"])),
+      "Could not update job schedule",
+      raise_on_error = True
+    )
+    logger.info(f"Updated job '{self.job_proto.id}'")
+    self.refresh()
 
   def __repr__(self) -> str:
     x = f"nbox.Job('{self.job_proto.id}', '{self.job_proto.auth_info.workspace_id}'): {self.status}"
