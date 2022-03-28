@@ -1,23 +1,46 @@
+"""
+This code is used to manage the authentication of the entire ``nbox`` package. For authentication
+it will create a ``.nbx`` in the user's home directory (``~/.nbx``, in case of linux) and store
+a file called ``secrets.json``. This folder will also contain more information and files that
+are used elsewhere as well ex. files generated when takling to any instance.
+
+We have also provided simple built in methods to connect to your cloud provider service as a part
+of BYOC (bring your own cloud), they are still work on progress, of you are interested in them,
+please raise an issue on Github.
+
+"""
 import os
 import json
-import logging
 import requests
 from getpass import getpass
 
-from .utils import join, nbox_session, NBOX_HOME_DIR, isthere
-
-logger = logging.getLogger()
+from .utils import join, NBOX_HOME_DIR, isthere, logger
+from .subway import Subway
 
 # ------ AWS Auth ------ #
 
 class AWSClient:
   @isthere("boto3", "botocore", soft = False)
-  def __init__(self, aws_access_key_id, aws_secret_access_key, region_name):
+  def __init__(self, aws_access_key_id: str, aws_secret_access_key: str, region_name: str):
+    """Template for creating your own AWS authentication class.
+
+    EXPERIMENTAL: This is not yet ready for use.
+
+    Args:
+        aws_access_key_id (str): AWS access key ID
+        aws_secret_access_key (str): AWS secret access key
+        region_name (str): AWS region name
+    """
     self.aws_access_key_id = aws_access_key_id
     self.aws_secret_access_key = aws_secret_access_key
     self.region_name = region_name
 
-  def get_client(self, service_name = "s3", **boto_config_kwargs):
+  def get_client(self, service_name: str = "s3", **boto_config_kwargs):
+    """Get the client object for the given service
+
+    Args:
+        service_name (str): _description_. Defaults to "s3".
+    """
     import boto3
     from botocore.client import Config as BotoConfig
 
@@ -36,7 +59,16 @@ class AWSClient:
 
 class GCPClient:
   @isthere("google-cloud-sdk", "google-cloud-storage", soft = False)
-  def __init__(self, project_id, credentials_file):
+  def __init__(self, project_id: str, credentials_file):
+    """Template for creating your own authentication class.
+
+    EXPERIMENTAL: This is not yet ready for use.
+
+    Args:
+        project_id (str): GCP project ID
+        credentials_file: GCP credentials python object, must support .read() method
+    """
+
     from google.oauth2 import service_account
     
     self.project_id = project_id
@@ -46,7 +78,12 @@ class GCPClient:
       scopes=["https://www.googleapis.com/auth/cloud-platform"]
     )
 
-  def get_client(self, service_name = "storage", **gcp_config_kwargs):
+  def get_client(self, service_name: str = "storage", **gcp_config_kwargs):
+    """Get the client object for the given service
+
+    Args:
+        service_name (str): GCP service name
+    """
     if service_name == "storage":
       from google.cloud import storage
       return storage.Client(
@@ -61,6 +98,11 @@ class GCPClient:
 class AzureClient:
   @isthere("azure-storage-blob", soft = False)
   def __init__(self):
+    """
+    Microsoft Azure
+
+    EXPERIMENTAL: This is not yet ready for use.
+    """
     from azure.storage.blob import BlobServiceClient
     from azure.identity import DefaultAzureCredential
 
@@ -83,6 +125,11 @@ class AzureClient:
 class OCIClient:
   @isthere("oci", "oci-py", soft = False)
   def __init__(self, config_file):
+    """
+    Oracle Cloud Infrastructure
+
+    EXPERIMENTAL: This is not yet ready for use.
+    """
     from oci.config import from_file
     from oci.signer import Signer
 
@@ -115,6 +162,11 @@ class OCIClient:
 class DOClient:
   @isthere("doctl", soft = False)
   def __init__(self, config_file):
+    """
+    Digital Ocean
+
+    EXPERIMENTAL: This is not yet ready for use.
+    """
     from doctl.doctl_client import DictCursor
     from doctl.doctl_client import DoctlClient
 
@@ -136,10 +188,12 @@ class DOClient:
 
 class NBXClient:
   @staticmethod
-  def get_access_token(nbx_home_url, username, password=None):
+  def get_access_token(nbx_home_url, email, password=None):
     password = getpass("Password: ") if password is None else password
+    ws = Subway(f"{nbx_home_url}/api/v1", requests.Session())
+    ws.email.validate("post", data = {"email": email, "password": password})
     try:
-      r = requests.post(url=f"{nbx_home_url}/api/user/login", json={"username": username, "password": password})
+      r = requests.post(url=None, json={"email": username, "password": password})
     except Exception as e:
       raise Exception(f"Could not connect to NBX | {str(e)}")
 
@@ -149,7 +203,7 @@ class NBXClient:
     elif r.status_code == 200:
       access_packet = r.json()
       access_token = access_packet.get("access_token", None)
-      logger.info("Access token obtained")
+      logger.debug("Access token obtained")
       return access_token
     else:
       logger.error(f"Unknown error: {r.content.decode()}")
@@ -169,6 +223,7 @@ class NBXClient:
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(fp):
       # get the secrets JSON
+      # TODO: @yashbonde: Set default initialisation from workspace
       try:
         self.secrets = json.loads(requests.get(
           "https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/sample_config.json"
@@ -178,7 +233,7 @@ class NBXClient:
         raise Exception(f"Could not create secrets file: {e}")
 
       # populate with the first time things
-      nbx_home_url = "https://www.nimblebox.ai"
+      nbx_home_url = "https://app.nimblebox.ai"
       username = input("Username: ")
       access_token = None
       while not access_token:
@@ -188,25 +243,21 @@ class NBXClient:
       self.secrets["nbx_url"] = nbx_home_url
       with open(fp, "w") as f:
         f.write(self.__repr__())
-      logger.info("Successfully created secrets!")
+      logger.debug("Successfully created secrets!")
     else:
       with open(fp, "r") as f:
         self.secrets = json.load(f)
-      logger.info("Successfully loaded secrets!")
+      logger.debug("Successfully loaded secrets!")
 
   def __repr__(self):
     return json.dumps(self.secrets)
 
-  def get(self, item):
-    return self.secrets[item]
+  def get(self, item, default=None):
+    return self.secrets.get(item, default)
 
 # function for manual trigger
-
 def init_secret():
-  global secret
-  secret = NBXClient()
-  nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
+  # add any logic here for creating secrets
+  return NBXClient()
 
-secret = None
-if not os.getenv("NBOX_NO_AUTH", False):
-  init_secret()
+secret = init_secret()

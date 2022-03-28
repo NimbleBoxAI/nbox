@@ -1,4 +1,4 @@
-Network Methods
+nbox Networking
 ===============
 
 .. automodule:: nbox.network

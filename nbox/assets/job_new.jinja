@@ -1,0 +1,101 @@
+# Auto generated code by 'nbox jobs new' command
+# project name: {{ project_name }}
+# created time: {{ created_time }}
+#   created by: {{ username }}
+#
+# > feeling stuck, start by populating the functions below <
+# all the excess code will be removed in future patch updates
+
+import os
+import sys
+import requests
+from fire import Fire
+{{ import_string_others}}
+
+# save the ~/.nbx/secrets.json
+r = requests.get("https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/sample_config.json")
+home_dir = os.path.join(os.path.expanduser("~"), ".nbx")
+secrets = os.path.join(home_dir, "secrets.json")
+os.makedirs(home_dir, exist_ok=True)
+if not os.path.exists(secrets):
+  with open(secrets, "w") as f:
+    f.write(r.content.decode())
+
+os.environ["NBOX_JOB_FOLDER"] = os.getcwd() # Do not touch
+os.environ["NBOX_LOG_LEVEL"] = "INFO" # Keep it the way you like
+
+import nbox.utils as U
+from nbox.nbxlib.tracer import Tracer
+from nbox import Operator, nbox_grpc_stub
+from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from nbox.hyperloop.job_pb2 import Job
+from nbox.messages import rpc
+{{ import_string_nbox}}
+
+def get_op() -> Operator:
+  # since initialising your operator might require passing a bunch of arguments
+  # you can use this function to get the operator by manually defining things here
+
+  return None
+
+{%if run_on_build%}
+def deploy():
+  # the contract of this deploy() function is to push code to the compute location.
+  # In case of nbx-jobs it uploads the code to S3 and then K8s cluster will manage
+  # the execution of code. In this case of nbx-build, we will simply transfer the
+  # this folder to the instance. run() will execute the code as it is will.
+  instance = Instance('{{instance}}')
+  {%if not_running%}if instance.status != "RUNNING":
+    instance.start(cpu_only = {{cpu_only}}, cpu_count = {{cpu_count}}, gpu = {{gpu}}, gpu_count = {{gpu_count}}){%endif%}
+  
+  # move the files and inform users of the command to execute this instruction
+  instance.mv(U.folder(__file__), "nbx://{{ project_name }}")
+  logger.info(f"Deployed to instance: {instance.name}")
+  logger.info("Run the following command to run the code:")
+
+  # convinience, you can run on CLI for shell "python3 exe.py deploy ... | sh"
+  sys.stdout.write("python3 -m nbox instance -i '{{ instance }}' run_py 'nbx://{{ project_name }}/exe.py' run")
+  sys.stdout.flush()
+
+  ! ~ instance.stop() # shutdown the instance, comment out the line to keep it running
+
+{%else%}
+def deploy():
+  op: Operator = get_op()
+  job = op.deploy(
+    job_id_or_name = '{{job_id_or_name}}',{%if workspace_id%}
+    workspace_id = '{{workspace_id}}',{%endif%}{% if scheduled %}
+    schedule = {{scheduled}},{% endif %}
+
+    init_folder = U.folder(__file__), # ! ~ do not change this
+  )
+{%endif%}
+
+def run():
+  op: Operator = get_op(){% if run_on_build %}
+  subprocess.run(["pip", "install", "-r", U.join(U.folder(__file__), "requirements.txt")]){% endif %}
+  op.propagate(_tracer = Tracer())
+  if hasattr(op._tracer, "job_proto"):
+    op.thaw(op._tracer.job_proto)
+
+  try:{% if scheduled %}
+    op() # your operator is recurring avoid passing any values here{% else %}
+    op(
+      # your operator is going to run once, try passing all inputs here
+    ){% endif %}
+  except Exception as e:
+    U.logger.error(e)
+    if hasattr(op._tracer, "job_proto"):
+      op._tracer.job_proto.status = Job.Status.ERROR
+  else:
+    if hasattr(op._tracer, "job_proto"):
+      op._tracer.job_proto.status = Job.Status.COMPLETED
+      rpc(
+        nbox_grpc_stub.UpdateRun, UpdateRunRequest(token = op._tracer.token, job=op._tracer.job_proto), "Failed to end job!"
+      )
+
+if __name__ == "__main__":
+  Fire({"deploy": deploy, "run": run})
+  sys.exit(0)
+
+# end of auto generated code

@@ -2,3 +2,7 @@
 	path = docs/build/html
 	url = https://github.com/NimbleBoxAI/nbox
 	branch = gh-pages
+[submodule "nbox/hyperloop"]
+	path = nbox/hyperloop
+	url = https://github.com/NimbleBoxAI/jobs-architecture
+	branch = python2

@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Framework {
+  string package = 1; // name of the package and it's version number
+  string path = 2; // path to read/write the file
+  string method = 3; // method used to serialise/deserialise the model
+  // optional parameters for the method, these will be used in case of
+  // deserialisation but can be provided during encoding as well
+  map<string, string> kwargs = 4;
+}
+
+// though the name is a Tensor, it represents any kind of input
+// output to the model
+message Tensor {
+  string name = 1; // name/keyword for this message
+  repeated int64 shape = 2; // shape: if None assume it is not a tensor
+  repeated string dimension_names = 3; // what are meanings of shapes like batch, etc.
+  string dtype = 5; // ~numpy datatype of the tensor
+}
+
+message Deployment {
+  string id = 1; // ID for the deployment
+  string name = 2; // name of the deployment
+  string workspace_id = 3; // Workspace ID, if None assume in user workspace
+
+  // Deployment type 
+  enum DeploymentTypes {
+    NBOX_SERVING = 0; // vanilla nbox serving with fastapi
+  }
+  DeploymentTypes type = 4;
+}
+
+message ModelSpec {
+  Framework source = 1; // source metadata
+  Framework target = 2; // target metadata
+  string folder = 3; // folder path to be zipped
+  string name = 4; // name of the model being op-ed
+  string id = 5; // nbox-id of this model, from this we can connect deploy and jobs
+  // leaving a bunch of ids empty for future use for the services
+  // that we want to provide like train/test/ab/deploy/...
+
+  // things to be written in the requirements.txt file so
+  // something like -f https://... can be added here as well.
+  repeated string requirements = 11;
+  google.protobuf.Timestamp exported_time = 12; // time to creation the export
+  repeated Tensor inputs = 13; // this is the input to the model
+  repeated Tensor outputs = 14; // this is the output of the model
+  Deployment deploy = 15; // information related to the deploy
+}

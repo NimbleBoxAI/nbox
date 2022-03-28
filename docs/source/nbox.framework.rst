@@ -1,18 +1,17 @@
-Frameworks
-==========
-
-This section deals exclusively with conversion operations across different frameworks.
+Pushing Understanding
+=====================
 
 .. automodule:: nbox.framework
    :members:
    :undoc-members:
    :show-inheritance:
 
-Supporting methods
-------------------
+Submodules
+----------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 4
 
-   nbox.framework.pytorch
-   nbox.framework.sklearn
+   nbox.framework.ml
+   nbox.framework.on_ml
+   nbox.framework.on_operators

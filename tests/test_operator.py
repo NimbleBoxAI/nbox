@@ -1,6 +1,6 @@
 import unittest
 
-from nbox.operators.operator import *
+from nbox.operator import *
 
 # operators/
 
@@ -42,3 +42,12 @@ class OperatorTest(unittest.TestCase):
     print(op)
     self.assertEqual(op(1, 2, 3, 4, 5, 6), 21)
 
+  def test_from_fn(self):
+    def add_two_nos(a, b):
+      return a + b
+
+    from functools import partial
+
+    fn = partial(add_two_nos, 1, 2)
+    op = Operator.py_func(fn)
+    self.assertEqual(op(), 3)

@@ -1,5 +1,5 @@
-nbox.auth module
-================
+nbox Authentications
+====================
 
 .. automodule:: nbox.auth
    :members:

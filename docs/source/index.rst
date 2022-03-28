@@ -8,73 +8,115 @@ Welcome to nbox's documentation!
 
 ..
 
-   Good documentation is always a work in silence and progress.
+   Good documentation is always a work in silence.
 
 Hi, there 👾!
 
-NimbleBox.ai started to reduce entry barrier to production grade AI workloads for developers. We started that by introducing our `platform <https://docs.nimblebox.ai/>`_\ , and now with our SDK nbox. Inference of models is the most common operation we see on our platform, and is a bottleneck for non-ML developers who just want to use that as a function and don't want to setup a pipeline.
-
-Find the complete open source code on `github <https://github.com/NimbleBoxAI/nbox>`_. Install the package by running the command:
+``nbox`` is SDK for `NimbleBox.ai <https://app.nimblebox.ai/>`_\ , it provides built in access to
+all the APIs and packages them in the most user friendly manner. Writing MLOps pipelines from scratch
+can be a daunting task and this is a breakdown of how nbox works. Find the complete open source code
+on `github <https://github.com/NimbleBoxAI/nbox>`_. Install the package from ``pipy``:
 
 .. code-block::
 
    pip install nbox
 
-..
 
-   In order to effectively use this package, you must have a password set. You can get it by going to Profile → Reset Password.
-
-When loading ``nbox`` for the first time, it will prompt you the username and password and create a secrets file at ``~/.nbx/secrets.json``. This file then contains all the information that you don't have to fetch manually again.
-
-``nbox`` is a new package designed ground up with inference and production grade deployment in mind. The input to model is called input_object and it can be a string, array-like, binary-like in form of a list or Dict.
-
-.. code-block:: python
-
-   import nbox
-
-   # As all these models come from the popular frameworks you use such as 
-   # torchvision, efficient_pytorch or hf.transformers
-   model = nbox.load("torchvision/mobilenetv2", pretrained = True)
-
-   # nbox makes inference the priority so you can feed strings to cats?
-   out = model("cat.jpg")
-   
-   # deploy model on NibleBox.ai Kubernetes cluster
-   url, key = model.deploy("cat.jpg", wait_for_deployment = True)
-
-   # load a cloud model like WTH
-   model = nbox.load(url, key)
-
-   # use as if locally
-   out = model("cat.jpg")
-
-``nbox`` can load any underlying model from package and can consume anything (eg. code above) whether it is ``filepaths``\ , ``PIL.Image`` or just a ``numpy array``.
-
-The objective is to make using ML models 🥶. For this it is paramount that the number of lines of code
-be very small. If it is very small, a smart engineer can open it up and debug it. The metric to always
-aim for is total lines of code which should stand below 1000 for ``top_dir``, other submodules can
-contain ``dicts`` that occupy a large % of code.
-
-As of ``nbox == 0.8.5`` this is where the stats stand!
+For convinience you should add ``nbox`` to your path by setting up an alias. Throughout the rest of the
+documentation we will be using ``nbx`` as the CLI:
 
 .. code-block::
 
-   SLOC	Directory	SLOC-by-Language (Sorted)
-   1181    top_dir         python=1181
-   88      framework       python=88
+   # go to your .bashrc or .zshrc and add
+   alias nbx="python3 -m nbox"
 
-   Totals grouped by language (dominant language first):
-   python:        1269 (100.00%)
+..
+
+   In order to effectively use this package, you must have a password set.
+   You can get it by going to Profile → Reset Password.
+
+When loading ``nbox`` for the first time, it will prompt you the username and password and create a secrets
+file at ``~/.nbx/secrets.json``. This file then contains all the information that you don't have to
+fetch manually again.
+
+APIs
+----
+
+The objective is to make using ML 🥶. For this it is paramount that APIs be deeper, user functions be
+kept to minimum and most relavant. This documentation contains the full spec of everything, but here's
+all the APIs you need to know:
+
+.. code-block::
+
+   nbox
+   ├── Model          # Framework agnostic Model
+   │   ├── __call__
+   │   ├── deploy
+   │   ├── train_on_instance (WIP)
+   │   └── train_on_jobs (WIP)
+   ├── Operators      # How jobs are combinations of operators
+   │   ├── __call__
+   │   └── deploy
+   ├── Jobs           # For controlling all your jobs
+   │   ├── logs       # stream logs right on your terminal
+   │   └── trigger    # manually trigger a job
+   └── Instance
+      ├── __call__    # Run any command on the instance
+      └── mv (WIP)    # Move files to and from NBX-Build
+
+Though the underlying framework will keep on increasing we already use Protobufs, gRPC along with auto
+generating code files.
+
+CLI
+---
+
+To provide zero differences between using CLI and packages, we use python-fire that makes CLIs using
+python objects. Example, let's just say you want to turn off any instance
+
+.. code-block::
+
+   # In case of script
+   Instance(i = "nbox-dev", workspace_id = "99mhf3h").stop()
+
+   # In case of CLI
+   nbx build --i="nbox-dev" --workspace_id="99mhf3h" stop
+
+
+SSH
+"""
+
+Or you can directly SSH into instances (Read more aout).
+
+.. code-block::
+
+   nbx tunnel 8000 --i="nbox-dev"
+
+GET
+"""
+
+Or you can see the status by making GET calls from CLI along with ``jq``:
+
+.. code-block::
+
+   $ nbx get "workspace/99mhf3h/projects/2892" | tail -n 1 | jq
+   > {
+      "data": {
+         "auto_backup": null,
+         "auto_shutdown_time": -1,
+         "autoshutdown": false,
+         "clone_access": false,
+         "created_time": "1647858175.0",
+         "creator": "Bruce Wayne",
+         "dedicated_hw": false,
+         "editor": "csv2",
+         ...
 
 
 If you want to see something be added or found bug, `raise an issue <https://github.com/NimbleBoxAI/nbox/issues/new>`_.
 
-
 Hope you enjoy this.
 
 **Yash Bonde** (NimbleBox.ai R&D)
-
-
 
 
 Index
@@ -84,46 +126,37 @@ Index
    :maxdepth: 2
    :caption: Tutorials
 
-   quick
-   quick_deploy
-   quick_plug
-   quick_skl
+   quick.0
+   quick.deploy
    nbox.cli
-   nbox-serving
+   nbox.nbxlib.ops
 
 .. toctree::
    :maxdepth: 2
-   :caption: Documentations
+   :caption: Commonly used APIs
 
-   nbox.load
    nbox.model
-   nbox.parsers
-   nbox.framework
-   nbox.network
-   nbox.utils
-   nbox.auth
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Operators
-
-   nbox.operators
-   nbox.operators.operator
-   nbox.operators.lib
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Jobs
-
+   nbox.operator
    nbox.jobs
-   nbox.jobs.utils
-
+   nbox.instance
+   nbox.framework.ml
+   
 
 .. toctree::
    :maxdepth: 2
    :caption: R&D
 
-   in_progress
+   nbox.subway
+   nbox.framework.rst
+   
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Engineering
+
+   nbox.messages
+   nbox.sub_utils.ssh
+   nbox.auth.rst
 
 
 * :ref:`genindex`

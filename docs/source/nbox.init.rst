@@ -1,5 +1,5 @@
-nbox.init module
-================
+init module
+===========
 
 .. automodule:: nbox.init
    :members:

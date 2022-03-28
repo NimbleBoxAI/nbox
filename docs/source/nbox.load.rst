@@ -1,5 +1,5 @@
-Loading models
-==============
+nbox.load
+=========
 
 .. automodule:: nbox.load
    :members:

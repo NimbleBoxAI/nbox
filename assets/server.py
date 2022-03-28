@@ -1,123 +1,119 @@
-# logger/
-
-# import json
-# import logging
-
-# from pythonjsonlogger.jsonlogger import JsonFormatter, RESERVED_ATTRS
-
-# class CustomJsonFormatter(JsonFormatter):
-#       def format(self, record):
-#         data = record.__dict__.copy()
-#         mydict = {
-#           "levelname": data.pop("levelname"),
-#           "created": data.pop("created"),
-#           "loc": f'{data.pop("filename")}:{data.pop("lineno")}',
-#           "message": data.pop("msg"),
-#         }
-#         for reserved in RESERVED_ATTRS:
-#             if reserved in data:
-#                 del data[reserved]
-#         mydict.update(data)
-#         return json.dumps(mydict)
-
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger()
-# logHandler = logging.StreamHandler()
-# logHandler.setFormatter(CustomJsonFormatter())
-# logger.addHandler(logHandler)
-# del logger.handlers[0]
-
-# /logger
+# this is the deprecated server since >v0.8.5
 
 import os
+import sys
 import time
+import json
+import requests
+import subprocess
 import fastapi as fa
 from typing import Dict, Any
 from pydantic import BaseModel
-from starlette.responses import Response
+from functools import lru_cache
+from tempfile import gettempdir
 from starlette.requests import Request
+from starlette.responses import Response
 
-# set envar so we can automatically get jsonlogs
-os.environ("NBOX_JSON_LOG", 1)
-import nbox
-from nbox.model import Model
-from nbox.utils import convert_to_list
-
-import logging
-logger = logging.getLogger()
-
-
+# extract the tar file
 fpath = os.getenv("NBOX_MODEL_PATH", None)
 if fpath == None:
-    raise ValueError("have you set env var: NBOX_MODEL_PATH")
+  raise ValueError("have you set env var: NBOX_MODEL_PATH")
+
+import tarfile
+if not tarfile.is_tarfile(fpath) or not fpath.endswith(".nbox"):
+  raise ValueError(f"{fpath} is not a valid .nbox file")
+
+with tarfile.open(fpath, "r:gz") as tar:
+  folder = os.path.join(gettempdir(), os.path.basename(fpath).replace(".nbox", ""))
+  tar.extractall(folder)
+
+if os.environ.get("NBOX_INSTALL_DEP", False):
+  subprocess.run(["pip", "install", "-r", os.path.join(folder, "requirements.txt")])
+
+with open(f"{folder}/nbox_config.json", "r") as f:
+  config = json.load(f)
+
+# save the ~/.nbx/secrets.json
+r = requests.get("https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/sample_config.json")
+r.raise_for_status()
+home_dir = os.path.join(os.path.expanduser("~"), ".nbx")
+os.makedirs(home_dir, exist_ok=True)
+with open(os.path.join(home_dir, "secrets.json"), "wb") as f:
+  sys.stdout.write(r.content.decode())
+  f.write(r.content)
+
+# this is where nbox gets loaded
+os.environ["NBOX_HOME_DIR"] = home_dir # no need but still
+os.environ["NBOX_JSON_LOG"] = "1"
+from nbox.model import Model
+from nbox.utils import logger
+SERVING_MODE = os.path.splitext(fpath)[1][1:]
+model: Model = Model.deserialise(folder=folder, model_spec=config)
+if hasattr(model.model, "eval"):
+  model.model.eval()
+
+from nbox.messages import message_to_dict
+
 
 class ModelInput(BaseModel):
-    inputs: Any
-    method: str = None
-    input_dtype: str = None
-    message: str = None
+  inputs: Any
+  method: str = None
+  input_dtype: str = None
+  message: str = None
 
 class ModelOutput(BaseModel):
-    outputs: Any
-    time: int
-    message: str = None
+  outputs: Any
+  time: int
+  message: str = None
 
 class MetadataModel(BaseModel):
-    time: int
-    spec: Dict[str, Any]
-    metadata: Dict[str, Any]
+  time: int
+  metadata: Dict[str, Any]
 
 class PingRespose(BaseModel):
-    time: int
-    message: str = None
+  time: int
+  message: str = None
 
+@lru_cache(1) # fetch only once
+def nbox_meta():
+  data = message_to_dict(model.model_spec,)
+  return data
 
 app = fa.FastAPI()
-SERVING_MODE = os.path.splitext(fpath)[1][1:]
-model = Model.deserialise(fpath, verbose = True)
 
 # add route for /
 @app.get("/", status_code=200, response_model=PingRespose)
-def ping(r: Request, response: Response):
-    return {"time": int(time.time()), "message": "pong"}
+async def ping(r: Request, response: Response):
+  return dict(time=int(time.time()), message="pong")
 
 # add route for /metadata
 @app.get("/metadata", status_code=200, response_model=MetadataModel)
-def get_meta(r: Request, response: Response):
-    return dict(
-        time=int(time.time()),
-        spec={
-            "model_path": fpath,
-            "source_serving": SERVING_MODE,
-            "nbox_version": nbox.__version__,
-            "name": model.nbox_meta["spec"]["model_name"],
-            **model.nbox_meta["spec"]
-        },
-        metadata = model.nbox_meta["metadata"]
-    )
+async def get_meta(r: Request, response: Response):
+  return dict(time=int(time.time()), metadata = nbox_meta())
 
+# add route for /predict
 @app.post("/predict", status_code=200, response_model=ModelOutput)
-def predict(r: Request, response: Response, item: ModelInput):
-    logger.info(str(item.inputs)[:100], extra = {"_time": int(time.time())})
+async def predict(r: Request, response: Response, item: ModelInput):
+  logger.debug(str(item.inputs)[:100])
 
-    try:
-        output = model(item.inputs, method = item.method, return_dict = True)
-    except Exception as e:
-        response.status_code = 500
-        logger.error('{"error_0": {}, "name": {}}'.format(str(e), "model_predict"))
-        return {"message": str(e), "time": int(time.time())}
+  try:
+    output = model(item.inputs)
+  except Exception as e:
+    response.status_code = 500
+    logger.error(f"error: {str(e)}")
+    return {"message": str(e), "time": int(time.time())}
 
-    if isinstance(output, str):
-        response.status_code = 400
-        logger.error('{"error_1": {}, "name": {}}'.format(output, "incorrect_predict"))
-        return {"message": output, "time": int(time.time())}
+  try:
+    json.dumps(output)
+  except Exception as e:
+    response.status_code = 400
+    logger.error("user_error: output is not JSON serializable")
+    return {
+      "message": "Output is not JSON serializable! Please redeploy with proper post_fn.",
+      "time": int(time.time())
+    }
 
-    try:
-        output = convert_to_list(output)
-    except Exception as e:
-        response.status_code = 500
-        logger.error('{"error_2": {}, "name": {}}'.format(str(e), "serialise"))
-        return {"message": str(e), "time": int(time.time())}
-
-    response.status_code = 200
-    return {"outputs": output, "time": int(time.time())}
+  return {
+    "outputs": output,
+    "time": int(time.time())
+  }

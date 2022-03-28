@@ -1,13 +1,10 @@
 """
-Operators
-=========
-
-Though initially this code just like the on_ml.py code was build separately for
-each different package that we supported and that led to just some really duct
-taping and hacking around that made it inefficient to scale. The lesson is that
-premature attempts to scale are as bad as not being able to scale. On that end
-eventually this file will be broken apart by packages but hopefully it is in a
-way better. My depth limit = 2.
+Though initially this code just like the `on_ml.py <nbox.framework.on_ml.html>`_
+code was build separately for each different package that we supported and that
+led to just some really duct taping and hacking around that made it inefficient
+to scale. The lesson is that premature attempts to scale are as bad as not being
+able to scale. On that end eventually this file will be broken apart by packages
+but hopefully it is in a way better. My depth limit = 2.
 
 Read the code for best understanding.
 """
@@ -15,7 +12,7 @@ Read the code for best understanding.
 import inspect # used for __doc__
 from functools import partial
 from datetime import timedelta
-from ..utils import isthere
+from ..utils import isthere, logger
 
 
 ################################################################################
@@ -27,7 +24,7 @@ from ..utils import isthere
 
 class AirflowMixin:
   @isthere("airflow", soft = False)
-  def to_airflow_operator(self, operator, timeout: timedelta = None, operator_kwargs = {}):
+  def to_airflow_operator(self, operator: 'Operator', timeout: timedelta = None, operator_kwargs = {}):
     """
     Args:
         operator (Operator): nbox.Operator object to be converted to Airflow Operator
@@ -173,3 +170,46 @@ class AirflowMixin:
 
     return root
 
+################################################################################
+# Prefect
+# =======
+# https://github.com/PrefectHQ/prefect
+################################################################################
+
+class PrefectMixin:
+  @classmethod
+  def from_prefect_flow(operator_cls, dag):
+    raise NotImplementedError
+  
+  def to_prefect_flow():
+    raise NotImplementedError
+
+  @classmethod
+  def from_prefect_task(operator_cls, dag):
+    raise NotImplementedError
+
+  def to_prefect_task():
+    raise NotImplementedError
+
+
+################################################################################
+# Luigi
+# =====
+# Built to solve Spotify's problems, luigi is a python library for building
+# pipelines of tasks.
+################################################################################
+
+class LuigiMixin:
+  @classmethod
+  def from_luigi_flow(operator_cls, dag):
+    raise NotImplementedError
+
+  def to_luigi_flow():
+    raise NotImplementedError
+
+  @classmethod
+  def from_luigi_task(operator_cls, dag):
+    raise NotImplementedError
+
+  def to_luigi_task():
+    raise NotImplementedError

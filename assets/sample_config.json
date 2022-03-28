@@ -2,17 +2,5 @@
   "version": 2,
   "username": null,
   "access_token": null, 
-  "nbx_url": "https://nimblebox.ai",
-  "ocd": [
-    {
-      "url": null,
-      "access_key": null,
-      "nbox_meta": null,
-      "api_hits": [],
-      "bytes_recieved": 0,
-      "bytes_sent": 0,
-      "bytes_total": 0,
-      "last_status": null
-    }
-  ]
+  "nbx_url": "https://app.nimblebox.ai"
 }

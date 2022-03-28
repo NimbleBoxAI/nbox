@@ -1,2 +1,0 @@
-class ModuleNotFound(Exception):
-  pass
