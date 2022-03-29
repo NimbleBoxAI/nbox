@@ -1,7 +1,7 @@
 # In case of nbox which handles all kinds of weird paths, initialisation is important.
 # We are defining init.py that starts the loading sequence
 
-from .init import nbox_grpc_stub, nbox_session, nbox_ws_v1
+from .init import nbox_grpc_stub, nbox_session, nbox_ws_v1, create_webserver_subway
 from .utils import logger
 from .model import Model
 from .load import load, PRETRAINED_MODELS

@@ -8,7 +8,7 @@ from nbox.jobs import Job
 from ..auth import secret
 from ..utils import logger
 from .. import utils as U
-from ..init import nbox_grpc_stub
+from .. import nbox_grpc_stub
 from ..hyperloop.dag_pb2 import Node
 from ..hyperloop.job_pb2 import NBXAuthInfo, Job
 from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest

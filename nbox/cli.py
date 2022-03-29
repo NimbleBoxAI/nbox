@@ -43,11 +43,11 @@ import sys
 import fire
 from json import dumps
 
+from . import nbox_ws_v1
 from .jobs import Job
 from .instance import Instance
 from .sub_utils import ssh
 from .framework.autogen import compile
-from .init import nbox_ws_v1
 
 
 def open_home():

@@ -16,7 +16,7 @@ from requests.sessions import Session
 from .subway import SpecSubway,  TIMEOUT_CALLS
 from . import utils as U
 from .utils import NBOX_HOME_DIR, logger
-from .init import nbox_ws_v1, create_webserver_subway
+from . import nbox_ws_v1, create_webserver_subway
 from .auth import secret
 
 
