@@ -111,9 +111,9 @@ from typing import Any, Dict, Union
 from types import SimpleNamespace
 
 
+from . import nbox_ws_v1
 from . import utils as U
 from .utils import logger
-from .init import nbox_ws_v1
 from .network import deploy_serving
 from .instance import Instance
 from .subway import NboxModelSubway

@@ -16,7 +16,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 from .hyperloop.job_pb2 import Job as JobProto
 
-from .init import nbox_grpc_stub
+from . import nbox_grpc_stub
 from .auth import secret
 from .jobs import Job
 from .messages import message_to_dict, rpc

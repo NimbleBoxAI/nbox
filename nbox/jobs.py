@@ -10,11 +10,11 @@ import tabulate
 from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
+from . import nbox_grpc_stub
 from . import utils as U
 from .utils import logger
 from .instance import Instance
 from .version import __version__
-from .init import nbox_grpc_stub
 from .hyperloop.nbox_ws_pb2 import JobInfo
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
 from .hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest

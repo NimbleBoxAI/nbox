@@ -53,9 +53,9 @@ from collections import OrderedDict
 from typing import Callable, Iterable, List
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from . import nbox_ws_v1
 from . import utils as U
 from .utils import logger
-from .init import nbox_ws_v1
 from .network import deploy_job, Schedule
 from .framework.on_functions import get_nbx_flow
 from .framework import AirflowMixin, PrefectMixin, LuigiMixin
