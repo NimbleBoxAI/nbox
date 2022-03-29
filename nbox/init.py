@@ -30,12 +30,8 @@ def get_stub() -> WSJobServiceStub:
   stub = WSJobServiceStub(channel)
   TIMEOUT = 6
   logger.info(f"Checking connection on channel for {TIMEOUT}s")
-  try:
-    grpc.channel_ready_future(channel).result(TIMEOUT)
-  except grpc.FutureTimeoutError:
-    logger.warn(f"gRPC server timeout, some functionality might not work")
-    return None
-
+  future = grpc.channel_ready_future(channel)
+  future.add_done_callback(lambda _: logger.info(f"gRPC server is ready"))
   logger.info(f"Connected using stub: {stub.__class__.__name__}")
   return stub
 
