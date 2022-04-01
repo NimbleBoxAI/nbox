@@ -12,6 +12,7 @@ please raise an issue on Github.
 import os
 import json
 import requests
+import webbrowser
 from getpass import getpass
 
 from .utils import join, NBOX_HOME_DIR, isthere, logger
@@ -187,63 +188,29 @@ class DOClient:
 # ------ NBX Auth ------ #
 
 class NBXClient:
-  @staticmethod
-  def get_access_token(nbx_home_url, email, password=None):
-    password = getpass("Password: ") if password is None else password
-    ws = Subway(f"{nbx_home_url}/api/v1", requests.Session())
-    ws.email.validate("post", data = {"email": email, "password": password})
-    try:
-      r = requests.post(url=None, json={"email": username, "password": password})
-    except Exception as e:
-      raise Exception(f"Could not connect to NBX | {str(e)}")
-
-    if r.status_code == 401:
-      logger.error(" Invalid username/password. Please try again!")
-      return False
-    elif r.status_code == 200:
-      access_packet = r.json()
-      access_token = access_packet.get("access_token", None)
-      logger.debug("Access token obtained")
-      return access_token
-    else:
-      logger.error(f"Unknown error: {r.content.decode()}")
-      raise Exception(f"Unknown error: {r.status_code}")
-
-  @staticmethod
-  def create_secret_file(username, access_token, nbx_url):
-    os.makedirs(NBOX_HOME_DIR, exist_ok=True)
-    fp = join(NBOX_HOME_DIR, "secrets.json")
-    with open(fp, "w") as f:
-      f.write(json.dumps({"username": username, "access_token": access_token, "nbx_url": nbx_url}, indent=2))
-
-  def __init__(self):
+  def __init__(self, nbx_url = "https://app.nimblebox.ai"):
+    """We try to find the values secrets file in the ``~/.nbx/secrets.json``, if not
+    found, we ask the user for the email and direct them to browser.
+    """
     os.makedirs(NBOX_HOME_DIR, exist_ok=True)
     fp = join(NBOX_HOME_DIR, "secrets.json")
 
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(fp):
-      # get the secrets JSON
-      # TODO: @yashbonde: Set default initialisation from workspace
-      try:
-        self.secrets = json.loads(requests.get(
-          "https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/sample_config.json"
-          ).content.decode("utf-8")
-        )
-      except Exception as e:
-        raise Exception(f"Could not create secrets file: {e}")
-
-      # populate with the first time things
-      nbx_home_url = "https://app.nimblebox.ai"
-      username = input("Username: ")
-      access_token = None
-      while not access_token:
-        access_token = self.get_access_token(nbx_home_url, username)
-        self.secrets["access_token"] = access_token
-      self.secrets["username"] = username
-      self.secrets["nbx_url"] = nbx_home_url
+      logger.info(f"Ensure that you put the email ID you have signed up with!")
+      email_id = input("Email ID: ")
+      _secrets_url = f"{nbx_url}/secrets"
+      logger.info(f"Opening: {_secrets_url}")
+      webbrowser.open(_secrets_url)
+      access_token = getpass("Access Token: ")
+      self.secrets = {
+        "email_id": email_id,
+        "access_token": access_token,
+        "nbx_url": nbx_url
+      }
       with open(fp, "w") as f:
-        f.write(self.__repr__())
-      logger.debug("Successfully created secrets!")
+        f.write(repr(self))
+      logger.info("Successfully created secrets!")
     else:
       with open(fp, "r") as f:
         self.secrets = json.load(f)

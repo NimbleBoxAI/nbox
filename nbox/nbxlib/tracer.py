@@ -43,9 +43,9 @@ class Tracer:
     self.job_proto.status = Job.Status.ACTIVE # automatically first run will
 
   def __call__(self, node: Node, verbose: bool = True):
+    if verbose:
+      logger.debug(node)
     if not self.network_tracer:
-      if verbose:
-        logger.debug(node)
       return
     self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this
     rpc(

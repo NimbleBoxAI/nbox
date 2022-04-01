@@ -51,7 +51,6 @@ from hashlib import sha256
 from tempfile import gettempdir
 from collections import OrderedDict
 from typing import Callable, Iterable, List
-from google.protobuf.timestamp_pb2 import Timestamp
 
 from . import utils as U
 from .utils import logger
@@ -62,6 +61,7 @@ from .framework import AirflowMixin, PrefectMixin, LuigiMixin
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from .hyperloop.dag_pb2 import DAG, Node, RunStatus
 from .nbxlib.tracer import Tracer
+from .messages import get_current_timestamp
 
 class Operator():
   _version: int = 1 # always try to keep this an i32
@@ -267,7 +267,7 @@ class Operator():
         input_dict[key] = value
 
     logger.debug(f"Calling operator: {self.__class__.__name__}: {self.node.id}")
-    _ts = Timestamp(); _ts.GetCurrentTime()
+    _ts = get_current_timestamp()
     self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
     if self._tracer != None:
       self._tracer(self.node)
@@ -288,7 +288,7 @@ class Operator():
       outputs = {"out_0": str(type(out))}
 
     logger.debug(f"Ending operator: {self.__class__.__name__}: {self.node.id}")
-    _ts = Timestamp(); _ts.GetCurrentTime()
+    _ts = get_current_timestamp()
     self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = outputs,))
     if self._tracer != None:
       self._tracer(self.node)
@@ -366,12 +366,11 @@ class Operator():
     if schedule != None:
       logger.debug(f"Schedule: {schedule}")
 
-    _starts = Timestamp(); _starts.GetCurrentTime()
+    _starts = get_current_timestamp()
     job_proto = JobProto(
       id = job_id,
       name = job_name if job_name else U.get_random_name(True).split("-")[0],
       created_at = _starts,
-      resource = Resource(),
       auth_info = NBXAuthInfo(workspace_id = workspace_id,),
       schedule = schedule.get_message() if schedule != None else None,
       dag = dag,

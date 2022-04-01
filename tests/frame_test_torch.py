@@ -46,12 +46,13 @@ def test_feedforward():
   x = np.random.uniform(size=(1, 3, 44, 44))
   x = torch.tensor(x).float()
   model = Feedforward(44, 2)
+
   src_model = Model(model, method = None, pre = pre_fn, post = post_fn)
 
   print("Source output:", np.array(src_model(x)).shape)
 
+  # avoid numpy problems
   with torch.no_grad():
-    # avoid numpy problems
     model_spec: ModelSpec = src_model.torch_to_torchscript(
       # get the dataclass just for your stub function, provide precise inputs
       # for your export method
@@ -66,8 +67,8 @@ def test_feedforward():
 
   # model_spec, nbx_path = src_model.deploy(
   #   model_spec,
-  #   deployment_id_or_name="jjsu3n4",
-  #   workspace_id="nerf89",
+  #   deployment_id_or_name="ywrrpw8g",
+  #   workspace_id="zcxdpqlk",
   #   _unittest = True
   # )
   # print(model_spec)

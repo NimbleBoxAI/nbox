@@ -174,8 +174,9 @@ def get_job_list(workspace_id: str = None):
   )
 
   out = message_to_dict(out)
-  if len(out) == 0:
+  if len(out["Jobs"]) == 0:
     logger.info("No jobs found")
+    sys.exit(0)
 
   # filters = [f.upper() for f in filters]
   headers=list(out["Jobs"][0].keys())

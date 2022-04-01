@@ -166,21 +166,22 @@ class Instance():
       raise ValueError("auto_shutdown must be a positive integer (hours)")
 
     if not self.state == "RUNNING":
-      logger.debug(f"Starting instance {self.name} ({self.instance_id})")
+      logger.info(f"Starting instance {self.project_name} ({self.project_id})")
+      # if gpu_count > 0:
       self.stub_ws_instance.start(
         auto_shutdown = auto_shutdown == 0,
         auto_shutdown_value = auto_shutdown,
         dedicated_hw = dedicated_hw,
-        hw = gpu_count == 0,
+        hw = "cpu" if gpu_count == 0 else "gpu",
         hw_config = {
           "cpu":f"n1-standard-{cpu}",
-          "gpu":f"nvidia-tesla-{gpu}",
-          "gpuCount": gpu_count,
+          "gpu" : None if gpu_count == 0 else f"nvidia-tesla-{gpu}",
+          "gpuCount" : gpu_count,
         },
         zone = zone
       )
 
-      logger.debug(f"Waiting for instance {self.name} ({self.instance_id}) to start")
+      logger.info(f"Waiting for instance {self.project_name} ({self.project_id}) to start ...")
       _i = 0
       while self.state != "RUNNING":
         time.sleep(5)
@@ -188,16 +189,15 @@ class Instance():
         _i += 1
         if _i > TIMEOUT_CALLS:
           raise TimeoutError("Instance did not start within timeout, please check dashboard")
-      logger.debug(f"Instance {self.name} ({self.instance_id}) started")
+      logger.info(f"Instance {self.project_name} ({self.project_id}) started")
     else:
       # TODO: @yashbonde: inform user in case of hardware mismatch?
-      logger.debug(f"Instance {self.name} ({self.instance_id}) is already running")
+      logger.info(f"Instance {self.project_name} ({self.project_id}) is already running")
 
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
-    logger.debug(f"Opening instance {self.name} ({self.instance_id})")
+    logger.debug(f"Opening instance {self.project_name} ({self.project_id})")
     self.open_data = self.stub_ws_instance.launch(_method = "post")
-    print(self.open_data)
 
     instance_url = self.open_data["base_url"].strip("/")
     self.cs_url = f"{self.url}/{instance_url}"
@@ -216,7 +216,7 @@ class Instance():
     logger.debug(f"CS: {self.compute_server}")
 
     # now load all the functions from methods.py
-    logger.debug(f"Testing instance {self.name} ({self.instance_id})")
+    logger.debug(f"Testing instance {self.project_name} ({self.project_id})")
     out = self.compute_server.test()
     with open(U.join(NBOX_HOME_DIR, "methods.py"), "w") as f:
       f.write(out["data"])
@@ -255,15 +255,15 @@ class Instance():
   def stop(self):
     """Stop Instance"""
     if self.state == "STOPPED":
-      logger.debug(f"Instance {self.name} ({self.instance_id}) is already stopped")
+      logger.info(f"Instance {self.project_name} ({self.project_id}) is already stopped")
       return
 
-    logger.debug(f"Stopping instance {self.name} ({self.instance_id})")
-    message = self.web_server.stop_instance("post", data = {"instance_id":self.instance_id})["msg"]
+    logger.debug(f"Stopping instance {self.project_name} ({self.project_id})")
+    message = self.stub_ws_instance.stop_instance("post", data = {"instance_id":self.project_id})["msg"]
     if not message == "success":
       raise ValueError(message)
 
-    logger.debug(f"Waiting for instance {self.name} ({self.instance_id}) to stop")
+    logger.debug(f"Waiting for instance {self.project_name} ({self.project_id}) to stop")
     _i = 0 # timeout call counter
     while self.state != "STOPPED":
       time.sleep(5)
@@ -271,7 +271,7 @@ class Instance():
       _i += 1
       if _i > TIMEOUT_CALLS:
         raise TimeoutError("Instance did not stop within timeout, please check dashboard")
-    logger.debug(f"Instance {self.name} ({self.instance_id}) stopped")
+    logger.debug(f"Instance {self.project_name} ({self.project_id}) stopped")
 
     self.__opened = False
 
@@ -325,7 +325,7 @@ class Instance():
         raise ValueError(data["msg"])
       
       status = data["status"]
-      logger.debug(f"Script {x} on instance {self.name} ({self.instance_id}) is {status}")
+      logger.debug(f"Script {x} on instance {self.project_name} ({self.project_id}) is {status}")
 
       if status in ["stopped", "failed"]:
         out = self.compute_server.rpc.logs(x)
@@ -343,7 +343,7 @@ class Instance():
     # sh_fpath = U.join(gettempdir(), "run.sh")
     # with open(sh_fpath, "w") as f:
     #   f.write(command)
-    # logger.info(f"Running command '{command}' [{comm_hash}] on instance {self.name} ({self.instance_id})")
+    # logger.info(f"Running command '{command}' [{comm_hash}] on instance {self.project_name} ({self.project_id})")
     # nbx_fpath = f"nbx://{comm_hash}.sh"
     # fpath = nbx_fpath.replace("nbx://", "/mnt/disks/user/project/")
     # self.mv(sh_fpath, nbx_fpath)
@@ -351,7 +351,7 @@ class Instance():
     #   lambda y: y["path"] == fpath, self.compute_server.myfiles.info(fpath)["data"]
     # ))
     # if not meta:
-    #   raise ValueError(f"File {x} not found on instance {self.name} ({self.instance_id})")
+    #   raise ValueError(f"File {x} not found on instance {self.project_name} ({self.project_id})")
     uid = "PID_" + self.compute_server.rpc.start(x, args = ["run"])["uid"]
     logger.info(f"Command {comm_hash} is running with PID {uid}")
     self.running_scripts.append(uid)

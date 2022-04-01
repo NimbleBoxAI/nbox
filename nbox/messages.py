@@ -2,8 +2,8 @@
 gRPC + Protobuf = ♥️
 """
 
-from json import loads
 from grpc import RpcError
+from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.json_format import MessageToDict, MessageToJson, ParseDict
 
 from .utils import logger
@@ -66,3 +66,9 @@ def dict_to_message(dict, message):
   """load dict into message"""
   ParseDict(dict, message)
   return message
+
+
+def get_current_timestamp():
+  ts = Timestamp()
+  ts.GetCurrentTime()
+  return ts

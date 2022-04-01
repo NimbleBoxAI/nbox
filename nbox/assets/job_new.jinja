@@ -12,15 +12,6 @@ import requests
 from fire import Fire
 {{ import_string_others}}
 
-# save the ~/.nbx/secrets.json
-r = requests.get("https://raw.githubusercontent.com/NimbleBoxAI/nbox/master/assets/sample_config.json")
-home_dir = os.path.join(os.path.expanduser("~"), ".nbx")
-secrets = os.path.join(home_dir, "secrets.json")
-os.makedirs(home_dir, exist_ok=True)
-if not os.path.exists(secrets):
-  with open(secrets, "w") as f:
-    f.write(r.content.decode())
-
 os.environ["NBOX_JOB_FOLDER"] = os.getcwd() # Do not touch
 os.environ["NBOX_LOG_LEVEL"] = "INFO" # Keep it the way you like
 
