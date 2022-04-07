@@ -29,7 +29,7 @@ def get_stub() -> WSJobServiceStub:
   channel = grpc.secure_channel(secret.get("nbx_url").replace("https://", "dns:/")+":443", creds)
   stub = WSJobServiceStub(channel)
   future = grpc.channel_ready_future(channel)
-  future.add_done_callback(lambda _: logger.info(f"gRPC server is ready"))
+  future.add_done_callback(lambda _: logger.info(f"NBX gRPC server is ready"))
   logger.info(f"Connected using stub: {stub.__class__.__name__}")
   return stub
 

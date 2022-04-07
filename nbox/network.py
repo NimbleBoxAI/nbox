@@ -296,7 +296,6 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   logger.debug(f"Deploying on URL: {URL}")
 
   code = JobProto.Code(size = max(file_size, 1), type = JobProto.Code.Type.ZIP)
-  logger.info(code)
   job_proto.code.MergeFrom(code)
 
   response: JobProto = rpc(
@@ -310,7 +309,6 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   s3_meta = job_proto.code.s3_meta
   logger.debug(f"Job ID: {job_proto.id}")
 
-  # upload the file to a S3 -> don't raise for status here
   logger.debug("Uploading model to S3 ...")
   r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
   try:

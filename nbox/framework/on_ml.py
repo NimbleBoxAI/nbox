@@ -23,7 +23,7 @@ Read the code for best understanding.
 import os
 
 from .. import utils as U
-from ..utils import logger
+from ..utils import isthere, logger
 from .autogen import ml_register
 from .model_spec_pb2 import ModelSpec, Tensor
 
@@ -120,14 +120,72 @@ def torch_export_onnx(user_options, nbox_options, spec: ModelSpec):
 
 
 ################################################################################
-# Utils
-# =====
-# The base class FrameworkAgnosticProtocol defines the two things user must define
-# in order to use the framework agnostic model:
-#   1. `forward` method: the forward pass of the model
-#   2. `export`: that takes in a string for export format and arguments for it
-# Other functions are self-explanatory
+# User Guide
+# ==========
+# This 
 ################################################################################
+
+
+@isthere("torch")
+def _get_torch_model():
+  import torch
+  class Feedforward(torch.nn.Module):
+    def __init__(self, input_size, hidden_size):
+      super(Feedforward, self).__init__()
+      self.input_size = input_size
+      self.hidden_size = hidden_size
+      self.network = torch.nn.Sequential(
+        torch.nn.Linear(self.input_size, self.hidden_size),
+        torch.nn.Softmax(-1),
+        torch.nn.Linear(self.hidden_size, 1),
+        torch.nn.Sigmoid(),
+      )
+
+    def forward(self, x):
+      output = self.network(x)
+      return output
+
+  import random
+
+  _dim = random.choice(range(10))
+  return (
+    {
+      "model": Feedforward(input_size = _dim, hidden_size = 2)
+    }, # nbox.Model kwargs
+    torch.randn(1, _dim), # example input
+  )
+
+@isthere("sklearn", "numpy")
+def _get_sklearn_model():
+  from sklearn import linear_model
+  reg = linear_model.LinearRegression()
+  data = [[0, 0], [1, 1], [2, 2]], [0, 1, 2]
+
+  return (
+    {
+      "model": reg,
+      "method": "fit",
+    }, # nbox.Model kwargs
+    data, # example input
+  )
+
+def _get_default_forward():
+  class SomeCaller:
+    def __init__(self):
+      pass
+
+    def __call__(self):
+      print("Add your logic here")
+
+  return (
+    {
+      "model": SomeCaller(),
+    }, # nbox.Model kwargs
+    None, # example input
+  )
+
+
+
 
 class InvalidProtocolError(Exception):
   pass

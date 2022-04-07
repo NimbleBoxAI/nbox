@@ -266,7 +266,7 @@ class Operator():
       if key in inputs:
         input_dict[key] = value
 
-    logger.debug(f"Calling operator: {self.__class__.__name__}: {self.node.id}")
+    logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
     _ts = get_current_timestamp()
     self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
     if self._tracer != None:
@@ -287,7 +287,7 @@ class Operator():
     else:
       outputs = {"out_0": str(type(out))}
 
-    logger.debug(f"Ending operator: {self.__class__.__name__}: {self.node.id}")
+    logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
     _ts = get_current_timestamp()
     self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = outputs,))
     if self._tracer != None:
@@ -374,6 +374,11 @@ class Operator():
       auth_info = NBXAuthInfo(workspace_id = workspace_id,),
       schedule = schedule.get_message() if schedule != None else None,
       dag = dag,
+      resource = Resource(
+        cpu = "100m",         # 100mCPU
+        memory = "200Mi",     # MiB
+        disk_size = "1Gi",    # GiB
+      )
     )
 
     with open(U.join(init_folder, "job_proto.msg"), "wb") as f:

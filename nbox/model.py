@@ -391,3 +391,14 @@ class Model:
     EXPERIMENTAL: FEATURES MIGHT BREAK
     """
     pass
+
+
+def magic_model():
+  from .framework.on_ml import _get_torch_model, _get_sklearn_model, _get_default_forward
+  for fn in [_get_torch_model, _get_sklearn_model, _get_default_forward]:
+    try:
+      model_kwargs, sample_input = fn()
+    except ImportError as e:
+      pass
+
+  return Model(**model_kwargs), sample_input

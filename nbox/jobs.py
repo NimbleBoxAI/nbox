@@ -281,6 +281,9 @@ class Job:
     logger.info(f"Triggered job '{self.job_proto.id}'")
     self.refresh()
 
+  def __call__(self):
+    pass
+
   def pause(self):
     """Pause the execution of this job.
     

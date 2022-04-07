@@ -39,7 +39,9 @@ class Tracer:
     self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id=self.workspace_id))
     self.network_tracer = True
     
-    logger.info(self.token)
+    logger.debug(f"Job Id: {self.job_id}")
+    logger.debug(f"Run token: {self.token}")
+    logger.debug(f"Workspace Id: {self.workspace_id}")
     self.job_proto.status = Job.Status.ACTIVE # automatically first run will
 
   def __call__(self, node: Node, verbose: bool = True):
@@ -48,9 +50,11 @@ class Tracer:
     if not self.network_tracer:
       return
     self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this
+    updated_at = node.run_status.start if node.run_status.end != None else node.run_status.end
+    logger.info(updated_at.ToDatetime())
     rpc(
       nbox_grpc_stub.UpdateRun,
-      UpdateRunRequest(token = self.token, job=self.job_proto, updated_at=node.run_status.end),
+      UpdateRunRequest(token = self.token, job=self.job_proto, updated_at=updated_at),
       f"Could not update job {self.job_proto.id}"
     )
 
