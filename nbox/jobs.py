@@ -1,5 +1,10 @@
 """
 ``nbox.Job`` is a wrapper to the APIs that's it.
+
+Notes
+-----
+
+* ``datetime.utcnow()`` is incorrect, use `this <https://blog.ganssle.io/articles/2019/11/utcnow.html>`_ method.
 """
 
 import re
@@ -27,10 +32,31 @@ from .messages import message_to_dict, rpc, streaming_rpc
 # These functions are assigned as static functions to the ``nbox.Job`` class.
 ################################################################################
 
-def _nbx_job(project_name: str, workspace_id: str = None):
+def _repl_schedule(return_proto: bool = False):
   from .network import Schedule
-  # https://blog.ganssle.io/articles/2019/11/utcnow.html
-  created_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") + " UTC"
+  logger.info("Calendar Instructions (all time is in UTC Timezone):")
+  logger.info("            What you want: Code")
+  logger.info("\"   every 4:30 at friday\": Schedule(4, 30, ['fri'])")
+  logger.info("\"every 12:00 on weekends\": Schedule(12, 0, ['sat', 'sun'])")
+  logger.info("\"         every 10 hours\": Schedule(10)")
+  logger.info("\"      every 420 minutes\": Schedule(minute = 420)")
+  logger.info("> Enter the calender instruction: ")
+  cron_instr = input("> ").strip()
+  schedule_proto = None
+  try:
+    schedule_proto: Schedule = eval(cron_instr, {'Schedule': Schedule})
+  except Exception as e:
+    logger.error(f"Invalid calender instruction: {e}")
+    sys.exit(1)
+  if not return_proto:
+    return cron_instr
+  return schedule_proto
+
+def _nbx_job(project_name: str, workspace_id: str = None):
+  # Monday W34 [UTC 12 April, 2022 - 12:00:00]
+  _ct = datetime.now(timezone.utc)
+  _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+  created_time = f"{_day} W{_ct.isocalendar().week} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
 
   job_id_or_name = input("> Job ID or name: ")
 
@@ -39,18 +65,7 @@ def _nbx_job(project_name: str, workspace_id: str = None):
   scheduled = input("> Is this a recurring job (y/N)? ").lower() == "y"
   cron_instr = None
   if scheduled:
-    logger.info("Calendar Instructions (all time is in UTC Timezone):")
-    logger.info("\"   every 4:30 at friday\": Schedule(4, 30, ['fri'])")
-    logger.info("\"every 12:00 on weekends\": Schedule(12, 0, ['sat', 'sun'])")
-    logger.info("\"         every 10 hours\": Schedule(10)")
-    logger.info("\"      every 420 minutes\": Schedule(minute = 420)")
-    logger.info("> Enter the calender instruction: ")
-    cron_instr = input("> ").strip()
-    try:
-      eval(cron_instr, {'Schedule': Schedule})
-    except Exception as e:
-      logger.error(f"Invalid calender instruction: {e}")
-      sys.exit(1)
+    cron_instr = _repl_schedule()
 
   logger.info("This job will be scheduled to run on a recurring basis" if scheduled else "This job will run once")
   logger.info(f"Creating a folder: {project_name}")
@@ -68,6 +83,10 @@ def _nbx_job(project_name: str, workspace_id: str = None):
 
   assets = U.join(U.folder(__file__), "assets")
   path = U.join(assets, "job_new.jinja")
+  with open(path, "r") as f, open("nbx_user.py", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**py_f_data))
+
+  path = U.join(assets, "job_nbx.jinja")
   with open(path, "r") as f, open("exe.py", "w") as f2:
     f2.write(jinja2.Template(f.read()).render(**py_f_data))
 
@@ -82,7 +101,10 @@ def _nbx_job(project_name: str, workspace_id: str = None):
     f2.write(jinja2.Template(f.read()).render(**md_data))
 
 def _build_job(project_name, workspace_id):
-  created_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S") + " UTC"
+  _ct = datetime.now(timezone.utc)
+  _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+  created_time = f"{_day} W{_ct.isocalendar().week} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+
   project_id = input("> Project ID: ")
   inst = Instance(i = project_id, workspace_id = workspace_id)
   cpu, gpu_name, gpu_count = None, None, None
@@ -127,6 +149,10 @@ def _build_job(project_name, workspace_id):
 
   assets = U.join(U.folder(__file__), "assets")
   path = U.join(assets, "job_new.jinja")
+  with open(path, "r") as f, open("nbx_user.py", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**py_f_data))
+
+  path = U.join(assets, "job_nbx.jinja")
   with open(path, "r") as f, open("exe.py", "w") as f2:
     f2.write(jinja2.Template(f.read()).render(**py_f_data))
 
@@ -221,9 +247,11 @@ class Job:
     self.job_info = JobInfo(job=self.job_proto)
     self.refresh()
 
-  def change_schedule(self, new_schedule: 'Schedule'):
+  def change_schedule(self, new_schedule: 'Schedule' = None):
     """Change schedule this job"""
     logger.info(f"Updating job '{self.job_proto.id}'")
+    if new_schedule == None:
+      new_schedule = _repl_schedule(True) # get the information from REPL
     self.job_proto.schedule.MergeFrom(new_schedule.get_message())
     rpc(
       nbox_grpc_stub.UpdateJob,
@@ -282,7 +310,7 @@ class Job:
     self.refresh()
 
   def __call__(self):
-    pass
+    return self.trigger()
 
   def pause(self):
     """Pause the execution of this job.

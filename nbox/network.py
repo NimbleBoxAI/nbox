@@ -56,8 +56,6 @@ def deploy_serving(
   # intialise the console logger
   logger.debug("-" * 30 + " NBX Deploy " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
-  
-  # TODO: @yashbonde figure out protobuf way of storing deployment_id strings
   deployment_type = "nbox" # model_spec.deploy.type
   deployment_id = model_spec.deploy.id
   deployment_name = model_spec.deploy.name
@@ -272,7 +270,8 @@ class Schedule:
     """Get the JobProto.Schedule object for this Schedule"""
     _starts = Timestamp(); _starts.GetCurrentTime()
     _ends = Timestamp(); _ends.FromDatetime(self.ends)
-    return JobProto.Schedule(start = _starts, end = _ends, cron = self.cron)
+    # return JobProto.Schedule(start = _starts, end = _ends, cron = self.cron)
+    return JobProto.Schedule(cron = self.cron)
 
   def __repr__(self):
     return str(self.get_dict())

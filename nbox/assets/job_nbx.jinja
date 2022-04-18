@@ -1,0 +1,84 @@
+# DO NOT TOUCH
+# ============
+# Auto generated code by 'nbox jobs new' command
+# project name: {{ project_name }}
+# created time: {{ created_time }}
+#   created by: {{ email_id }}
+#
+# > feeling stuck, start by populating the functions below <
+
+import os
+import sys
+import fire
+{{ import_string_others}}
+
+# the trick to importing nbox is to ensure proper loading order and setting
+# of correct env vars, the first import is made in the user stub
+os.environ["NBOX_JOB_FOLDER"] = os.getcwd() # Do not touch
+
+from nbx_user import get_op # << nbox imported here, fill all envs here
+
+import nbox.utils as U
+from nbox.nbxlib.tracer import Tracer
+from nbox import Operator, nbox_grpc_stub
+from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from nbox.hyperloop.job_pb2 import Job
+from nbox.messages import rpc
+from nbox.messages import get_current_timestamp
+{{ import_string_nbox}}
+
+{%if run_on_build%}def deploy():
+  # the contract of this deploy() function is to push code to the compute location.
+  # In case of nbx-jobs it uploads the code to S3 and then K8s cluster will manage
+  # the execution of code. In this case of nbx-build, we will simply transfer the
+  # this folder to the instance. run() will execute the code as it is will.
+  instance = Instance('{{instance}}')
+  {%if not_running%}if instance.status != "RUNNING":
+    instance.start(cpu_only = {{cpu_only}}, cpu_count = {{cpu_count}}, gpu = {{gpu}}, gpu_count = {{gpu_count}}){%endif%}
+  
+  # move the files and inform users of the command to execute this instruction
+  instance.mv(U.folder(__file__), "nbx://{{ project_name }}")
+  logger.info(f"Deployed to instance: {instance.name}")
+  logger.info("Run the following command to run the code:")
+
+  # convinience, you can run on CLI for shell "python3 exe.py deploy ... | sh"
+  sys.stdout.write("python3 -m nbox instance -i '{{ instance }}' run_py 'nbx://{{ project_name }}/exe.py' run")
+  sys.stdout.flush()
+
+  ! ~ instance.stop() # shutdown the instance, comment out the line to keep it running
+{%else%}def deploy():
+  op: Operator = get_op()
+  job = op.deploy(
+    job_id_or_name = '{{job_id_or_name}}',{%if workspace_id%}
+    workspace_id = '{{workspace_id}}',{%endif%}{% if scheduled %}
+    schedule = {{scheduled}},{% endif %}
+
+    init_folder = U.folder(__file__), # ! ~ do not change this
+  )
+{%endif%}
+
+def run():
+  op: Operator = get_op(){% if run_on_build %}
+  subprocess.run(["pip", "install", "-r", U.join(U.folder(__file__), "requirements.txt")]){% endif %}
+  op.propagate(_tracer = Tracer())
+  if hasattr(op._tracer, "job_proto"):
+    op.thaw(op._tracer.job_proto)
+
+  try:
+    op() # now we don't take anything as an input
+  except Exception as e:
+    U.logger.error(e)
+    if hasattr(op._tracer, "job_proto"):
+      op._tracer.job_proto.status = Job.Status.ERROR
+  else:
+    if hasattr(op._tracer, "job_proto"):
+      op._tracer.job_proto.status = Job.Status.COMPLETED
+      rpc(
+        nbox_grpc_stub.UpdateRun, UpdateRunRequest(
+          token = op._tracer.token, job=op._tracer.job_proto, updated_at=get_current_timestamp()
+        ), "Failed to end job!"
+      )
+
+if __name__ == "__main__":
+  fire.Fire({"deploy": deploy, "run": run})
+  sys.exit(0)

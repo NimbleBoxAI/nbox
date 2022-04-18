@@ -317,17 +317,33 @@ def node_return(node: ast.Return, lines, node_proto: Node) -> Node:
   ))
   return node_proto
 
-def def_func_or_class(node, lines):
-  out = {
-    "name": node.name,
-    "code": get_code_portion(lines, **node.__dict__),
-    "type": "def-node"
-  }
-  if isinstance(node, ast.FunctionDef):
-    out.update({"func": True, "inputs": parse_args(node.args)})
-  else:
-    out.update({"func": False, "inputs": []})
-  return out
+def def_func_or_class(node, lines, node_proto: Node) -> Node:
+  # out = {
+  #   "name": ,
+  #   "code": get_code_portion(lines, **node.__dict__),
+  #   "type": "def-node"
+  # }
+  # if isinstance(node, ast.FunctionDef):
+  #   out.update({"func": True, "inputs": parse_args(node.args)})
+  # else:
+  #   out.update({"func": False, "inputs": []})
+
+  node_proto.MergeFrom(Node(
+    name = f"symbol-{node.name}",
+    info = Code(
+      name = "return",
+      type = Node.NodeType.OP, # TODO: @yashbonde expand node types to include class/func definitions
+      code = get_code_portion(lines, **node.__dict__),
+      nbox_string = "",
+      lineno = node.lineno,
+      col_offset = node.col_offset,
+      end_lineno = node.end_lineno,
+      end_col_offset = node.end_col_offset,
+      inputs = {},
+      outputs = {'None':'None'},
+    )
+  ))
+  return node_proto
 
 
 # ==================
@@ -360,7 +376,7 @@ def code_node(execution_index, expr, code_lines) -> Node:
     id = str(uuid4()),
     execution_index = execution_index,
     name = f"codeblock-{execution_index}",
-    type = "op-node",
+    type = Node.NodeType.OP,
     operator = "CodeBlock",
     nbox_string = f"CODE: {str(type(expr))}", # :str
     run_status = RunStatus(), # no need to initialise this object
@@ -388,17 +404,17 @@ def get_nbx_flow(forward) -> DAG:
   # get code string from operator
   code = inspect.getsource(forward).strip()
   code_lines = code.splitlines()
-  node = ast.parse(code)
+  ast_node = ast.parse(code)
 
   edges = {} # this is the flow
   nodes = {} # this is the operators
   symbols_to_nodes = {} # this is things that are defined at runtime
 
   try:
-    for i, expr in enumerate(node.body[0].body):
+    for i, expr in enumerate(ast_node.body[0].body):
       # create the empty node that will be used everywhere
       if not type(expr) in type_wise_logic:
-        node.info = code_node(i, expr, code_lines)
+        node: Node = code_node(i, expr, code_lines)
         nodes[node.id] = node
         continue
 
@@ -407,14 +423,7 @@ def get_nbx_flow(forward) -> DAG:
       output = type_wise_logic[type(expr)](expr, code_lines, node_proto)
       if output is None:
         continue
-      elif not isinstance(output, Node) and "def" in output["type"]:
-        symbols_to_nodes[output['name']] = {
-          "info": output,
-          "execution_index": i,
-          "nbox_string": nbxl.define(output["name"], output["inputs"])
-        }
-      else:
-        nodes[node_proto.id] = node_proto
+      nodes[node_proto.id] = node_proto
 
     # edges for execution order can be added
     _node_ids = tuple(nodes.keys())

@@ -243,3 +243,30 @@ class Notify(Operator):
       webhook = Webhook.from_url(self.notify_id, adapter = RequestsWebhookAdapter())
       webhook.send(message, **kwargs)
 
+class StepOp(Operator):
+  def __init__(self):
+    """Convinience operator, add a no output operator using ``.add_step`` and don't write forward
+
+    Usage
+    -----
+
+    .. code-block:: python
+
+    class InstallPython(StepOp)
+      def __init__(self, version: str = "3.9):
+        self.add_step(ShellCommand(f"chmod +x ./scripts/python{version}_install.sh"))
+        self.add_step(ShellCommand(f"./scripts/python{version}_install.sh"))
+
+    install_python = InstallPython() # init op
+    for ... in (...):
+      install_python()
+    """
+    super().__init__()
+    self.steps = []
+
+  def add_step(self, step: Operator):
+    self.steps.append(step)
+
+  def forward(self):
+    for step in self.steps:
+      step()
