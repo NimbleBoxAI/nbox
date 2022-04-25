@@ -145,7 +145,7 @@ def deploy_serving(
 
     elif curr_st == "deployment.ready":
       out = stub_all_depl.u(model_spec.deploy.id).get_access_key()
-      access_key = out["access_key"]
+      access_key = out['data']["access_key"]
 
       # keep hitting /metadata and see if model is ready or not
       r = requests.get(url=f"{server_endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})
