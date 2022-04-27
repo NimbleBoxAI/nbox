@@ -94,7 +94,7 @@ def torch_import_torchscript(user_options, nbox_options, spec: ModelSpec):
   message_name="TorchToOnnx",
   export_fn_import="from torch.onnx import export",
   dependencies=["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
-  ignore_args = ["f"],
+  ignore_args = ["f", "model"],
 )
 def torch_export_onnx(user_options, nbox_options, spec: ModelSpec):
   import torch

@@ -2,85 +2,74 @@
 
 # 🏖️ Nbox
 
-pypi `nbox` is stable for SSH and other APIs. Check out [v1](https://github.com/NimbleBoxAI/nbox/tree/v1) for the latest code and APIs!
+`nbox` is NimbleBox.ai's official SDK.
 
-A library that makes using a host of models provided by the opensource community a lot more easier. 
-
-> The entire purpose of this package is to make using models 🥶.
+> The entire purpose of this package is to make using ML 🥶.
 
 ```
 pip install nbox
 ```
 
-#### Current LoC
-
-```
-SLOC	Directory	SLOC-by-Language (Sorted)
-996     top_dir         python=996
-88      framework       python=88
-
-Totals grouped by language (dominant language first):
-python:        1084 (100.00%)
-```
-
 ## 🔥 Usage
 
+`nbox` provides first class support API for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`:
+
 ```python
-import nbox
+from nbox import Operator
+from nbox.nbxlib.ops import Magic
 
-# As all these models come from the popular frameworks you use such as 
-# torchvision, efficient_pytorch or hf.transformers
-model = nbox.load("torchvision/mobilenetv2", pretrained = True)
+# define a class object
+weekly_trainer: Operator = Magic()
 
-# nbox makes inference the priority so you can use it
-# pass it a list for batch inference 
-out_single = model('cat.jpg')
-out = model([Image.open('cat.jpg'), np.array(Image.open('cat.jpg'))])
-tuple(out.shape) == (2, 1000)
-
-# deploy the model to a managed kubernetes cluster on NimbleBox.ai
-url_endpoint, nbx_api_key = model.deploy()
-
-# or load a cloud infer model and use seamlessly
-model = nbox.load(
-  model_key_or_url = url_endpoint,
-  nbx_api_key = nbx_api_key,
-  category = "image"
+# call your operators
+weekly_trainer(
+  pass_values = "directly",
 )
 
-# Deja-Vu!
-out_single = model('cat.jpg')
-out = model([Image.open('cat.jpg'), np.array(Image.open('cat.jpg'))])
-tuple(out.shape) == (2, 1000)
+# confident? deploy it to your cloud
+weekly_trainer.deploy(
+  job_id_or_name = "magic_jobs",
+  schedule = Schedule(4, 30, ['fri']) # schedule like humans
+)
 ```
 
-## ⚙️ CLI
+Deploy your machine learning or statistical models:
 
-Just add this to your dockerfile or github actions.
+```python
+from nbox import Model
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+# define your pre and post processing functions
+def pre(x: Dict):
+  return AutoTokenizer(**x)
+
+# load your classifier with functions
+model = AutoModelForSequenceClassification.from_pretrained("distill-bert")
+classifier = Model(model, pre = pre)
+
+# call your model
+classifier(f"Is this a good picture?")
+
+# get full control on exporting it
+spec = classifier.torch_to_onnx(
+  TorchToOnnx(...)
+)
+
+# confident? deploy it your cloud
+url, key = classifier.deploy(
+  spec, deployment_id_or_name = "classification"
+)
+
+# use it anywhere
+pred = requests.post(
+  url,
+  json = {
+    "text": f"Is this a good picture?"
+  },
+  header = {"Authorization": f"Bearer {key}"}
+).json()
 ```
-NBX_AUTH=1 python -m nbox deploy --model_path=my/model.onnx --deployment_type="nbox"
-
-# or for more details
-
-python -m nbox --help
-```
-
-## ✏️ Things for Repo
-
-- Using [`poetry`](https://python-poetry.org/) for proper package management as @cshubhamrao says.
-  - Add new packages with `poetry add <name>`. Do not add `torch`, `tensorflow` and others, useless burden to manage those.
-  - When pushing to pypi just do `poetry build && poetry publish` this manages all the things around
-- Install `pytest` and then run `pytest tests/ -v`.
-- Using `black` for formatting, VSCode to the moon.
-- To make the docs:
-  ```
-  # from current folder
-  sphinx-apidoc -o docs/source/ ./nbox/ -M -e
-  cd docs && make html
-  cd ../build/html && python3 -m http.server 80
-  ```
 
 # 🧩 License
 
-The code in thist repo is licensed as [BSD 3-Clause](./LICENSE). Please check for individual repositories for licenses.
+The code in thist repo is licensed as [Apache License 2.0](./LICENSE). Please check for individual repositories for licenses.
