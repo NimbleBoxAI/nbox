@@ -4,7 +4,7 @@
 Notes
 -----
 
-* ``datetime.utcnow()`` is incorrect, use `this <https://blog.ganssle.io/articles/2019/11/utcnow.html>`_ method.
+* ``datetime.now(timezone.utc)`` is incorrect, use `this <https://blog.ganssle.io/articles/2019/11/utcnow.html>`_ method.
 """
 
 import re

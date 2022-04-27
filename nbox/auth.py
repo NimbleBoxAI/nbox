@@ -198,15 +198,27 @@ class NBXClient:
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(fp):
       logger.info(f"Ensure that you put the email ID you have signed up with!")
-      email_id = input("Email ID: ")
       _secrets_url = f"{nbx_url}/secrets"
       logger.info(f"Opening: {_secrets_url}")
       webbrowser.open(_secrets_url)
       access_token = getpass("Access Token: ")
+      
+      # Once we have the access token, we can get the secrets
+      r = requests.get(f"{nbx_url}/api/v1/user/account_details", headers={"Authorization": f"Bearer {access_token}"})
+      try:
+        r.raise_for_status()
+        username = r.json()["data"]["username"]
+        email = r.json()["data"]["email"]
+      except:
+        username = ""
+        email = ""
+
+      # create the objects
       self.secrets = {
-        "email_id": email_id,
+        "email": email,
         "access_token": access_token,
-        "nbx_url": nbx_url
+        "nbx_url": nbx_url,
+        "username": username
       }
       with open(fp, "w") as f:
         f.write(repr(self))
@@ -217,12 +229,18 @@ class NBXClient:
       logger.debug("Successfully loaded secrets!")
 
   def __repr__(self):
-    return json.dumps(self.secrets)
+    return json.dumps(self.secrets, indent=2)
 
   def get(self, item, default=None):
     return self.secrets.get(item, default)
 
-# function for manual trigger
+  def put(self, item, value, persist: bool = False):
+    self.secrets[item] = value
+    if persist:
+      with open(join(NBOX_HOME_DIR, "secrets.json"), "w") as f:
+        f.write(repr(self))
+
+
 def init_secret():
   # add any logic here for creating secrets
   return NBXClient()

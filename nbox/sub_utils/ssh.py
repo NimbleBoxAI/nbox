@@ -1,27 +1,35 @@
 """
-This file provides support for the SSH tunneling into NBX-Build Instances.
+Creates a socket tunnel between users localhost to server called RSockServer (Reverse Socket Server) .
+Usage:
+  client-tunnel.py <client_port>:<instance_name>:<instance_port> <auth>
+Takes in the following arguments:
+  - client_port: The port that the user can connect to.
+  - instance_name: The name of the instance that the user wants to connect to.
+  - instance_port: The port that the instance is listening on.
+  - auth: The authentication token that the user has to provide to connect to the RSockServer.
+  
 """
-# If you have come till here, and you want to work on more things like this, reach out:
-# research@nimblebox.ai
 
 import os
 import ssl
 import socket
-import certifi
+import logging
 import threading
-from typing import List
-from datetime import datetime
+from io import StringIO
 from functools import partial
+from typing import List
+from datetime import datetime, timezone
 
-from ..utils import NBOX_HOME_DIR, logger as nbx_logger
-from .. import utils as U
-from ..auth import secret
-from ..instance import Instance
+from nbox.utils import NBOX_HOME_DIR, logger as nbx_logger
+from nbox import utils as U
+from nbox.auth import secret
+from nbox.instance import Instance
+
 
 class FileLogger:
   def __init__(self, filepath):
     self.filepath = filepath
-    self.f = open(filepath, "w")
+    self.f = open(filepath, "a")
 
     self.debug = partial(self.log, level="debug",)
     self.info = partial(self.log, level="info",)
@@ -30,7 +38,7 @@ class FileLogger:
     self.critical = partial(self.log, level="critical",)
 
   def log(self, message, level):
-    self.f.write(f"[{datetime.utcnow().isoformat()}] {level}: {message}\n")
+    self.f.write(f"[{datetime.now(timezone.utc).isoformat()}] {level}: {message}\n")
     self.f.flush()
 
 
@@ -40,30 +48,33 @@ class RSockClient:
   Connects to RSockServer listening on localhost:886.
   RSockServer recieves instructions as a string and sends back a response.
   RSockServer requires following steps to setup
-  First, authentication:
-    - Authentication happens by sending
-      `"AUTH~{AUTH_TOKEN}"`
-    - AUTH_TOKEN is not defined and is default to 'password'
-  Seting config:
-    - you can set config by sending
-      `"SET_CONFIG~{instance}~{instance_port}"`
-    - "instance" - Currently is the internal ip of the instance.
-    - "instance_port" - What port users wants to connect to.
-  Connect:
-    - This Starts the main loop which
-      1. Listen on client_port
+  First,
+    Authentication:
+      - Authentication happens by sending
+        `"AUTH~{AUTH_TOKEN}"`
+      - AUTH_TOKEN is not defined and is default to 'password'
+    Seting config:
+      - you can set config by sending
+        `"SET_CONFIG~{instance}~{instance_port}"`
+      - "instance" - Currently is the internal ip of the instance.
+      - "instance_port" - What port users wants to connect to.
+    Connect:
+      - This Starts the main loop which
+        1. Listen on client_port
+        2. On connection, 
       2. On connection, 
-        a. Send AUTH
-        b. If AUTH is successful, send SET_CONFIG
-        c. If SET_CONFIG is successful, send CONNECT
-        d. If CONNECT is successful, start io_copy
-  IO_COPY:
-    - This is the main loop that handles the data transfer between client and server. This is done by creating a new thread for each connection.
-    - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
-    - When a connection is closed, the loop is stopped.
+        2. On connection, 
+          a. Send AUTH
+          b. If AUTH is successful, send SET_CONFIG
+          c. If SET_CONFIG is successful, send CONNECT
+          d. If CONNECT is successful, start io_copy
+    IO_COPY:
+      - This is the main loop that handles the data transfer between client and server. This is done by creating a new thread for each connection.
+      - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
+      - When a connection is closed, the loop is stopped.
   """
 
-  def __init__(self, connection_id, client_socket, instance, instance_port, auth, logger: FileLogger, secure=False,):
+  def __init__(self, connection_id, client_socket, user, subdomain, instance_port, file_logger, auth, secure=False):
     """
     Initializes the client.
     Args:
@@ -76,35 +87,50 @@ class RSockClient:
     """
     self.connection_id = connection_id
     self.client_socket = client_socket
-    self.instance = instance
+    self.user = user
+    self.subdomain = subdomain
     self.instance_port = instance_port
     self.auth = auth
     self.secure = secure
-    self.logger = logger
 
     self.client_auth = False
     self.rsock_thread_running = False
     self.client_thread_running = False
+    self.logger = file_logger
 
-    self.logger.info('Starting client')
+    self.log('Starting client')
     self.connect_to_rsock_server()
-    self.logger.info('Connected to RSockServer')
-    self.authenticate()
-    self.logger.info('Authenticated client')
+    self.log('Connected to RSockServer')
+    # self.authenticate()
+    # self.log('Authenticated client')
     self.set_config()
-    self.logger.info('Client init complete')
+    self.log('Client init complete')
 
+  def __repr__(self):
+    return f"""RSockClient(
+  connection_id={self.connection_id},
+  client_socket={self.client_socket},
+  user={self.user},
+  subdomain={self.subdomain},
+  instance_port={self.instance_port},
+  auth={self.auth},
+)"""
+  
+  def log(self, message, level=logging.INFO):
+    self.logger.info(f"[{self.connection_id}] [{level}] {message}")
+  
   def connect_to_rsock_server(self):
     """
     Connects to RSockServer.
     """
-    self.logger.debug('Connecting to RSockServer')
+    self.log('Connecting to RSockServer', logging.DEBUG)
     rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    rsock_socket.connect(('rsocks.nimblebox.ai', 886))
+    rsock_socket.connect(('rsock.rc.nimblebox.ai', 886))
 
     if self.secure:
-      self.logger.info('Starting SSL')
-      self.rsock_socket = ssl.wrap_socket(rsock_socket, ca_certs=certifi.where(), cert_reqs=ssl.CERT_REQUIRED)
+      self.log('Starting SSL')
+      certfile = U.join(U.folder(__file__), "pub.crt")
+      self.rsock_socket = ssl.wrap_socket(rsock_socket, ca_certs=certfile, cert_reqs=ssl.CERT_REQUIRED)
     else:
       self.rsock_socket = rsock_socket
 
@@ -113,14 +139,14 @@ class RSockClient:
     Authenticates the client.
     Sends `"AUTH~{AUTH_TOKEN}"` to RSockServer.
     """
-    self.logger.info('Authenticating client')
-    self.rsock_socket.sendall(bytes(f'AUTH~{self.auth}', 'utf-8'))
+    self.log('Authenticating client')
+    self.rsock_socket.sendall(bytes('AUTH~{}'.format(self.auth), 'utf-8'))
     auth = self.rsock_socket.recv(1024)
     auth = auth.decode('utf-8')
     if auth == 'OK':
-      self.logger.info('Client authenticated')
+      self.log('Client authenticated')
     else:
-      self.logger.erro('Client authentication failed')
+      self.log('Client authentication failed', logging.ERROR)
       self.client_auth = False
       exit(1)
   
@@ -129,15 +155,16 @@ class RSockClient:
     Sets the config of the client.
     Sends `"SET_CONFIG~{instance}~{instance_port}"` to RSockServer.
     """
-    self.logger.info('Setting config')
-    self.rsock_socket.sendall(bytes(f'SET_CLIENT~{self.instance}~{self.instance_port}', 'utf-8'))
+    self.log('Setting config')
+    self.rsock_socket.sendall(bytes('SET_CLIENT~{}~{}~{}~{}'.format(self.user, self.subdomain, self.instance_port, self.auth), 'utf-8'))
     config = self.rsock_socket.recv(1024)
     config = config.decode('utf-8')
-    self.logger.info('Config set to {}'.format(config))
+    self.log('Config set to {}'.format(config))
     if config == 'OK':
-      self.logger.info('Config set')
+      self.client_auth = True
+      self.log('Config set')
     else:
-      self.logger.error('Config set failed')
+      self.log('Config set failed', logging.ERROR)
       exit(1)
 
   def connect(self):
@@ -145,24 +172,37 @@ class RSockClient:
     Connects the client to RSockServer.
     Sends `"CONNECT"` to RSockServer.
     """
-    self.logger.info('Starting the io_copy loop')
-    self.rsock_socket.sendall(bytes('CONNECT', 'utf-8'))
-    
-    # start the io_copy loop
-    self.rsock_thread_running = True
-    self.rsock_thread = threading.Thread(target=self.io_copy, args=("server", ))
-    self.rsock_thread.start()
+    if self.client_auth:
+      self.log('Starting the io_copy loop')
+      self.rsock_socket.sendall(bytes('CONNECT', 'utf-8'))
 
-    # start the io_copy loop
-    self.client_thread_running = True
-    self.client_thread = threading.Thread(target=self.io_copy, args=("client", ))
-    self.client_thread.start()
+      connect_status = self.rsock_socket.recv(1024)
+      connect_status = connect_status.decode('utf-8')
+      self.log('Connected status: {}'.format(connect_status))
+      if connect_status == 'OK':
+        self.log('Connected to project...')
+      else:
+        self.log('Connect failed', logging.ERROR)
+        exit(1)
+
+      # start the io_copy loop
+      self.rsock_thread_running = True
+      self.client_thread_running = True
+
+      self.rsock_thread = threading.Thread(target=self.io_copy, args=("server", ))
+      self.client_thread = threading.Thread(target=self.io_copy, args=("client", ))
+
+      self.rsock_thread.start()
+      self.client_thread.start()
+    else:
+      self.log('Client authentication failed', logging.ERROR)
+      exit(1)
 
   def io_copy(self, direction):
     """
     This is the main loop that handles the data transfer between client and server.
     """
-    self.logger.info('Starting {} io_copy'.format(direction))
+    self.log('Starting {} io_copy'.format(direction))
 
     if direction == 'client':
       client_socket = self.client_socket
@@ -172,56 +212,73 @@ class RSockClient:
       client_socket = self.rsock_socket
       server_socket = self.client_socket
 
-    while True:
+    while self.rsock_thread_running and self.client_thread_running:
       try:
         data = client_socket.recv(1024)
         if data:
-          # self.logger.info('{} data: {}'.format(direction, data))
+          # self.log('{} data: {}'.format(direction, data))
           server_socket.sendall(data)
         else:
-          self.logger.info('{} connection closed'.format(direction))
+          self.log('{} connection closed'.format(direction))
           break
       except Exception as e:
-        self.logger.error('Error in {} io_copy: {}'.format(direction, e))
+        self.log('Error in {} io_copy: {}'.format(direction, e), logging.ERROR)
         break
-    self.logger.info('Stopping {} io_copy'.format(direction))
 
-def create_connection(local_port, instance_id, instance_port, logger: FileLogger, listen = 1):
+    self.rsock_thread_running = False
+    self.rsock_thread_running = False
+    
+    self.log('Stopping {} io_copy'.format(direction))
+
+
+def create_connection(
+  localport: int,
+  user: str,
+  subdomain: str,
+  port: int,
+  file_logger: str,
+  auth: str,
+  notsecure: bool = False,
+):
+  """
+  Args:
+    localport: The port that the client will be listening on.
+    user: The user that the client will be connecting as.
+    subdomain: The subdomain that the client will be connecting to.
+    port: The port that the server will be listening on.
+    auth: The build auth token that the client will be using.
+    notsecure: Whether or not to use SSL.
+  """
   listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  listen_socket.bind(('localhost', local_port))
-  listen_socket.listen(listen)
+  listen_socket.bind(('localhost', localport))
+  listen_socket.listen(20)
 
   connection_id = 0
+  # print(localport, user, subdomain, port, file_logger, auth)
 
   while True:
-    logger.info('Waiting for client')
+    logging.info('Waiting for client')
     client_socket, _ = listen_socket.accept()
-    logger.info('Client connected')
+    logging.info('Client connected')
 
     connection_id += 1
-    logger.info(f'Total clients connected -> {connection_id}')
-    # create the client
-    pwd = secret.get("access_token")
+    logging.info(f'Total clients connected -> {connection_id}')
 
-    client = RSockClient(
-      connection_id = connection_id,
-      client_socket = client_socket,
-      instance = instance_id,
-      instance_port = instance_port,
-      auth = pwd,
-      logger = logger,
-      secure = True
-    )
+    # create the client
+    secure = not notsecure
+    client = RSockClient(connection_id, client_socket, user, subdomain, port, file_logger, auth, secure)
 
     # start the client
     client.connect()
+
 
 def port_in_use(port: int) -> bool:
   import socket
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     return s.connect_ex(('localhost', port)) == 0
 
-def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
+
+def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
   """the nbox way to SSH into your instance, by default ``"jupyter": 8888 and "mlflow": 5000``
 
   Usage:
@@ -251,13 +308,12 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
   os.makedirs(folder, exist_ok=True)
   filepath = U.join(folder, f"tunnel_{i}.log")
   file_logger = FileLogger(filepath)
+  nbx_logger.info(f"Logging to {filepath}")
 
-  
   # ===============
 
   default_ports = {
-    "jupyter": 8888,
-    "mlflow": 5000,
+    "jupyter": 1050,
   }
   apps = {} # <localport-cloudport>
   for ap in apps_to_ports:
@@ -271,7 +327,7 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
       if app not in default_ports:
         raise ValueError(f"Unknown '{app}' should be either integer or one of {', ' .join(default_ports.keys())}")
       apps[port] = default_ports[app]
-  apps[ssh] = 22 # hard code
+  apps[ssh] = 2222 # hard code
 
   ports_used = []
   for k in apps:
@@ -282,16 +338,24 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str):
     raise ValueError(f"Ports {', '.join(ports_used)} are already in use")
 
   # check if instance is the correct one
-  instance = Instance(i)
+  instance = Instance(i, workspace_id)
   if not instance.state == "RUNNING":
     raise ValueError("Instance is not running")
-  nbx_logger.info(f"password: {instance.open_data['ssh_pass']}")
+
+  instance.start(_ssh = True)
 
   # create the connection
   threads = []
-  for local_port, cloud_port in apps.items():
-    nbx_logger.info(f"Creating connection from {cloud_port} -> {local_port}")
-    t = threading.Thread(target=create_connection, args=(local_port, instance.instance_id, cloud_port, file_logger, 1))
+  for localport, cloudport in apps.items():
+    nbx_logger.info(f"Creating connection from {cloudport} -> {localport}")
+    t = threading.Thread(target=create_connection, args=(
+      localport,                       # localport
+      secret.get("username"),          # user
+      instance.open_data.get("url"),   # subdomain
+      cloudport,                       # port
+      file_logger,                     # filelogger
+      instance.open_data.get("token"), # auth
+    ))
     t.start()
     threads.append(t)
 

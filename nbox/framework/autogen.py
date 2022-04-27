@@ -4,8 +4,8 @@ import re
 import jinja2
 import inspect
 from textwrap import indent
-from datetime import datetime
 from typing import Callable, List
+from datetime import datetime, timezone
 
 from .. import utils as U
 from ..utils import logger
@@ -158,7 +158,7 @@ def compile():
   with open(src_file, "r") as src, open(trg_file, "w") as trg:
     trg.write(
       jinja2.Template(src.read()).render(
-        timestamp = datetime.utcnow().isoformat(),
+        timestamp = datetime.now(timezone.utc).isoformat(),
         frameworks = data,
         zip = zip,
     ))

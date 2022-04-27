@@ -318,21 +318,11 @@ def node_return(node: ast.Return, lines, node_proto: Node) -> Node:
   return node_proto
 
 def def_func_or_class(node, lines, node_proto: Node) -> Node:
-  # out = {
-  #   "name": ,
-  #   "code": get_code_portion(lines, **node.__dict__),
-  #   "type": "def-node"
-  # }
-  # if isinstance(node, ast.FunctionDef):
-  #   out.update({"func": True, "inputs": parse_args(node.args)})
-  # else:
-  #   out.update({"func": False, "inputs": []})
-
   node_proto.MergeFrom(Node(
     name = f"symbol-{node.name}",
+    type = Node.NodeType.OP, # TODO: @yashbonde expand node types to include class/func definitions
     info = Code(
       name = "return",
-      type = Node.NodeType.OP, # TODO: @yashbonde expand node types to include class/func definitions
       code = get_code_portion(lines, **node.__dict__),
       nbox_string = "",
       lineno = node.lineno,
@@ -401,8 +391,10 @@ def get_nbx_flow(forward) -> DAG:
   Args:
       forward (callable): the function whose flowchart is to be generated
   """
-  # get code string from operator
-  code = inspect.getsource(forward).strip()
+  if type(forward) == str:
+    code = forward
+  else:
+    code = inspect.getsource(forward).strip() # get code string from operator
   code_lines = code.splitlines()
   ast_node = ast.parse(code)
 

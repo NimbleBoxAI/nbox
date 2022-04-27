@@ -275,7 +275,6 @@ class Model:
     ))
     if len(deployments) == 0:
       logger.warning(f"No deployment found with id '{deployment_id_or_name}', creating one with same name")
-      _deploy_proto.id = None
       _deploy_proto.name = deployment_id_or_name
     elif len(deployments) > 1:
       raise ValueError(f"Multiple deployments found for '{deployment_id_or_name}', try passing ID")

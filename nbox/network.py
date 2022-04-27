@@ -9,7 +9,7 @@ manages the quirkyness of our backend and packs multiple steps as one function.
 import os
 import requests
 from time import sleep
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -144,13 +144,13 @@ def deploy_serving(
           break
 
     elif curr_st == "deployment.ready":
-      out = stub_all_depl.u(model_spec.deploy.id).get_access_key()
+      out = stub_all_depl.u(model_spec.deploy.id).get_access_key()["data"]
       access_key = out["access_key"]
 
       # keep hitting /metadata and see if model is ready or not
       r = requests.get(url=f"{server_endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})
       if r.status_code == 200:
-        logger.debug(f"Model is ready")
+        logger.info(f"Model is ready")
         break
 
     # actual break condition happens here: bug in webserver where it does not return ready
@@ -199,7 +199,7 @@ class Schedule:
       Schedule(4, 20, ["fri"], ["jan", "feb"])
 
       # 4:20 everyday starting in 2 days and runs for 3 days
-      starts = datetime.utcnow() + timedelta(days = 2) # NOTE: that time is in UTC
+      starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
       Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
 
       # Every 1 hour
@@ -248,8 +248,8 @@ class Schedule:
       raise ValueError(f"Invalid months: {diff}")
     self.months = ",".join([self._months[m] for m in months]) if months else "*"
 
-    self.starts = starts or datetime.utcnow()
-    self.ends = ends or datetime.utcnow() + timedelta(days = 7)
+    self.starts = starts or datetime.now(timezone.utc)
+    self.ends = ends or datetime.now(timezone.utc) + timedelta(days = 7)
 
   @property
   def cron(self):

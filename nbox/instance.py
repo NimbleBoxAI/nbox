@@ -117,11 +117,12 @@ class Instance():
     self.__opened = False
     self.running_scripts = []
     self.refresh()
-    # if self.state == "RUNNING":
-    #   self.start()
+    if self.state == "RUNNING":
+      self.start()
     logger.debug(f"Instance: {self}")
 
-  __repr__ = lambda self: f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
+  def __repr__(self):
+    return f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
   @classmethod
   def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
@@ -150,7 +151,9 @@ class Instance():
     gpu_count: int = 0,
     auto_shutdown: int = 6,
     dedicated_hw: bool = False,
-    zone = "asia-south-1"
+    zone = "asia-south-1",
+    *,
+    _ssh: bool = False
   ):
     """Start instance if not already running and loads APIs from the compute server.
 
@@ -162,22 +165,32 @@ class Instance():
         dedicated_hw (bool, optional): If not spot/pre-emptible like machines used
         zone (str, optional): GCP cloud regions, defaults to "asia-south-1".
     """
+    if _ssh:
+      # need to move to app.rc.
+      self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
+
     if auto_shutdown < 0:
       raise ValueError("auto_shutdown must be a positive integer (hours)")
+    gpu_count = int(gpu_count)
 
     if not self.state == "RUNNING":
       logger.info(f"Starting instance {self.project_name} ({self.project_id})")
-      # if gpu_count > 0:
+      hw_config = {
+        "cpu":f"n1-standard-{cpu}"
+      }
+      if gpu_count > 0:
+        hw_config["gpu"] = f"nvidia-tesla-{gpu}"
+        hw_config["gpu_count"] = gpu_count
+      else:
+        # things nimblebox does, for nimblebox reasons
+        hw_config["gpu"] = 'null'
+
       self.stub_ws_instance.start(
         auto_shutdown = auto_shutdown == 0,
         auto_shutdown_value = auto_shutdown,
         dedicated_hw = dedicated_hw,
         hw = "cpu" if gpu_count == 0 else "gpu",
-        hw_config = {
-          "cpu":f"n1-standard-{cpu}",
-          "gpu" : None if gpu_count == 0 else f"nvidia-tesla-{gpu}",
-          "gpuCount" : gpu_count,
-        },
+        hw_config = hw_config,
         zone = zone
       )
 
@@ -196,10 +209,16 @@ class Instance():
 
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
+    print(self.stub_ws_instance)
     logger.debug(f"Opening instance {self.project_name} ({self.project_id})")
-    self.open_data = self.stub_ws_instance.launch(_method = "post")
+    base_domain = self.stub_ws_instance.launch(_method = "post")["data"]["base_domain"]
+    secret.get("url")
+    self.open_data = {
+      "url": f"{base_domain}",
+      "token": self.stub_ws_instance._session.cookies.get_dict()[f"instance_token_{base_domain}"]
+    }
 
-    instance_url = self.open_data["base_url"].strip("/")
+    instance_url = self.open_data["url"].strip("/")
     self.cs_url = f"{self.url}/{instance_url}"
     if self.cs_endpoint:
       self.cs_url += f"/{self.cs_endpoint}"

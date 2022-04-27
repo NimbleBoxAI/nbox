@@ -23,6 +23,7 @@ Based os these ideas there are three types of subways:
 
 import re
 import string
+from requests import Session
 from functools import lru_cache
 
 from .utils import logger
@@ -70,7 +71,7 @@ def filter_templates(paths):
   return re_temps
 
 class Sub30:
-  def __init__(self, _url, _api, _session, *, prefix = ""):
+  def __init__(self, _url, _api, _session: Session, *, prefix = ""):
     """Like Subway but built for Nimblebox Webserver APIs.
 
     Usage:
@@ -99,6 +100,14 @@ class Sub30:
 
   def __getattr__(self, attr):
     return Sub30(f"{self._url}/{attr}", self._api, self._session, prefix=f"{self._prefix}/{attr}")
+
+  def data(self, _url = None, _api = None, _session = None, *, prefix = None):
+    return {
+      "_url": _url or self._url,
+      "_api": _api or self._api,
+      "_session": _session or self._session,
+      "_prefix": prefix or self._prefix,
+    }
 
   def u(self, attr):
     return self.__getattr__(attr)

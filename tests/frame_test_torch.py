@@ -67,8 +67,8 @@ def test_feedforward():
 
   # model_spec, nbx_path = src_model.deploy(
   #   model_spec,
-  #   deployment_id_or_name="ywrrpw8g",
-  #   workspace_id="zcxdpqlk",
+  #   deployment_id_or_name="",
+  #   workspace_id="",
   #   _unittest = True
   # )
   # print(model_spec)
@@ -79,8 +79,8 @@ def test_feedforward():
 
   url, key = src_model.deploy(
     model_spec,
-    deployment_id_or_name="ywrrpw8g",
-    workspace_id="zcxdpqlk",
+    deployment_id_or_name="",
+    workspace_id="",
     _unittest = False
   )
   print(url, key)

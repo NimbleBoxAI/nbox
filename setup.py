@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="nbox",
-    version="0.9.6a",
+    version="0.9.6b",
     author="NimbleBox.ai",
     author_email="research@nimblebox.ai",
     description="Make inference chill again!",
