@@ -209,7 +209,6 @@ class Instance():
 
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
-    print(self.stub_ws_instance)
     logger.debug(f"Opening instance {self.project_name} ({self.project_id})")
     base_domain = self.stub_ws_instance.launch(_method = "post")["data"]["base_domain"]
     secret.get("url")

@@ -69,6 +69,11 @@ def get_logger():
 
 logger = get_logger() # package wide logger
 
+def log_and_exit(msg, *args, **kwargs):
+  # convinience function to avoid tracebacks
+  logger.error(msg, *args, **kwargs)
+  sys.exit(1)
+
 # lazy_loading/
 
 class Fn:

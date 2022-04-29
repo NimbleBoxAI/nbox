@@ -340,7 +340,10 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
   # check if instance is the correct one
   instance = Instance(i, workspace_id)
   if not instance.state == "RUNNING":
-    raise ValueError("Instance is not running")
+    # raise ValueError("Instance is not running")
+    nbx_logger.error(f"Project {instance.project_id} is not running, use command:")
+    nbx_logger.info(f"nbx build --i '{instance.project_id}' --workspace_id '{workspace_id}' start")
+    U.log_and_exit(f"Project {instance.project_id} is not running")
 
   instance.start(_ssh = True)
 

@@ -62,6 +62,7 @@ from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from .hyperloop.dag_pb2 import DAG, Node, RunStatus
 from .nbxlib.tracer import Tracer
 from .messages import get_current_timestamp
+from .sub_utils.latency import log_latency
 
 class Operator():
   _version: int = 1 # always try to keep this an i32
@@ -259,39 +260,42 @@ class Operator():
     elif len_inputs < len(args):
       raise ValueError(f"Need at least arguments ({len(args)}) but got ({len_inputs})")
 
-    input_dict = {}
-    for i, arg in enumerate(args):
-      input_dict[self.inputs[i]] = arg
-    for key, value in kwargs.items():
-      if key in inputs:
-        input_dict[key] = value
+    with log_latency("pre-step"):
+      input_dict = {}
+      for i, arg in enumerate(args):
+        input_dict[self.inputs[i]] = arg
+      for key, value in kwargs.items():
+        if key in inputs:
+          input_dict[key] = value
 
-    logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = get_current_timestamp()
-    self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
-    if self._tracer != None:
-      self._tracer(self.node)
-
-    # ---- USER SEPERATION BOUNDARY ---- #
-
-    out = self.forward(**input_dict)
+      logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
+      _ts = get_current_timestamp()
+      self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
+      if self._tracer != None:
+        self._tracer(self.node)
 
     # ---- USER SEPERATION BOUNDARY ---- #
-    outputs = {}
-    if out == None:
-      outputs = {"out_0": str(type(None))}
-    elif isinstance(out, dict):
-      outputs = {k: str(type(v)) for k, v in out.items()}
-    elif isinstance(out, (list, tuple)):
-      outputs = {f"out_{i}": str(type(v)) for i, v in enumerate(out)}
-    else:
-      outputs = {"out_0": str(type(out))}
 
-    logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = get_current_timestamp()
-    self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = outputs,))
-    if self._tracer != None:
-      self._tracer(self.node)
+    with log_latency("forward"):
+      out = self.forward(**input_dict)
+
+    # ---- USER SEPERATION BOUNDARY ---- #
+    with log_latency("post-step"):
+      outputs = {}
+      if out == None:
+        outputs = {"out_0": str(type(None))}
+      elif isinstance(out, dict):
+        outputs = {k: str(type(v)) for k, v in out.items()}
+      elif isinstance(out, (list, tuple)):
+        outputs = {f"out_{i}": str(type(v)) for i, v in enumerate(out)}
+      else:
+        outputs = {"out_0": str(type(out))}
+
+      logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
+      _ts = get_current_timestamp()
+      self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = outputs,))
+      if self._tracer != None:
+        self._tracer(self.node)
 
     return out
 
