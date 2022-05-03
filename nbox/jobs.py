@@ -53,6 +53,8 @@ def _repl_schedule(return_proto: bool = False):
   return schedule_proto
 
 def _nbx_job(project_name: str, workspace_id: str = None):
+  # Python3.7 checks ...
+
   # Monday W34 [UTC 12 April, 2022 - 12:00:00]
   _ct = datetime.now(timezone.utc)
   _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]

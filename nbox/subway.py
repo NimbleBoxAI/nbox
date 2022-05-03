@@ -55,7 +55,7 @@ class Subway():
     return r.json()
 
 
-@lru_cache
+@lru_cache(None)
 def filter_templates(paths):
   re_temps = []
   for x in paths:

@@ -4,9 +4,11 @@ the machine (start, stop, etc.), can be used to transfer files to and from the m
 and to an extent running and managing programs (WIP).
 """
 
+import os
 import sys
 import time
 import shlex
+import subprocess
 from typing import List
 from functools import partial
 from tabulate import tabulate
@@ -80,6 +82,7 @@ class Instance():
     self.size_used: float = None
     self.size: float = None
     self.state: str = None
+    self.workspace_id = workspace_id
 
     # create a new session for communication with the compute server, avoid using single
     # session for conlficting headers
@@ -206,6 +209,7 @@ class Instance():
     else:
       # TODO: @yashbonde: inform user in case of hardware mismatch?
       logger.info(f"Instance {self.project_name} ({self.project_id}) is already running")
+    time.sleep(1) # avoid rate limiting
 
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
@@ -270,6 +274,43 @@ class Instance():
 
     self.__opened = True
 
+  def mv(self, src: str, dst: str, port: int = 8001):
+    """Transfer files and folders to and from NBX-Build instances, provide an open `port` on your system,
+    this will establish a parallel tunnel to the NBX-Build instance. `dst` should be relative to the
+    `/home/ubuntu/project` folder.
+    """
+    if not self.__opened:
+      logger.error(f"Instance must be started before mv can be used: ")
+      logger.error(f"    [from nbox]: nbox.instances('{self.project_name}', '{self.workspace_id}').start() ")
+      logger.error(f"     [from CLI]: nbx build --i '{self.project_name}' --workspace_id '{self.workspace_id}' start")
+      raise ValueError("Instance must be started before mv can be used")
+
+    from nbox.sub_utils.ssh import _start_connection_threads, _stop_connection_threads
+
+    src_cloud = src.startswith("nbx://")
+    dst_cloud = dst.startswith("nbx://")
+    if src_cloud and dst_cloud:
+      raise ValueError("Cannot transfer between two NBX-Build Projects")
+    if not src_cloud and not dst_cloud:
+      raise ValueError("Atleast one of `src` and `dst` must be a NBX-Build Project (start with `nbx://`)")
+    if src_cloud:
+      src = "/home/ubuntu/project/" + src.split("nbx://")[1]
+    if dst_cloud:
+      dst = "/home/ubuntu/project/" + dst.split("nbx://")[1]
+
+    src_is_folder = os.path.isdir(src)
+    if not src_is_folder and not os.path.isfile(src):
+      raise ValueError(f"Source {src} does not exist")
+    logger.info(f"Moving file '{src}' to '{dst}'")
+
+    threads, queue, thread_killer = _start_connection_threads(port, i=self.project_id, workspace_id=self.workspace_id)
+    try:
+      subprocess.run(f'scp -P {port} {src} localhost:{dst}'.split()) # this can be blocking
+    except Exception as e:
+      logger.error("Could not complete file transfer ...")
+      logger.error(f"Error: {e}")
+    _stop_connection_threads(threads, queue, thread_killer)
+
   def stop(self):
     """Stop Instance"""
     if self.state == "STOPPED":
@@ -277,7 +318,7 @@ class Instance():
       return
 
     logger.debug(f"Stopping instance {self.project_name} ({self.project_id})")
-    message = self.stub_ws_instance.stop_instance("post", data = {"instance_id":self.project_id})["msg"]
+    message = self.stub_ws_instance.stop("post", data = {"instance_id":self.project_id})["msg"]
     if not message == "success":
       raise ValueError(message)
 
@@ -302,6 +343,7 @@ class Instance():
       self.stub_ws_instance("delete")
     else:
       logger.warning("Aborted")
+      sys.exit(1) # ensure status code 1
 
   def run_py(self, fp: str, *args, write_fp = sys.stdout):
     """Run any python file
