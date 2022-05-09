@@ -342,6 +342,7 @@ class Instance():
     if path == "":
       raise ValueError("Path cannot be empty")
     path = "/home/ubuntu/project/" + path.strip("/")
+    logger.info(f"Looking in folder: {path}")
 
     from nbox.sub_utils.ssh import _create_threads
     connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id)
@@ -354,10 +355,11 @@ class Instance():
       command = shlex.split(f'ssh -p {port} ubuntu@localhost ls -l {path}')
       result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
       result = result.stdout
+      print(result)
     except KeyboardInterrupt:
       logger.info("KeyboardInterrupt, closing connections")
       result = None
-    # connection.quit()
+    connection.quit()
     return result
 
   def mv(self, src: str, dst: str, force: bool = False, *, port: int = 6174):
