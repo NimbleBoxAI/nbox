@@ -13,10 +13,11 @@ Takes in the following arguments:
 import os
 import ssl
 import socket
+import logging
 import threading
-from typing import List
+from io import StringIO
 from functools import partial
-from multiprocessing import Queue
+from typing import List
 from datetime import datetime, timezone
 
 from nbox.utils import NBOX_HOME_DIR, logger as nbx_logger
@@ -115,14 +116,14 @@ class RSockClient:
   auth={self.auth},
 )"""
   
-  def log(self, message, level=20):
+  def log(self, message, level=logging.INFO):
     self.logger.info(f"[{self.connection_id}] [{level}] {message}")
   
   def connect_to_rsock_server(self):
     """
     Connects to RSockServer.
     """
-    self.log('Connecting to RSockServer', 10)
+    self.log('Connecting to RSockServer', logging.DEBUG)
     rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     rsock_socket.connect(('rsock.rc.nimblebox.ai', 886))
 
@@ -145,7 +146,7 @@ class RSockClient:
     if auth == 'OK':
       self.log('Client authenticated')
     else:
-      self.log('Client authentication failed', 40)
+      self.log('Client authentication failed', logging.ERROR)
       self.client_auth = False
       exit(1)
   
@@ -163,7 +164,7 @@ class RSockClient:
       self.client_auth = True
       self.log('Config set')
     else:
-      self.log('Config set failed', 40)
+      self.log('Config set failed', logging.ERROR)
       exit(1)
 
   def connect(self):
@@ -181,69 +182,53 @@ class RSockClient:
       if connect_status == 'OK':
         self.log('Connected to project...')
       else:
-        self.log('Connect failed', 40)
+        self.log('Connect failed', logging.ERROR)
         exit(1)
 
       # start the io_copy loop
       self.rsock_thread_running = True
       self.client_thread_running = True
 
-      self.thread_killer_rsock = threading.Event()
-      self.thread_killer_client = threading.Event()
-      self.rsock_thread = threading.Thread(target=self.io_copy, name = "io_copy_server", args=("server", ))
-      self.client_thread = threading.Thread(target=self.io_copy, name = "io_copy_client", args=("client", ))
+      self.rsock_thread = threading.Thread(target=self.io_copy, args=("server", ))
+      self.client_thread = threading.Thread(target=self.io_copy, args=("client", ))
 
       self.rsock_thread.start()
       self.client_thread.start()
     else:
-      self.log('Client authentication failed', 40)
+      self.log('Client authentication failed', logging.ERROR)
       exit(1)
 
-  def close(self):
-    """
-    Closes the client, by closing sockets, then killing threads.
-    """
-    self.log('Closing client')
-    self.rsock_socket.close()
-    self.client_socket.close()
-    # self.rsock_thread.join()
-    # self.client_thread.join()
-    self.thread_killer_rsock.set()
-    self.thread_killer_client.set()
-    self.log('Client closed')
-
-  def io_copy(self, direction, stop_event):
+  def io_copy(self, direction):
     """
     This is the main loop that handles the data transfer between client and server.
     """
-    while not stop_event.wait(1):
-      self.log('Starting {} io_copy'.format(direction))
+    self.log('Starting {} io_copy'.format(direction))
 
-      if direction == 'client':
-        client_socket = self.client_socket
-        server_socket = self.rsock_socket
+    if direction == 'client':
+      client_socket = self.client_socket
+      server_socket = self.rsock_socket
 
-      elif direction == 'server':
-        client_socket = self.rsock_socket
-        server_socket = self.client_socket
+    elif direction == 'server':
+      client_socket = self.rsock_socket
+      server_socket = self.client_socket
 
-      while self.rsock_thread_running and self.client_thread_running:
-        try:
-          data = client_socket.recv(1024)
-          if data:
-            # self.log('{} data: {}'.format(direction, data))
-            server_socket.sendall(data)
-          else:
-            self.log('{} connection closed'.format(direction))
-            break
-        except Exception as e:
-          self.log('Error in {} io_copy: {}'.format(direction, e), 40)
+    while self.rsock_thread_running and self.client_thread_running:
+      try:
+        data = client_socket.recv(1024)
+        if data:
+          # self.log('{} data: {}'.format(direction, data))
+          server_socket.sendall(data)
+        else:
+          self.log('{} connection closed'.format(direction))
           break
+      except Exception as e:
+        self.log('Error in {} io_copy: {}'.format(direction, e), logging.ERROR)
+        break
 
-      self.rsock_thread_running = False
-      self.rsock_thread_running = False
-      
-      self.log('Stopping {} io_copy'.format(direction))
+    self.rsock_thread_running = False
+    self.rsock_thread_running = False
+    
+    self.log('Stopping {} io_copy'.format(direction))
 
 
 def create_connection(
@@ -253,8 +238,6 @@ def create_connection(
   port: int,
   file_logger: str,
   auth: str,
-  queue: Queue,
-  thread_killer: threading.Event,
   notsecure: bool = False,
 ):
   """
@@ -264,37 +247,29 @@ def create_connection(
     subdomain: The subdomain that the client will be connecting to.
     port: The port that the server will be listening on.
     auth: The build auth token that the client will be using.
-    queue: The queue that the client will be sending data to.
     notsecure: Whether or not to use SSL.
   """
-  while not thread_killer.wait(1):
-    listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listen_socket.bind(('localhost', localport))
-    listen_socket.listen(20)
+  listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  listen_socket.bind(('localhost', localport))
+  listen_socket.listen(20)
 
-    connection_id = 0
-    # print(localport, user, subdomain, port, file_logger, auth)
+  connection_id = 0
+  # print(localport, user, subdomain, port, file_logger, auth)
 
-    while True:
-      file_logger.info('Waiting for client')
-      client_socket, _ = listen_socket.accept()
-      file_logger.info('Client connected')
+  while True:
+    logging.info('Waiting for client')
+    client_socket, _ = listen_socket.accept()
+    logging.info('Client connected')
 
-      connection_id += 1
-      file_logger.info(f'Total clients connected -> {connection_id}')
+    connection_id += 1
+    logging.info(f'Total clients connected -> {connection_id}')
 
-      # create the client
-      secure = not notsecure
-      client = RSockClient(connection_id, client_socket, user, subdomain, port, file_logger, auth, secure)
+    # create the client
+    secure = not notsecure
+    client = RSockClient(connection_id, client_socket, user, subdomain, port, file_logger, auth, secure)
 
-      # start the client
-      client.connect()
-
-      while True:
-        queue.get(block = True)
-        nbx_logger.debug(f"RSock server got command to shut down")
-        client.close()
-  return
+    # start the client
+    client.connect()
 
 
 def port_in_use(port: int) -> bool:
@@ -303,8 +278,20 @@ def port_in_use(port: int) -> bool:
     return s.connect_ex(('localhost', port)) == 0
 
 
+def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
+  """the nbox way to SSH into your instance, by default ``"jupyter": 8888 and "mlflow": 5000``
 
-def _start_connection_threads(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
+  Usage:
+    tunn.py 8000 notebook:8000 2000:8001 -i "nbox-dev"
+
+  Args:
+    ssh: Local port to connect SSH to
+    *apps_to_ports: A tuple of values ``<app_name/instance_port>:<localport>``.
+      For example, ``jupyter:8888`` or ``2001:8002``
+    i(str): The instance to connect to
+    pwd (str): password to connect to that instance.
+  """
+
   import sys
 
   if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
@@ -362,8 +349,6 @@ def _start_connection_threads(ssh: int, *apps_to_ports: List[str], i: str, works
 
   # create the connection
   threads = []
-  queue = Queue()
-  thread_killer = threading.Event()
   for localport, cloudport in apps.items():
     nbx_logger.info(f"Creating connection from {cloudport} -> {localport}")
     t = threading.Thread(target=create_connection, args=(
@@ -373,40 +358,9 @@ def _start_connection_threads(ssh: int, *apps_to_ports: List[str], i: str, works
       cloudport,                       # port
       file_logger,                     # filelogger
       instance.open_data.get("token"), # auth
-      queue,                           # queue
-      thread_killer,                   # thread_killer
     ))
     t.start()
     threads.append(t)
-
-  return threads, queue, thread_killer
-
-
-def _stop_connection_threads(threads: List[threading.Thread], queue: Queue, thread_killer: threading.Event):
-  nbx_logger.debug(f"Stopping Rsock Server ...")
-  queue.put(None)
-  thread_killer.set()
-  nbx_logger.debug("Waiting for Rsock Server to stop ...")
-  for t in threads:
-    t.join(1.0)
-  return
-
-
-def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
-  """the nbox way to SSH into your instance, by default ``"jupyter": 8888 and "mlflow": 5000``
-
-  Usage:
-    tunn.py 8000 2000:8002 -i "nbox-dev"
-
-  Args:
-    ssh: Local port to connect SSH to
-    *apps_to_ports: A tuple of values ``<app_name/instance_port>:<localport>``.
-      For example, ``jupyter:8888`` or ``2001:8002``
-    i(str): The instance to connect to
-    workspace_id (str): The workspace to connect to
-  """
-
-  threads, queue, thread_killer = _start_connection_threads(ssh, *apps_to_ports, i=i, workspace_id=workspace_id)
 
   try:
     # start the ssh connection on terminal
@@ -415,6 +369,7 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
   except KeyboardInterrupt:
     nbx_logger.info("KeyboardInterrupt, closing connections")
-    _stop_connection_threads(threads, queue, thread_killer)
+    for t in threads:
+      t.join()
 
-  return
+  sys.exit(0) # graceful exit

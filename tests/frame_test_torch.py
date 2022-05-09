@@ -89,10 +89,25 @@ def test_feedforward():
 test_feedforward()
 
 
+import transformers
+
+class Forecasting(Model):
+  def __init__(self, torch_model):
+    super().__init__()
+    self.tokenizer = transformers.AutoTokenizer.from_pretrained("gpt2")
+
+  def preprocess(self, text):
+    data = self.tokenizer(text, return_tensors = "pt")
+    return data
+
+  def forward(self, x):
+    pass
+
+
 # def test_hf():
 #   def pre_(x):
-#     import transformers
-#     token = transformers.AutoTokenizer.from_pretrained("prajjwal1/bert-tiny")
+#     
+#     
 #     return token(x, return_tensors = "pt")
 
 #   def post_(x):

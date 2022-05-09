@@ -214,6 +214,9 @@ class Model:
     post_out = self.post(model_out) # post processing output
     return post_out
 
+  def export_model(self) -> ModelSpec:
+    raise NotImplementedError("Define your export function here")
+
   @classmethod
   def deserialise(cls, model_spec: Union[ModelSpec, Dict], folder) -> 'Model':
     """Load ``ModelSpec`` and ``folder`` with the files in it and return a ``Model`` object.

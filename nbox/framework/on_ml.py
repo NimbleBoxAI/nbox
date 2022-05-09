@@ -21,11 +21,12 @@ Read the code for best understanding.
 """
 
 import os
+from typing import Callable
 
-from .. import utils as U
-from ..utils import isthere, logger
-from .autogen import ml_register
-from .model_spec_pb2 import ModelSpec, Tensor
+from nbox import utils as U
+from nbox.utils import logger
+from nbox.framework.autogen import ml_register
+from nbox.framework.model_spec_pb2 import ModelSpec, Tensor
 
 class NboxOptions:
   def __init__(self, model_name: str = None, folder: str = None, create_folder = False):
@@ -38,427 +39,123 @@ class NboxOptions:
       self.folder = folder
       self.model_name = model_name
 
-@ml_register.conditional(framework = "torch",)
-def torch_condition(model):
-  import torch
-  if isinstance(model, torch.nn.Module):
-    return True
-  return False
-
-@ml_register.register(
-  framework = "torch",
-  target = "torch",
-  stub_name = "torch_to_torchscript",
-  message_name = "TorchToTorchscript",
-  target_processor_name = "torchscript_to_torch",
-  export_fn_import = "from torch.jit import trace",
-  dependencies = ["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
-)
-def torch_export_torchscript(user_options, nbox_options, spec: ModelSpec):
-  import torch
-  from torch.jit import trace
-  traced_model = trace(**user_options.__dict__)
-  filepath = U.join(nbox_options.folder, "model.pt")
-  spec.source.path = filepath
-  spec.inputs.extend([
-    Tensor(
-      name = str(i),
-      shape = tuple(t.shape),
-      dtype = str(t.numpy().dtype)
-    ) for i, t in enumerate(user_options.example_inputs)
-  ])
-
-  # actual export
-  torch.jit.save(traced_model, filepath)
-  return spec
-
-@ml_register.register(
-  framework = "torch",
-  target = "torch",
-  stub_name = "torchscript_to_torch",
-  message_name = "TorchscriptToTorch",
-  export_fn_import = "from torch.jit import load",
-  dependencies = ["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
-  ignore_args= ["f"],
-)
-def torch_import_torchscript(user_options, nbox_options, spec: ModelSpec):
-  from torch.jit import load
-  model = load(U.join(nbox_options.folder, "model.pt"), map_location="cpu")
-  return model
-
-@ml_register.register(
-  framework = "torch",
-  target = "onnx",
-  target_processor_name = "onnx_runtime",
-  stub_name = "torch_to_onnx",
-  message_name="TorchToOnnx",
-  export_fn_import="from torch.onnx import export",
-  dependencies=["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
-  ignore_args = ["f", "model"],
-)
-def torch_export_onnx(user_options, nbox_options, spec: ModelSpec):
-  import torch
-  from torch.onnx import export
-  user_options.f = nbox_options.filepath # override the folder
-  inputs = user_options.args
-  if isinstance(inputs, torch.Tensor):
-    spec.inputs.append(Tensor(name = '0', shape = tuple(inputs.shape), dtype = str(inputs.numpy().dtype)))
-  elif isinstance(inputs, tuple):
-    if any(isinstance(x, dict) for x in inputs):
-      if not inputs[-1] == {}:
-        logger.warning(f"Last input is not an empty dictionary and is recommended by ONNX Export")
-    for i,t in enumerate(inputs):
-      if isinstance(t, torch.Tensor):
-        spec.inputs.append(Tensor(name = str(i), shape = tuple(t.shape), dtype = str(t.numpy().dtype)))
-      elif isinstance(t, dict):
-        for k,v in t.items():
-          spec.inputs.append(Tensor(name = k, shape = tuple(v.shape), dtype = str(v.numpy().dtype)))
-
-  # actual export
-  export(**user_options.__dict__)
-  return spec
-
-
-################################################################################
-# User Guide
-# ==========
-# This 
-################################################################################
-
-
-@isthere("torch")
-def _get_torch_model():
-  import torch
-  class Feedforward(torch.nn.Module):
-    def __init__(self, input_size, hidden_size):
-      super(Feedforward, self).__init__()
-      self.input_size = input_size
-      self.hidden_size = hidden_size
-      self.network = torch.nn.Sequential(
-        torch.nn.Linear(self.input_size, self.hidden_size),
-        torch.nn.Softmax(-1),
-        torch.nn.Linear(self.hidden_size, 1),
-        torch.nn.Sigmoid(),
-      )
-
-    def forward(self, x):
-      output = self.network(x)
-      return output
-
-  import random
-
-  _dim = random.choice(range(10))
-  return (
-    {
-      "model": Feedforward(input_size = _dim, hidden_size = 2)
-    }, # nbox.Model kwargs
-    torch.randn(1, _dim), # example input
-  )
-
-@isthere("sklearn", "numpy")
-def _get_sklearn_model():
-  from sklearn import linear_model
-  reg = linear_model.LinearRegression()
-  data = [[0, 0], [1, 1], [2, 2]], [0, 1, 2]
-
-  return (
-    {
-      "model": reg,
-      "method": "fit",
-    }, # nbox.Model kwargs
-    data, # example input
-  )
-
-def _get_default_forward():
-  class SomeCaller:
-    def __init__(self):
-      pass
-
-    def __call__(self):
-      print("Add your logic here")
-
-  return (
-    {
-      "model": SomeCaller(),
-    }, # nbox.Model kwargs
-    None, # example input
-  )
-
-
-
-
-class InvalidProtocolError(Exception):
-  pass
-
-# class ModelOutput(U.DBase):
-#   __slots__ = [
-#     "inputs", # :Any
-#     "outputs", # :Any
-#   ]
-
-#   def serialise():
-#     raise NotImplementedError
-
-# # class ModelSpec(DBase):
-# #   __slots__ = [
-# #     # where from
-# #     "src_framework", # :str: name of the source framework
-# #     "src_framework_version", # :str
-# #     'export_path', # str: there is no reason for the Pod to know anything about the user
-
-# #     # where to
-# #     "export_type", # :str
-# #     "exported_time", # :str: UTC time when the model was exported
-
-# #     # how to
-# #     "load_method", # :str: The classmethod to call to load this model
-# #     "load_kwargs", # :dict: kwargs to pass to the load method
-# #     "io_dict", # :dict: obtained from above function
-
-# #     # 'what to' is the serving script!
-# #     "required_packages", # :list: list of things to write in requirements.txt
-# #   ]
-
-# class FrameworkAgnosticProtocol(object):
-#   """
-#   This Protocol only aims to serve as an abstracted layer that calls the underlying framework
-#   specific code and returns the output. This mainly is intended to implement three functions:
-#   * forward: the forward pass of the model
-#   * export: that takes in a string for export format and arguments for it
-#   * deserialise: that takes the model spec object and returns the loader for this model
-#   https://nimblebox.notion.site/nbox-FrameworkAgnosticProtocol-6b39249316b1497b8ad9ff8f02b227f0
-#   """
-#   # def __init__(self, i0: Any, i1: Any) -> None
-
-#   def forward(self, input_object) -> ModelOutput:
-#     out = self._model(**input_object)
-#     return ModelOutput(inputs = input_object, outputs = out)
-
-#   # def export(self, format: str, input_object: Any, export_model_path: str, **kwargs) -> ModelSpec:
-#   #   raise InvalidProtocolError(f"export method not implemented: {self.__class__.__name__} -> {format}")
-
-#   def serialise(self, format):
-#     if format not in self.serialisations:
-#       raise InvalidProtocolError(f"Format {format} not supported for torch export")
-#     return self.serialisations[format]
-
-#   @staticmethod
-#   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
-#     raise InvalidProtocolError(f"deserialise method not implemented: '{model_meta.export_type}'")
-
-
-# def get_io_dict(input_object, call_fn, forward_fn):
-#   """Generates and returns an io_dict by performing forward pass through the model
-
-#   Args:
-#       input_object (Any): Input to a model
-#       call_fn (Callable): function that Model.model employs to do a forward pass.
-#       forward_fn (Callable): forward() function of the Model
-
-#   Returns:
-#       io : io_dict
-#   """
-#   logger.info(f"Generating io_dict")
-#   out = forward_fn(input_object)
-#   args = inspect.getfullargspec(call_fn)
-#   args.args.remove("self")
-
-#   # Create the i/o dict
-#   def __get_struct(object):
-
-#     def process_dict(x, curr_idx) -> dict:
-#       #Process Dictionaries
-#       results = {}
-#       for key in x.keys():
-#         parsed, curr_idx = parse(x[key], name=key, curr_idx=curr_idx)
-#         results[key] = parsed
-#       return results, curr_idx
-
-#     def process_container(x, curr_idx) -> dict:
-#       #Handles lists, sets and tuples
-#       results = []
-#       for element in x:
-#         parsed, curr_idx = parse(element, None, curr_idx)
-#         results.append(parsed)
-
-#       return results, curr_idx
-
-#     def parse(x, name=None, curr_idx=0) -> dict:
-#       # Parses objects to generate iodict
-#       dtype = None
-#       if name is None:
-#         name = f"tensor{curr_idx}"
-#         curr_idx += 1
-
-#       if hasattr(x, "dtype"):
-#         dtype = str(x.dtype)
-
-#       if isinstance(x, dict):
-#         return process_dict(x, curr_idx)
-
-#       elif isinstance(x, (list, set, tuple)):
-#         return process_container(x, curr_idx)
-
-#       elif hasattr(x, "shape"):
-#         dim_names=[""]*len(x.shape)
-#         if hasattr(x, "names"):
-#           dim_names=x.names
-#         return {"name": name, "dtype": dtype, "tensorShape": {"dim":[{'name':dim_names[y], "size":x.shape[y]} for y in range(len(x.shape))],"unknownRank":False}}, curr_idx
-#       else:
-#         return {"name": name, "dtype": dtype, "shape": None}, curr_idx
-
-#     return parse(object)[0]
-
-#   io = {
-#     "inputs": __get_struct(out.inputs),
-#     "outputs": __get_struct(out.outputs),
-#     "arg_spec": {
-#       "args": args.args,
-#       "varargs": args.varargs,
-#       "varkw": args.varkw,
-#       "defaults": args.defaults,
-#       "kwonlyargs": args.kwonlyargs,
-#       "kwonlydefaults": args.kwonlydefaults,
-#     }
-#   }
-#   return io
-
-
-# ################################################################################
-# # NimbleBox.ai Deployments
-# # ========================
-# # NBX-Deploy is a service that you can use to load the API endpoints where it is
-# # deployed. This is a special kind of method because it can consume all the
-# # objects that other models can consume.
-# ################################################################################
-
-# # TODO:@yashbonde
-# # class NBXModel(FrameworkAgnosticProtocol):
-# #   @U.isthere("numpy", soft=False)
-# #   def __init__(self, url_key: Tuple[str, str]):
-# #     logger.debug(f"Trying to load as NBX-Api")
-# #     if not (isinstance(url_key, (tuple, list)) and len(url_key) == 2):
-# #       raise InvalidProtocolError(f"Invalid url_key for NBX-Api")
-
-    
-
-# #     self.url = url
-# #     self.key = key
-
-# #     # fetch the metadata from the cloud
-# #     model_url = url.rstrip("/")
-# #     logger.debug("Getting model metadata")
-# #     URL = secret.get("nbx_url")
-# #     r = requests.get(f"{URL}/api/model/get_model_meta", params=f"url={model_url}&key={key}")
-# #     try:
-# #       r.raise_for_status()
-# #     except:
-# #       raise ValueError(f"Could not fetch metadata, please check status: {r.status_code}")
-
-# #     # start getting the metadata, note that we have completely dropped using OVMS meta and instead use nbox_meta
-# #     content = json.loads(r.content.decode())["meta"]
-# #     nbox_meta = content["nbox_meta"]
-
-# #     all_inputs = nbox_meta["metadata"]["inputs"]
-# #     templates = {}
-# #     for node, meta in all_inputs.items():
-# #       templates[node] = [int(x["size"]) for x in meta["tensorShape"]["dim"]]
-# #     logger.debug("Cloud infer metadata obtained")
-
-# #     category = nbox_meta["spec"]["category"]
-
-# #     # if category is "text" or if it is dict then any key is "text"
-# #     tokenizer = None
-# #     max_len = None
-# #     if category == "text" or (isinstance(category, dict) and any([x == "text" for x in category.values()])):
-# #       import transformers
-
-# #       model_key = nbox_meta["spec"]["model_key"].split("::")[0].split("transformers/")[-1]
-# #       tokenizer = transformers.AutoTokenizer.from_pretrained(model_key)
-# #       max_len = templates["input_ids"][-1]
-
-# #     image_parser = ImageParser(cloud_infer=True, post_proc_fn=lambda x: x.tolist(), templates=templates)
-# #     text_parser = TextParser(tokenizer=tokenizer, max_len=max_len, post_proc_fn=lambda x: x.tolist())
-
-# #   def forward(self, model_input):
-# #     import numpy as np
-
-# #     logger.debug(f"Hitting API: {self.model_or_model_url}")
-# #     st = time()
-# #     # OVMS has :predict endpoint and nbox has /predict
-# #     _p = "/" if "export_type" in self.nbox_meta["spec"] else ":"
-# #     json = {"inputs": model_input}
-# #     if "export_type" in self.nbox_meta["spec"]:
-# #       json["method"] = method
-# #     r = requests.post(self.url + f"/{_p}predict", json=json, headers={"NBX-KEY": self.key})
-# #     et = time() - st
-# #     out = None
-
-# #     try:
-# #       r.raise_for_status()
-# #       out = r.json()
-
-# #       # first try outputs is a key and we can just get the structure from the list
-# #       if isinstance(out["outputs"], dict):
-# #         out = {k: np.array(v) for k, v in r.json()["outputs"].items()}
-# #       elif isinstance(out["outputs"], list):
-# #         out = np.array(out["outputs"])
-# #       else:
-# #         raise ValueError(f"Outputs must be a dict or list, got {type(out['outputs'])}")
-# #       logger.debug(f"Took {et:.3f} seconds!")
-# #     except Exception as e:
-# #       logger.debug(f"Failed: {str(e)} | {r.content.decode()}")
-# #       raise e
-
-
-# ################################################################################
-# # Torch
-# # =====
-# # Torch is a deep learning framework from Facebook. It is aimed towards a simple
-# # interface and is a huge inspiration to me. User needs to define the
-# # config/init and forward pass. This is the minimum input you need to take from
-# # a user to get all the output
-# ################################################################################
-
-
-
-
-# #   @staticmethod
-# #   def deserialise(model_meta: ModelSpec) -> Tuple[Any, Any]:
-# #     import torch
-# #     logger.debug(f"Deserialising torch model from {model_meta.export_path}")
-
-# #     kwargs = model_meta.load_kwargs
-
-# #     if model_meta.export_type == "torchscript":
-# #       lp = kwargs.pop("logic_path")
-# #       logger.debug(f"Loading logic from {lp}")
-# #       model = torch.jit.load(model_meta.load_kwargs["model"], map_location=kwargs["map_location"])
-# #       return model
-# #     else:
-# #       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
-
-
-# ################################################################################
-# # ONNX Runtime
-# # ============
-# # OnnxRuntime is a C++ library that allows you to run ONNX models in your
-# # application. It is a wrapper around the ONNX API. It *does not*
-# # work on Apple M1 machines and so suck it up! But this is useful for server
-# # side processing.
-# ################################################################################
+
+# """
+# ## Torch
+
+# Torch is a deep learning framework from Facebook. It is aimed towards a simple interface and is a huge inspiration
+# to me. User needs to define the config/init and forward pass. This is the minimum input you need to take from
+# a user to get all the output.
+# """
+
+# def torch_condition(model) -> bool:
+#   import torch
+#   if isinstance(model, torch.nn.Module):
+#     return True
+#   return False
+
+# ml_register.register_package(
+#   package_name = "torch",
+#   conditional_fn = torch_condition,
+#   requirements_txt = ["-f https://download.pytorch.org/whl/cpu/torch_stable.html", "torch"],
+# )
+
+
+# @ml_register.torch(
+#   _from = "torchscript", # from_torchscript
+#   stub_function_import_string = "from torch.jit import load",
+#   ignore_args = ["f"],
+# )
+# def load_torchscript(user_options: 'FromTorchScript', nbox_options: NboxOptions, model_spec: ModelSpec) -> 'torch.nn.Module':
+#   from torch.jit import load
+#   model = load(U.join(nbox_options.folder, "model.pt"), map_location="cpu")
+#   return model
+
+
+# @ml_register.torch(
+#   _to = "torchscript", # to_torchscript
+#   stub_function_import_string = "from torch.jit import trace",
+#   ignore_args = ["filename"],
+# )
+# def torch_to_torchcript(user_options, nbox_options: NboxOptions, model_spec: ModelSpec) -> ModelSpec:
+#   import torch
+#   from torch.jit import trace
+#   traced_model = trace(**user_options.__dict__)
+#   filepath = U.join(nbox_options.folder, "model.pt")
+#   model_spec.source.path = filepath
+#   model_spec.inputs.extend([
+#     Tensor(
+#       name = str(i),
+#       shape = tuple(t.shape),
+#       dtype = str(t.numpy().dtype)
+#     ) for i, t in enumerate(user_options.example_inputs)
+#   ])
+
+#   # actual export
+#   torch.jit.save(traced_model, filepath)
+#   return model_spec
+
+
+# @ml_register.torch(
+#   _to = "onnx",
+#   stub_function_import_string = "from torch.onnx import export",
+#   ignore_args = ["f", "model"],
+# )
+# def torch_to_onnx(user_options, nbox_options, spec: ModelSpec) -> ModelSpec:
+#   import torch
+#   from torch.onnx import export
+#   user_options.f = nbox_options.filepath # override the folder
+#   inputs = user_options.args
+#   if isinstance(inputs, torch.Tensor):
+#     spec.inputs.append(Tensor(name = '0', shape = tuple(inputs.shape), dtype = str(inputs.numpy().dtype)))
+#   elif isinstance(inputs, tuple):
+#     if any(isinstance(x, dict) for x in inputs):
+#       if not inputs[-1] == {}:
+#         logger.warning(f"Last input is not an empty dictionary and is recommended by ONNX Export")
+#     for i,t in enumerate(inputs):
+#       if isinstance(t, torch.Tensor):
+#         spec.inputs.append(Tensor(name = str(i), shape = tuple(t.shape), dtype = str(t.numpy().dtype)))
+#       elif isinstance(t, dict):
+#         for k,v in t.items():
+#           spec.inputs.append(Tensor(name = k, shape = tuple(v.shape), dtype = str(v.numpy().dtype)))
+
+#   # actual export
+#   export(**user_options.__dict__)
+#   return spec
+
+
+# """
+# ## ONNX
+
+# OnnxRuntime is a C++ library that allows you to run ONNX models in your application. It is a wrapper around
+# the ONNX API. It *does not* work on Apple M1 machines and so suck it up! But this is useful for server
+# side processing.
+# """
+
+# def _check_onnx_model(model):
+#   import onnx
+#   if isinstance(model, onnx.onnx_ml_pb2.ModelProto):
+#     return True
+#   return False
+
+# ml_register.register_package(
+#   package_name = "onnx_runtime",
+#   conditional_fn = _check_onnx_model,
+#   requirements_txt = ["onnxruntime", "numpy", "onnx"]
+# )
+
+# @ml_register.onnx(
+#   _from = "onnx",
+# )
+# def load_onnx(user_options: 'FromOnnx', nbox_options: NboxOptions, model_spec: ModelSpec) -> Callable:
+#   import onnxruntime as ort
+#   sess = ort.InferenceSession(U.join(nbox_options.folder, "model.onnx"))
+#   return sess._run
+
 
 # class ONNXRtModel(FrameworkAgnosticProtocol):
 #   @U.isthere("onnx", "onnxruntime", "numpy", soft = False)
 #   def __init__(self, m0):
-#     import onnx
-#     import onnxruntime as ort
-#     logger.debug(f"Trying to load as ONNX Runtime")
-
-#     if not isinstance(m0, onnx.onnx_ml_pb2.ModelProto):
-#       raise InvalidProtocolError(f"First input must be a ONNX model, got: {type(m0)}")
-
-#     self._sess = ort.InferenceSession(self._model.SerializeToString())
 
 #   def forward(self, input_object) -> ModelOutput:
 #     # import numpy as np
@@ -503,13 +200,54 @@ class InvalidProtocolError(Exception):
 #       raise InvalidProtocolError(f"Unknown format: {model_meta.export_type}")
 
 
-# ################################################################################
-# # Sklearn
-# # =======
-# # Scikit-learn is a Python library that allows you to use classical machine
-# # learning algorithms in your application. Its versatility is huge and that
-# # means that a dedicate Input DataModel is required.
-# ################################################################################
+
+
+# """
+# ## Sklearn
+
+# Scikit-learn is a Python library that allows you to use classical machine
+# learning algorithms in your application. Its versatility is huge and that
+# means that a dedicate Input DataModel is required.
+# """
+
+# def _check_sklearn_model(model) -> bool:
+#   if "sklearn" in type(model):
+#     return True
+#   return False
+
+# ml_register.register_package(
+#   package_name = "sklearn",
+#   conditional_fn = _check_sklearn_model,
+#   requirements_txt = "scikit-learn",
+# )
+
+# @ml_register.register_deserializer(
+#   package_name = "sklearn",
+#   framework_name = "joblib", # from_joblib
+#   stub_name = "FromJoblib", 
+#   stub_function_import_string = "from joblib import load",
+#   ignore_args = [
+#     "filename"
+#   ],
+# )
+# def sklearn_from_joblib(user_options, nbox_options: NboxOptions, model_spec: ModelSpec):
+#   import joblib
+#   model = joblib.load(nbox_options.filepath)
+#   return model
+
+# @ml_register.register_serializer(
+#   package_name = "sklearn",
+#   framework_name = "joblib", # to_joblib
+#   stub_name = "ToJoblib",
+#   stub_function_import_string = "from joblib import dump",
+#   ignore_args = [
+#     "filename"
+#   ],
+# )
+# def sklearn_to_joblib(user_options, nbox_options: NboxOptions, model_spec: ModelSpec):
+#   from joblib import dump
+#   dump(user_options, nbox_options.filepath)
+#   return model_spec
 
 # class SklearnModel(FrameworkAgnosticProtocol):
 #   @U.isthere("sklearn", "numpy", soft = False)

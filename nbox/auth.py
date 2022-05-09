@@ -16,7 +16,6 @@ import webbrowser
 from getpass import getpass
 
 from .utils import join, NBOX_HOME_DIR, isthere, logger
-from .subway import Subway
 
 # ------ AWS Auth ------ #
 

@@ -43,6 +43,7 @@ import sys
 import fire
 from json import dumps
 
+from nbox.auth import init_secret
 from .jobs import Job
 from .instance import Instance
 from .sub_utils import ssh
@@ -73,7 +74,11 @@ def get(api_end: str, **kwargs):
   sys.stdout.write(dumps(res))
   sys.stdout.flush()
 
+def login():
+  init_secret()
+
 NBX = dict(
+  login = login                  , # nbox login
   tunnel = ssh.tunnel            , # nbox tunnel
   home = open_home               , # nbox home
   compile = compile              , # nbox compile: internal for autogen code

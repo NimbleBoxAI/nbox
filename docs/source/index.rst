@@ -127,7 +127,7 @@ Index
    :caption: Tutorials
 
    quick.0
-   quick.deploy
+   quick.jobs
    nbox.cli
    nbox.nbxlib.ops
 
