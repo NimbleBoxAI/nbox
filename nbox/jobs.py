@@ -56,7 +56,7 @@ def _nbx_job(project_name: str, workspace_id: str = None):
   # Monday W34 [UTC 12 April, 2022 - 12:00:00]
   _ct = datetime.now(timezone.utc)
   _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
-  created_time = f"{_day} W{_ct.isocalendar().week} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+  created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
   # created_time = None
 
   job_id_or_name = input("> Job ID or name: ")
@@ -104,7 +104,7 @@ def _nbx_job(project_name: str, workspace_id: str = None):
 def _build_job(project_name, workspace_id):
   _ct = datetime.now(timezone.utc)
   _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
-  created_time = f"{_day} W{_ct.isocalendar().week} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+  created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
 
   project_id = input("> Project ID: ")
   inst = Instance(i = project_id, workspace_id = workspace_id)

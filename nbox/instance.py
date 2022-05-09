@@ -77,6 +77,7 @@ class Instance():
     # simply add useful keys to the instance
     self.project_id: str = None
     self.project_name: str = None
+    self.workspace_id: str = workspace_id
     self.size_used: float = None
     self.size: float = None
     self.state: str = None
@@ -124,6 +125,12 @@ class Instance():
   def __repr__(self):
     return f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
+  """
+  # Classmethods (WIP)
+
+  Functions to create instances.
+  """
+
   @classmethod
   def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
     if workspace_id == None:
@@ -136,13 +143,49 @@ class Instance():
     print(out)
     # return cls(project_name, url)
 
-  mv = None # atleast registered
+  """
+  # Status Methods
+
+  Functions here are responsible for managing the states (metadata + turn on/off) of the instances.
+  """
 
   def refresh(self):
     """Update the data, get latest state"""
     self.data = self.stub_ws_instance()["data"] # GET /user/projects/{project_id}
     for k in self.useful_keys:
       setattr(self, k, self.data[k])
+
+  def _start(self, cpu, gpu, gpu_count, auto_shutdown, dedicated_hw, zone):
+    """Turn on the the unserlying compute"""
+    logger.info(f"Starting instance {self.project_name} ({self.project_id})")
+    hw_config = {
+      "cpu":f"n1-standard-{cpu}"
+    }
+    if gpu_count > 0:
+      hw_config["gpu"] = f"nvidia-tesla-{gpu}"
+      hw_config["gpu_count"] = gpu_count
+    else:
+      # things nimblebox does, for nimblebox reasons
+      hw_config["gpu"] = 'null'
+
+    self.stub_ws_instance.start(
+      auto_shutdown = auto_shutdown == 0,
+      auto_shutdown_value = auto_shutdown,
+      dedicated_hw = dedicated_hw,
+      hw = "cpu" if gpu_count == 0 else "gpu",
+      hw_config = hw_config,
+      zone = zone
+    )
+
+    logger.info(f"Waiting for instance {self.project_name} ({self.project_id}) to start ...")
+    _i = 0
+    while self.state != "RUNNING":
+      time.sleep(5)
+      self.refresh()
+      _i += 1
+      if _i > TIMEOUT_CALLS:
+        raise TimeoutError("Instance did not start within timeout, please check dashboard")
+    logger.info(f"Instance {self.project_name} ({self.project_id}) started")
 
   def start(
     self,
@@ -157,6 +200,8 @@ class Instance():
   ):
     """Start instance if not already running and loads APIs from the compute server.
 
+    Actual start is implemented in `_start` method, this combines other things 
+
     Args:
         cpu (int, optional): CPU count should be one of ``[2, 4, 8]``
         gpu (str, optional): GPU name should be one of ``["t5", "p100", "v100", "k80"]``
@@ -166,43 +211,15 @@ class Instance():
         zone (str, optional): GCP cloud regions, defaults to "asia-south-1".
     """
     if _ssh:
-      # need to move to app.rc.
-      self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
+      if "app.nimblebox.ai" in self.stub_ws_instance._url:
+        self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
 
     if auto_shutdown < 0:
       raise ValueError("auto_shutdown must be a positive integer (hours)")
     gpu_count = int(gpu_count)
 
     if not self.state == "RUNNING":
-      logger.info(f"Starting instance {self.project_name} ({self.project_id})")
-      hw_config = {
-        "cpu":f"n1-standard-{cpu}"
-      }
-      if gpu_count > 0:
-        hw_config["gpu"] = f"nvidia-tesla-{gpu}"
-        hw_config["gpu_count"] = gpu_count
-      else:
-        # things nimblebox does, for nimblebox reasons
-        hw_config["gpu"] = 'null'
-
-      self.stub_ws_instance.start(
-        auto_shutdown = auto_shutdown == 0,
-        auto_shutdown_value = auto_shutdown,
-        dedicated_hw = dedicated_hw,
-        hw = "cpu" if gpu_count == 0 else "gpu",
-        hw_config = hw_config,
-        zone = zone
-      )
-
-      logger.info(f"Waiting for instance {self.project_name} ({self.project_id}) to start ...")
-      _i = 0
-      while self.state != "RUNNING":
-        time.sleep(5)
-        self.refresh()
-        _i += 1
-        if _i > TIMEOUT_CALLS:
-          raise TimeoutError("Instance did not start within timeout, please check dashboard")
-      logger.info(f"Instance {self.project_name} ({self.project_id}) started")
+      self._start(cpu, gpu, gpu_count, auto_shutdown, dedicated_hw, zone)
     else:
       # TODO: @yashbonde: inform user in case of hardware mismatch?
       logger.info(f"Instance {self.project_name} ({self.project_id}) is already running")
@@ -294,7 +311,7 @@ class Instance():
     self.__opened = False
 
   def delete(self, force = False):
-    """Delete Instance"""
+    """With great power comes great responsibility."""
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
     logger.warning(f"Deleting instance {self.project_name} ({self.project_id})")
@@ -302,6 +319,101 @@ class Instance():
       self.stub_ws_instance("delete")
     else:
       logger.warning("Aborted")
+
+  """
+  # Interaction Methods
+
+  Doing things with the project-build.
+  """
+
+  def __unopened_error(self):
+    if not self.__opened:
+      logger.error("You are trying to move files to a NOT-RUNNING instance, you will have to start the instance first:")
+      logger.error('    -         nbox.Instance(...).start(...)')
+      logger.error('    - python3 -m nbox build ... start ...')
+      # logger.error('    -   nbox.Instance(...).mv("./somefile", "nbx://folder/file")')
+      # logger.error('    - python3 -m build ... mv "./somefile", "nbx://folder/file"')
+      raise ValueError("Instance is not opened, please call .open() first")
+
+  def ls(self, path: str, *, port: int = 6174):
+    """List files in a directory relative to '/home/ubuntu/project'"""
+    self.__unopened_error()
+
+    if path == "":
+      raise ValueError("Path cannot be empty")
+    path = "/home/ubuntu/project/" + path.strip("/")
+
+    from nbox.sub_utils.ssh import _create_threads
+    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id)
+
+    try:
+      import shlex
+      from subprocess import PIPE, run
+
+      # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
+      command = shlex.split(f'ssh -p {port} ubuntu@localhost ls -l {path}')
+      result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+      result = result.stdout
+    except KeyboardInterrupt:
+      logger.info("KeyboardInterrupt, closing connections")
+      result = None
+    # connection.quit()
+    return result
+
+  def mv(self, src: str, dst: str, force: bool = False, *, port: int = 6174):
+    """
+    Move files to and fro NBX-Build.
+    
+    Use 'nbx://' as prefix for Instance, all files will be placed relative to
+    "/home/ubuntu/project/" folder.
+    """
+    self.__unopened_error()
+
+    src_is_cloud = src.startswith("nbx://")
+    dst_is_cloud = dst.startswith("nbx://")
+
+    if src_is_cloud and dst_is_cloud:
+      # logger.error(f"Cannot move files between two instances")
+      raise ValueError("Cannot move files between two instances")
+    if not src_is_cloud and not dst_is_cloud:
+      # logger.error(f"Cannot move files on your machine")
+      raise ValueError("Cannot move files on your machine")
+    
+    # check if this file already exists
+    cloud_file = src if src_is_cloud else dst
+    cloud_file = cloud_file.replace("nbx://", "")
+    
+    ls_res = self.ls(cloud_file)
+    if not ls_res.endswith(": No such file or directory"):
+      logger.info(f"File {cloud_file} already exists")
+      if not force:
+        logger.error("Aborted, use --force to override")
+        return
+      logger.info("Overriding file")
+
+    src = "/home/ubuntu/project/" + src[5:] if src_is_cloud else src
+    dst = "/home/ubuntu/project/" + dst[5:] if dst_is_cloud else dst
+    logger.info(f"Moving {src} to {dst}")
+    
+    # move file
+    from nbox.sub_utils.ssh import _create_threads
+    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id)
+
+    try:
+      import shlex
+      from subprocess import PIPE, run
+
+      # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
+      comm = f'scp -P {port} {src} localhost:{dst}'
+      logger.info(comm)
+      command = shlex.split(comm)
+      result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+    except KeyboardInterrupt:
+      logger.info("KeyboardInterrupt, closing connections")
+      result = None
+    connection.quit()
+    return result
+
 
   def run_py(self, fp: str, *args, write_fp = sys.stdout):
     """Run any python file

@@ -11,11 +11,12 @@ Takes in the following arguments:
 """
 
 import os
+import sys
 import ssl
+import socket
 import socket
 import logging
 import threading
-from io import StringIO
 from functools import partial
 from typing import List
 from datetime import datetime, timezone
@@ -273,61 +274,56 @@ def create_connection(
 
 
 def port_in_use(port: int) -> bool:
-  import socket
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     return s.connect_ex(('localhost', port)) == 0
 
 
-def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
-  """the nbox way to SSH into your instance, by default ``"jupyter": 8888 and "mlflow": 5000``
+class ThreadMan:
+  def __init__(self, threads: list = []):
+    self.threads: List[threading.Thread] = threads
 
-  Usage:
-    tunn.py 8000 notebook:8000 2000:8001 -i "nbox-dev"
+  def append(self, thread: threading.Thread):
+    self.threads.append(thread)
 
-  Args:
-    ssh: Local port to connect SSH to
-    *apps_to_ports: A tuple of values ``<app_name/instance_port>:<localport>``.
-      For example, ``jupyter:8888`` or ``2001:8002``
-    i(str): The instance to connect to
-    pwd (str): password to connect to that instance.
-  """
+  def start(self):
+    for thread in self.threads:
+      if not thread.is_alive():
+        thread.start()
 
-  import sys
+  def quit(self):
+    for thread in self.threads:
+      if thread.is_alive():
+        thread.join()
 
-  if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
-    pass
-  elif sys.platform == "darwin":
-    pass
-  elif sys.platform == "win32":
-    # Windows (either 32-bit or 64-bit)
-    raise Exception("Windows is unsupported platform, raise issue: https://github.com/NimbleBoxAI/nbox/issues")
-  else:
-    raise Exception(f"Unkwown platform '{sys.platform}', raise issue: https://github.com/NimbleBoxAI/nbox/issues")
 
-  folder = U.join(NBOX_HOME_DIR, "tunnel_logs")
-  os.makedirs(folder, exist_ok=True)
-  filepath = U.join(folder, f"tunnel_{i}.log")
-  file_logger = FileLogger(filepath)
-  nbx_logger.info(f"Logging to {filepath}")
+def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: str) -> ThreadMan:
+  def _sanity():
+    if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
+      pass
+    elif sys.platform == "darwin":
+      pass
+    elif sys.platform == "win32":
+      # Windows (either 32-bit or 64-bit)
+      raise Exception("Windows is unsupported platform, raise issue: https://github.com/NimbleBoxAI/nbox/issues")
+    else:
+      raise Exception(f"Unkwown platform '{sys.platform}', raise issue: https://github.com/NimbleBoxAI/nbox/issues")
 
-  # ===============
+    # sanity checks because python fire does not handle empty strings
+    if i == "":
+      raise Exception("Instance name cannot be empty")
+    if workspace_id == "":
+      raise Exception("Workspace ID cannot be empty")
 
-  default_ports = {
-    "jupyter": 1050,
-  }
+  _sanity() # run sanity checks
+
   apps = {} # <localport-cloudport>
   for ap in apps_to_ports:
-    app, port = ap.split(':')
-    port = int(port)
-    if not app or not port:
-      raise ValueError(f"Invalid app:port pair {ap}")
     try:
-      apps[int(app)] = port
-    except:
-      if app not in default_ports:
-        raise ValueError(f"Unknown '{app}' should be either integer or one of {', ' .join(default_ports.keys())}")
-      apps[port] = default_ports[app]
-  apps[ssh] = 2222 # hard code
+      localport, buildport = ap.split(':')
+      apps[int(localport)] = int(buildport)
+    except ValueError:
+      raise ValueError(f"Incorrect local:build '{ap}', are you passing integers?")
+  apps[port] = 2222 # hard code
 
   ports_used = []
   for k in apps:
@@ -345,10 +341,18 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     nbx_logger.info(f"nbx build --i '{instance.project_id}' --workspace_id '{workspace_id}' start")
     U.log_and_exit(f"Project {instance.project_id} is not running")
 
+  # create logging for RSock
+  folder = U.join(NBOX_HOME_DIR, "tunnel_logs")
+  os.makedirs(folder, exist_ok=True)
+  filepath = U.join(folder, f"tunnel_{instance.project_id}.log") # consistency with IDs instead of names
+  file_logger = FileLogger(filepath)
+  nbx_logger.info(f"Logging to {filepath}")
+
+  # start the instance with _ssh mode
   instance.start(_ssh = True)
 
   # create the connection
-  threads = []
+  threads = ThreadMan()
   for localport, cloudport in apps.items():
     nbx_logger.info(f"Creating connection from {cloudport} -> {localport}")
     t = threading.Thread(target=create_connection, args=(
@@ -359,17 +363,34 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
       file_logger,                     # filelogger
       instance.open_data.get("token"), # auth
     ))
-    t.start()
     threads.append(t)
+  threads.start() # start the connection and return
+
+  return threads
+
+
+def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
+  """the nbox way to SSH into your instance.
+
+  Usage:
+    tunn.py 8000 -i "nbox-dev"
+
+  Args:
+    port: Local port for terminal
+    *apps_to_ports: A tuple of values `buildport:localport`. For example, ``jupyter:8888`` or ``2001:8002``
+    i(str): The instance to connect to
+    pwd (str): password to connect to that instance.
+  """
+  
+  connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)
 
   try:
     # start the ssh connection on terminal
     import subprocess
     nbx_logger.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
-    subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
+    subprocess.call(f'ssh -p {port} ubuntu@localhost', shell=True)
   except KeyboardInterrupt:
     nbx_logger.info("KeyboardInterrupt, closing connections")
-    for t in threads:
-      t.join()
+    connection.quit()
 
   sys.exit(0) # graceful exit
