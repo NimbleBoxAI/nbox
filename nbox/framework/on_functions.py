@@ -335,6 +335,25 @@ def def_func_or_class(node, lines, node_proto: Node) -> Node:
   ))
   return node_proto
 
+def async_def_func_or_class(node, lines, node_proto: Node) -> Node:
+  print(node.__dict__)
+  node_proto.MergeFrom(Node(
+    name = f"symbol-{node.name}",
+    type = Node.NodeType.OP, # TODO: @yashbonde expand node types to include class/func definitions
+    info = Code(
+      name = "return",
+      code = get_code_portion(lines, **node.__dict__),
+      nbox_string = "",
+      lineno = node.lineno,
+      col_offset = node.col_offset,
+      end_lineno = node.end_lineno,
+      end_col_offset = node.end_col_offset,
+      inputs = {},
+      outputs = {'None':'None'},
+    )
+  ))
+  return node_proto
+
 
 # ==================
 
@@ -342,6 +361,7 @@ type_wise_logic = {
   # defns ------
   ast.FunctionDef: def_func_or_class,
   ast.ClassDef: def_func_or_class,
+  ast.AsyncFunctionDef: def_func_or_class,
 
   # nodes ------
   ast.Assign: node_assign_or_expr,
@@ -403,7 +423,8 @@ def get_nbx_flow(forward) -> DAG:
   symbols_to_nodes = {} # this is things that are defined at runtime
 
   try:
-    for i, expr in enumerate(ast_node.body[0].body):
+    iter_obj = ast_node.body[0].body if hasattr(ast_node.body[0], 'body') else ast_node.body
+    for i, expr in enumerate(iter_obj):
       # create the empty node that will be used everywhere
       if not type(expr) in type_wise_logic:
         node: Node = code_node(i, expr, code_lines)

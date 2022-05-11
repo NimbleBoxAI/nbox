@@ -108,14 +108,7 @@ class RSockClient:
     self.log('Client init complete')
 
   def __repr__(self):
-    return f"""RSockClient(
-  connection_id={self.connection_id},
-  client_socket={self.client_socket},
-  user={self.user},
-  subdomain={self.subdomain},
-  instance_port={self.instance_port},
-  auth={self.auth},
-)"""
+    return f"RSockClient({self.subdomain} | {self.connection_id})"
   
   def log(self, message, level=logging.INFO):
     self.logger.info(f"[{self.connection_id}] [{level}] {message}")
@@ -230,47 +223,84 @@ class RSockClient:
     self.rsock_thread_running = False
     
     self.log('Stopping {} io_copy'.format(direction))
+  
+  def stop(self):
+    """
+    Stops the client.
+    """
+    self.log('Stopping client')
+    self.rsock_thread_running = False
+    self.client_thread_running = False
+    self.client_socket.close()
+    self.rsock_socket.close()
+    self.log('Client stopped')
 
 
-def create_connection(
-  localport: int,
-  user: str,
-  subdomain: str,
-  port: int,
-  file_logger: str,
-  auth: str,
-  notsecure: bool = False,
-):
-  """
-  Args:
-    localport: The port that the client will be listening on.
-    user: The user that the client will be connecting as.
-    subdomain: The subdomain that the client will be connecting to.
-    port: The port that the server will be listening on.
-    auth: The build auth token that the client will be using.
-    notsecure: Whether or not to use SSL.
-  """
-  listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  listen_socket.bind(('localhost', localport))
-  listen_socket.listen(20)
+class ConnectionManager:
+  def __init__(self, user: str, subdomain: str, file_logger: str, auth: str, notsecure: bool = False):
+    """
+    Args:
+      localport: The port that the client will be listening on.
+      user: The user that the client will be connecting as.
+      subdomain: The subdomain that the client will be connecting to.
+      port: The port that the server will be listening on.
+      auth: The build auth token that the client will be using.
+      notsecure: Whether or not to use SSL.
+    """
+    self.user = user
+    self.subdomain = subdomain
+    self.file_logger = file_logger
+    self.auth = auth
+    self.notsecure = notsecure
+    self.connection_id = 0
 
-  connection_id = 0
-  # print(localport, user, subdomain, port, file_logger, auth)
+    self.done = False
+    self.clients = []
+    self.threads = []
 
-  while True:
-    logging.info('Waiting for client')
-    client_socket, _ = listen_socket.accept()
-    logging.info('Client connected')
+  def __repr__(self) -> str:
+    return f"ConnectionManager({self.subdomain}: {len(self.threads)} Connections)"
 
-    connection_id += 1
-    logging.info(f'Total clients connected -> {connection_id}')
+  def add(self, localport, buildport, *, _ssh: bool = True):
+    """
+    Adds a client to the list of clients.
+    """
+    t = threading.Thread(target = self.start, args = (localport, buildport, _ssh))
+    t.start()
+    self.threads.append(t)
 
-    # create the client
-    secure = not notsecure
-    client = RSockClient(connection_id, client_socket, user, subdomain, port, file_logger, auth, secure)
+  def start(self, localport, buildport, _ssh: bool = True):
+    listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if not _ssh:
+      listen_socket.settimeout(1.0)
+    listen_socket.bind(('localhost', localport))
+    listen_socket.listen(20)
 
-    # start the client
-    client.connect()
+    while not self.done:
+      logging.info('Waiting for client')
+      try:
+        client_socket, _ = listen_socket.accept()
+      except socket.timeout:
+        break
+
+      logging.info('Client connected')
+      self.connection_id += 1
+      logging.info(f'Total clients connected -> {self.connection_id}')
+
+      # create the client
+      secure = not self.notsecure
+      client = RSockClient(self.connection_id, client_socket, self.user, self.subdomain, buildport, self.file_logger, self.auth, secure)
+      self.clients.append(client)
+
+      # start the client
+      client.connect()
+
+  def quit(self):
+    self.done = False
+    for client in self.clients:
+      client.stop()
+    for thread in self.threads:
+      thread.join()
 
 
 def port_in_use(port: int) -> bool:
@@ -278,25 +308,7 @@ def port_in_use(port: int) -> bool:
     return s.connect_ex(('localhost', port)) == 0
 
 
-class ThreadMan:
-  def __init__(self, threads: list = []):
-    self.threads: List[threading.Thread] = threads
-
-  def append(self, thread: threading.Thread):
-    self.threads.append(thread)
-
-  def start(self):
-    for thread in self.threads:
-      if not thread.is_alive():
-        thread.start()
-
-  def quit(self):
-    for thread in self.threads:
-      if thread.is_alive():
-        thread.join()
-
-
-def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: str) -> ThreadMan:
+def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: str, _ssh: bool = True) -> ConnectionManager:
   def _sanity():
     if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
       pass
@@ -351,22 +363,17 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   # start the instance with _ssh mode
   instance.start(_ssh = True)
 
-  # create the connection
-  threads = ThreadMan()
-  for localport, cloudport in apps.items():
-    nbx_logger.info(f"Creating connection from {cloudport} -> {localport}")
-    t = threading.Thread(target=create_connection, args=(
-      localport,                       # localport
-      secret.get("username"),          # user
-      instance.open_data.get("url"),   # subdomain
-      cloudport,                       # port
-      file_logger,                     # filelogger
-      instance.open_data.get("token"), # auth
-    ))
-    threads.append(t)
-  threads.start() # start the connection and return
-
-  return threads
+  # conman runs threads internally for multiple connections
+  conman = ConnectionManager(
+    file_logger = file_logger,
+    user = secret.get("username"), 
+    subdomain = instance.open_data.get("url"),
+    auth = instance.open_data.get("token"),
+  )
+  for localport, buildport in apps.items():
+    nbx_logger.info(f"Creating connection from NBX:{buildport} -> local:{localport}")
+    conman.add(localport, buildport, _ssh = _ssh)
+  return conman
 
 
 def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
@@ -393,4 +400,5 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     nbx_logger.info("KeyboardInterrupt, closing connections")
     connection.quit()
 
+  connection.quit()
   sys.exit(0) # graceful exit

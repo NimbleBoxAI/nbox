@@ -331,12 +331,17 @@ class Instance():
       logger.error("You are trying to move files to a NOT-RUNNING instance, you will have to start the instance first:")
       logger.error('    -         nbox.Instance(...).start(...)')
       logger.error('    - python3 -m nbox build ... start ...')
-      # logger.error('    -   nbox.Instance(...).mv("./somefile", "nbx://folder/file")')
-      # logger.error('    - python3 -m build ... mv "./somefile", "nbx://folder/file"')
       raise ValueError("Instance is not opened, please call .open() first")
 
   def ls(self, path: str, *, port: int = 6174):
-    """List files in a directory relative to '/home/ubuntu/project'"""
+    """
+    List files in a directory relative to '/home/ubuntu/project'
+
+    ```
+    [nbox API] - nbox.Instance(...).ls("/)
+    [nbox CLI] - python3 -m nbox build ... ls /
+    ```
+    """
     self.__unopened_error()
 
     if path == "":
@@ -345,7 +350,7 @@ class Instance():
     logger.info(f"Looking in folder: {path}")
 
     from nbox.sub_utils.ssh import _create_threads
-    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id)
+    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id, _ssh = False)
 
     try:
       import shlex
@@ -355,7 +360,6 @@ class Instance():
       command = shlex.split(f'ssh -p {port} ubuntu@localhost ls -l {path}')
       result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
       result = result.stdout
-      print(result)
     except KeyboardInterrupt:
       logger.info("KeyboardInterrupt, closing connections")
       result = None
@@ -386,36 +390,40 @@ class Instance():
     cloud_file = cloud_file.replace("nbx://", "")
     
     ls_res = self.ls(cloud_file)
-    if not ls_res.endswith(": No such file or directory"):
+    # print("lllllllllll", ls_res)
+    logger.debug("ls_res", ls_res)
+    if ls_res:
       logger.info(f"File {cloud_file} already exists")
       if not force:
         logger.error("Aborted, use --force to override")
         return
       logger.info("Overriding file")
 
-    src = "/home/ubuntu/project/" + src[5:] if src_is_cloud else src
-    dst = "/home/ubuntu/project/" + dst[5:] if dst_is_cloud else dst
+    src = "/home/ubuntu/project/" + src[6:] if src_is_cloud else src
+    dst = "/home/ubuntu/project/" + dst[6:] if dst_is_cloud else dst
     logger.info(f"Moving {src} to {dst}")
     
-    # move file
-    from nbox.sub_utils.ssh import _create_threads
-    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id)
+    # # move file
+    # from nbox.sub_utils.ssh import _create_threads
+    # connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id)
 
-    try:
-      import shlex
-      from subprocess import PIPE, run
+    # try:
+    #   import shlex
+    #   from subprocess import PIPE, run
 
-      # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
-      comm = f'scp -P {port} {src} localhost:{dst}'
-      logger.info(comm)
-      command = shlex.split(comm)
-      result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
-    except KeyboardInterrupt:
-      logger.info("KeyboardInterrupt, closing connections")
-      result = None
-    connection.quit()
-    return result
+    #   # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
+    #   comm = f'scp -P {port} {src} localhost:{dst}'
+    #   logger.info(comm)
+    #   command = shlex.split(comm)
+    #   result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+    # except KeyboardInterrupt:
+    #   logger.info("KeyboardInterrupt, closing connections")
+    #   result = None
+    # connection.quit()
+    # return result
 
+  def rm(self):
+    pass
 
   def run_py(self, fp: str, *args, write_fp = sys.stdout):
     """Run any python file
