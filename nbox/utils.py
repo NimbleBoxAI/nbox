@@ -273,7 +273,7 @@ def convert_to_list(x):
 # pool/
 
 class PoolBranch:
-  def __init__(self, mode = "thread", max_workers = 2):
+  def __init__(self, mode = "thread", max_workers = 2, _name: str = None):
     """Threading is hard, your brain is not wired to handle parallelism. You are a blocking
     python program. So a blocking function for you. There are some conditions:
 
@@ -333,7 +333,7 @@ class PoolBranch:
     self.mode = mode
     self.item_id = -1 # because +1 later
     self.futures = {}
-    self._name = get_random_name(True)
+    self._name = _name or get_random_name(True)
 
     if mode == "thread":
       self.executor = ThreadPoolExecutor(

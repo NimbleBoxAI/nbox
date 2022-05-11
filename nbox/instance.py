@@ -149,6 +149,14 @@ class Instance():
   Functions here are responsible for managing the states (metadata + turn on/off) of the instances.
   """
 
+  def is_running(self) -> bool:
+    """Check if the instance is running.
+
+    Returns:
+        bool: True if the instance is running, False otherwise.
+    """
+    return self.state == "RUNNING"
+
   def refresh(self):
     """Update the data, get latest state"""
     self.data = self.stub_ws_instance()["data"] # GET /user/projects/{project_id}

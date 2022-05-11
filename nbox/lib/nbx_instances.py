@@ -8,7 +8,7 @@ class NboxInstanceStartOperator(Operator):
     super().__init__()
     if not isinstance(instances, list):
       instances = [instances]
-    assert instances[0].__class__ == Instance, "instances must be of type Instance"
+    assert instances[0].__class__ == Instance, "instances must be of type nbox.Instance"
     self.instances = instances
     self.pool = PoolBranch("thread", len(instances), _name = "instance_starter")
 
@@ -17,7 +17,6 @@ class NboxInstanceStartOperator(Operator):
       lambda instance: instance.start(cpu_only = True),
       self.instances
     )
-    return None
 
 class NboxModelDeployOperator(Operator):
   def __init__(self, model_name, model_path, model_weights, model_labels):
@@ -29,8 +28,9 @@ class NboxModelDeployOperator(Operator):
     self.model_labels = model_labels
 
   def forward(self, name):
-    from ..model import Model
-    Model(
+    from nbox.model import Model
+
+    return Model(
       self.model_name,
       self.model_path,
       self.model_weights,
@@ -59,3 +59,15 @@ class NboxWaitTillJIDComplete(Operator):
         return None
       elif status == "error-done":
         raise Exception("Job {} failed".format(self.jid))
+
+class NboxInstanceMv(Operator):
+  def __init__(self, i: str, workspace_id: str) -> None:
+    super().__init__()
+    self.build = Instance(i = i, workspace_id = workspace_id)
+    self.start_build = NboxInstanceStartOperator(self.build)
+  
+  def forward(self, src: str, dst: str, force: bool = False) -> None:
+    if not self.build.is_running():
+      self.start_build()
+    resp = self.build.mv(src, dst, force = force)
+    return resp
