@@ -4,6 +4,7 @@ the machine (start, stop, etc.), can be used to transfer files to and from the m
 and to an extent running and managing programs (WIP).
 """
 
+import os
 import sys
 import time
 import shlex
@@ -11,6 +12,7 @@ from typing import List
 from functools import partial
 from tabulate import tabulate
 from tempfile import gettempdir
+from subprocess import PIPE, run
 from requests.sessions import Session
 
 from .subway import SpecSubway,  TIMEOUT_CALLS
@@ -21,10 +23,12 @@ from .auth import secret
 
 
 ################################################################################
+'''
 # NBX-Instances Functions
-# =======================
-# The methods below are used to talk to the Webserver APIs and other methods
-# make the entire process functional.
+
+The methods below are used to talk to the Webserver APIs and other methods
+make the entire process functional.
+'''
 ################################################################################
 
 def print_status(workspace_id: str = None, fields: List[str] = None):
@@ -46,10 +50,12 @@ def print_status(workspace_id: str = None, fields: List[str] = None):
     logger.info(x)
 
 ################################################################################
+'''
 # NimbleBox.ai Instances
-# ======================
-# NBX-Instances is compute abstracted away to get the best hardware for your
-# task. To that end each Instance from the platform is a single class.
+
+NBX-Instances is compute abstracted away to get the best hardware for your
+task. To that end each Instance from the platform is a single class.
+'''
 ################################################################################
 
 class Instance():
@@ -143,11 +149,13 @@ class Instance():
     print(out)
     # return cls(project_name, url)
 
+  ################################################################################
   """
-  # Status Methods
+  # State Methods
 
   Functions here are responsible for managing the states (metadata + turn on/off) of the instances.
   """
+  ################################################################################
 
   def is_running(self) -> bool:
     """Check if the instance is running.
@@ -328,11 +336,13 @@ class Instance():
     else:
       logger.warning("Aborted")
 
+  ################################################################################
   """
   # Interaction Methods
 
   Doing things with the project-build.
   """
+  ################################################################################
 
   def __unopened_error(self):
     if not self.__opened:
@@ -340,6 +350,20 @@ class Instance():
       logger.error('    -         nbox.Instance(...).start(...)')
       logger.error('    - python3 -m nbox build ... start ...')
       raise ValueError("Instance is not opened, please call .open() first")
+
+  def __run_command(self, comm, port):
+    from nbox.sub_utils.ssh import _create_threads
+    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id, _ssh = False)
+    try:
+      # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
+      command = shlex.split(comm)
+      result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+      result = result.stdout
+    except KeyboardInterrupt:
+      logger.info("KeyboardInterrupt, closing connections")
+      result = ""
+    connection.quit()
+    return result
 
   def ls(self, path: str, *, port: int = 6174):
     """
@@ -355,23 +379,10 @@ class Instance():
     if path == "":
       raise ValueError("Path cannot be empty")
     path = "/home/ubuntu/project/" + path.strip("/")
+
+    # RPC
     logger.info(f"Looking in folder: {path}")
-
-    from nbox.sub_utils.ssh import _create_threads
-    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id, _ssh = False)
-
-    try:
-      import shlex
-      from subprocess import PIPE, run
-
-      # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
-      command = shlex.split(f'ssh -p {port} ubuntu@localhost ls -l {path}')
-      result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
-      result = result.stdout
-    except KeyboardInterrupt:
-      logger.info("KeyboardInterrupt, closing connections")
-      result = None
-    connection.quit()
+    result = self.__run_command(f"ssh -p {port} ubuntu@localhost 'ls -l {path}'", port)
     return result
 
   def mv(self, src: str, dst: str, force: bool = False, *, port: int = 6174):
@@ -387,19 +398,21 @@ class Instance():
     dst_is_cloud = dst.startswith("nbx://")
 
     if src_is_cloud and dst_is_cloud:
-      # logger.error(f"Cannot move files between two instances")
       raise ValueError("Cannot move files between two instances")
     if not src_is_cloud and not dst_is_cloud:
-      # logger.error(f"Cannot move files on your machine")
       raise ValueError("Cannot move files on your machine")
+    elif src_is_cloud:
+      if os.path.exists(dst) and not force:
+        raise ValueError(f"Source file '{dst}' already exists, pass force=True to overwrite")
+    elif dst_is_cloud:
+      assert os.path.exists(src), f"Source file '{src}' does not exist"
     
     # check if this file already exists
     cloud_file = src if src_is_cloud else dst
     cloud_file = cloud_file.replace("nbx://", "")
-    
+
     ls_res = self.ls(cloud_file)
-    # print("lllllllllll", ls_res)
-    logger.debug("ls_res", ls_res)
+    logger.info(f"ls_res: {ls_res}")
     if ls_res:
       logger.info(f"File {cloud_file} already exists")
       if not force:
@@ -409,39 +422,38 @@ class Instance():
 
     src = "/home/ubuntu/project/" + src[6:] if src_is_cloud else src
     dst = "/home/ubuntu/project/" + dst[6:] if dst_is_cloud else dst
+
+    # RPC
     logger.info(f"Moving {src} to {dst}")
-    
-    # # move file
-    # from nbox.sub_utils.ssh import _create_threads
-    # connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id)
+    result = self.__run_command(f'scp -P {port} {src} localhost:{dst}', port)
+    return result
 
-    # try:
-    #   import shlex
-    #   from subprocess import PIPE, run
+  def rm(self, file: str, *, port: int = 6174):
+    """
+    Remove file from NBX-Build.
+    """
+    self.__unopened_error()
 
-    #   # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
-    #   comm = f'scp -P {port} {src} localhost:{dst}'
-    #   logger.info(comm)
-    #   command = shlex.split(comm)
-    #   result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
-    # except KeyboardInterrupt:
-    #   logger.info("KeyboardInterrupt, closing connections")
-    #   result = None
-    # connection.quit()
-    # return result
+    if not file.startswith("nbx://"):
+      raise ValueError("File must be on NBX-Build, try adding 'nbx://' to start!")
+    file = "/home/ubuntu/project/" + file.replace("nbx://", "")
 
-  def rm(self):
-    pass
+    # RPC
+    logger.info(f"Removing file: {file}")
+    result = self.__run_command(f"ssh -p {port} ubuntu@localhost 'rm {file}'", port)
+    return result
 
-  def run_py(self, fp: str, *args, write_fp = sys.stdout):
-    """Run any python file
-    
-    EXPERIMENTAL: FEATURES MIGHT BREAK"""
-    fp = fp.replace("nbx://", "/mnt/disks/user/project/")
-    pid = self(fp)
-    from time import sleep
-    while self(pid) == "running":
-      sleep(10)
+  def remote(self, x: str, *, port: int = 6174):
+    """
+    Run any command using SSH, in the underlying system it will setup a SSH connection and execute
+    any command.
+    """
+    self.__unopened_error()
+
+    # RPC
+    logger.info(f"Running command: {x}")
+    result = self.__run_command(f"ssh -p {port} ubuntu@localhost '{x}'", port)
+    return result
 
   def __call__(self, x: str):
     """EXPERIMENTAL: FEATURES MIGHT BREAK

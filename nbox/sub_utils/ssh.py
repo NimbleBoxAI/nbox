@@ -15,7 +15,6 @@ import sys
 import ssl
 import socket
 import socket
-import logging
 import threading
 from functools import partial
 from typing import List
@@ -110,14 +109,14 @@ class RSockClient:
   def __repr__(self):
     return f"RSockClient({self.subdomain} | {self.connection_id})"
   
-  def log(self, message, level=logging.INFO):
+  def log(self, message, level="INFO"):
     self.logger.info(f"[{self.connection_id}] [{level}] {message}")
   
   def connect_to_rsock_server(self):
     """
     Connects to RSockServer.
     """
-    self.log('Connecting to RSockServer', logging.DEBUG)
+    self.log('Connecting to RSockServer', "DEBUG")
     rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     rsock_socket.connect(('rsock.rc.nimblebox.ai', 886))
 
@@ -140,7 +139,7 @@ class RSockClient:
     if auth == 'OK':
       self.log('Client authenticated')
     else:
-      self.log('Client authentication failed', logging.ERROR)
+      self.log('Client authentication failed', "ERROR")
       self.client_auth = False
       exit(1)
   
@@ -158,7 +157,7 @@ class RSockClient:
       self.client_auth = True
       self.log('Config set')
     else:
-      self.log('Config set failed', logging.ERROR)
+      self.log('Config set failed', "ERROR")
       exit(1)
 
   def connect(self):
@@ -176,7 +175,7 @@ class RSockClient:
       if connect_status == 'OK':
         self.log('Connected to project...')
       else:
-        self.log('Connect failed', logging.ERROR)
+        self.log('Connect failed', "ERROR")
         exit(1)
 
       # start the io_copy loop
@@ -189,7 +188,7 @@ class RSockClient:
       self.rsock_thread.start()
       self.client_thread.start()
     else:
-      self.log('Client authentication failed', logging.ERROR)
+      self.log('Client authentication failed', "ERROR")
       exit(1)
 
   def io_copy(self, direction):
@@ -216,7 +215,7 @@ class RSockClient:
           self.log('{} connection closed'.format(direction))
           break
       except Exception as e:
-        self.log('Error in {} io_copy: {}'.format(direction, e), logging.ERROR)
+        self.log('Error in {} io_copy: {}'.format(direction, e), "ERROR")
         break
 
     self.rsock_thread_running = False
@@ -277,15 +276,15 @@ class ConnectionManager:
     listen_socket.listen(20)
 
     while not self.done:
-      logging.info('Waiting for client')
+      nbx_logger.info("Waiting for connection on port {}".format(localport))
       try:
         client_socket, _ = listen_socket.accept()
       except socket.timeout:
         break
 
-      logging.info('Client connected')
+      nbx_logger.info('Client connected')
       self.connection_id += 1
-      logging.info(f'Total clients connected -> {self.connection_id}')
+      nbx_logger.info(f'Total clients connected -> {self.connection_id}')
 
       # create the client
       secure = not self.notsecure

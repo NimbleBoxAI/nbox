@@ -308,6 +308,7 @@ class Operator():
     workspace_id: str = None,
     schedule: Schedule = None,
     cache_dir: str = None,
+    resource: Resource = None,
     *,
     _unittest = False
   ):
@@ -382,7 +383,7 @@ class Operator():
         cpu = "100m",         # 100mCPU
         memory = "200Mi",     # MiB
         disk_size = "1Gi",    # GiB
-      )
+      ) if resource == None else resource
     )
 
     with open(U.join(init_folder, "job_proto.msg"), "wb") as f:
