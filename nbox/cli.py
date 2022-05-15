@@ -39,17 +39,17 @@ This is CLI for ``nbox``, it is meant to be as simple to use as possible.
 
 """
 
+import os
 import sys
 import fire
 from json import dumps
 
 from nbox.auth import init_secret
-from .jobs import Job
+from .jobs import Job, new_model
 from .instance import Instance
 from .sub_utils import ssh
 from .framework.autogen import compile
 from .init import nbox_ws_v1
-
 
 def open_home():
   """Open current NBX platform"""
@@ -77,6 +77,36 @@ def get(api_end: str, **kwargs):
 def login():
   init_secret()
 
+
+class ServeCLINamespace(object):
+  new = staticmethod(new_model)
+
+  def __call__(
+    self,
+    init_folder,
+    deployment_id_or_name: str,
+    workspace_id: str = None,
+    wait_for_deployment: bool = True,
+  ):
+    from nbox import logger
+
+    folder = os.path.abspath(init_folder)
+    sys.path.append(folder)
+    logger.info(f"Compiling serving: {folder}")
+
+    from nbx_user import get_op, get_resource
+    from nbox import Operator
+
+    op: Operator = get_op()
+    return op.serve(
+      init_folder=init_folder,
+      deployment_id_or_name = deployment_id_or_name,
+      workspace_id = workspace_id,
+      resource = get_resource(), # whatever the user has defined
+      wait_for_deployment = wait_for_deployment,
+    )
+
+
 NBX = dict(
   login = login                  , # nbox login
   tunnel = ssh.tunnel            , # nbox tunnel
@@ -86,6 +116,7 @@ NBX = dict(
   #
   build = Instance               , # nbox build
   jobs = Job                     , # nbox jobs
+  serve = ServeCLINamespace,                               
 )
 
 if __name__ == "__main__":

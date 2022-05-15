@@ -46,6 +46,7 @@ certainly if we come up with that high abstraction we will refactor this:
 # modifications: research@nimblebox.ai 2022
 
 import os
+import jinja2
 import zipfile
 from hashlib import sha256
 from tempfile import gettempdir
@@ -55,14 +56,38 @@ from typing import Callable, Iterable, List
 from . import utils as U
 from .utils import logger
 from .init import nbox_ws_v1
-from .network import deploy_job, Schedule
+from .network import deploy_job, Schedule, deploy_serving
 from .framework.on_functions import get_nbx_flow
 from .framework import AirflowMixin, PrefectMixin, LuigiMixin
 from .hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from .hyperloop.dag_pb2 import DAG, Node, RunStatus
+from .hyperloop.serve_pb2 import Serving
 from .nbxlib.tracer import Tracer
 from .messages import get_current_timestamp
 from .sub_utils.latency import log_latency
+from .version import __version__
+
+def get_fn_base_models(fn) -> List[str]:
+  import ast
+  if type(fn) == str:
+    fn = ast.parse(fn)
+  
+  for node in fn.body:
+    if type(node) == ast.FunctionDef:
+      args: ast.arguments = node.args
+      all_args = [] # tuple of name, type (if any) and default value
+      for arg in args.args[1:]: # first one is always self
+        all_args.append(arg.arg)
+      if args.kwonlyargs:
+        for arg in args.kwonlyargs:
+          all_args.append(arg.arg)
+      if args.vararg:
+        all_args.append(args.vararg.arg)
+      if args.kwarg:
+        all_args.append(args.kwarg.arg)
+  
+  strings = [f"{x}: Any = None" for x in all_args]
+  return strings
 
 class Operator():
   _version: int = 1 # always try to keep this an i32
@@ -307,12 +332,13 @@ class Operator():
     job_id_or_name: str,
     workspace_id: str = None,
     schedule: Schedule = None,
-    cache_dir: str = None,
     resource: Resource = None,
     *,
     _unittest = False
   ):
     """Deploy this job on NBX-Jobs.
+
+    DO NOT CALL THIS DIRECTLY, use `nbx jobs new` CLI command instead.
 
     Args:
         init_folder (str, optional): Name the folder to zip
@@ -323,6 +349,7 @@ class Operator():
     Returns:
         Job: Job object
     """
+    # get stub
     if workspace_id == None:
       stub_all_jobs = nbox_ws_v1.user.jobs
     else:
@@ -389,6 +416,21 @@ class Operator():
     with open(U.join(init_folder, "job_proto.msg"), "wb") as f:
       f.write(job_proto.SerializeToString())
 
+    # # create the runner stub: in case of jobs it will be python3 exe.py run
+    # py_data = dict(
+    #   import_string_nbox = "from nbox.network import Schedule" if scheduled else None,
+    #   job_id_or_name = job_id_or_name,
+    #   workspace_id = workspace_id,
+    #   scheduled = schedule,
+    #   project_name = project_name,
+    #   created_time = created_time,
+    # )
+    # py_f_data = {k:v for k,v in py_data.items() if v is not None}
+
+    # path = U.join(assets, "job_nbx.jinja")
+    # with open(path, "r") as f, open("exe.py", "w") as f2:
+    #   f2.write(jinja2.Template(f.read()).render(**py_f_data))
+
     # zip all the files folder
     all_f = U.get_files_in_folder(init_folder)
     all_f = [f[len(init_folder)+1:] for f in all_f] # remove the init_folder from zip
@@ -401,7 +443,7 @@ class Operator():
     hash_ = hash_.hexdigest()
     logger.info(f"SHA256 ( {init_folder} ): {hash_}")
 
-    zip_path = U.join(cache_dir if cache_dir else gettempdir(), f"project-{hash_}.nbox")
+    zip_path = U.join(gettempdir(), f"project-{hash_}.nbox")
     logger.info(f"Packing project to '{zip_path}'")
     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
       for f in all_f:
@@ -411,5 +453,116 @@ class Operator():
       return job_proto
   
     return deploy_job(zip_path = zip_path, job_proto = job_proto)
+
+  def serve(
+    self,
+    init_folder: str,
+    deployment_id_or_name: str,
+    workspace_id: str = None,
+    resource: Resource = None,
+    wait_for_deployment: bool = True,
+    *,
+    _unittest = False,
+  ):
+    """Serve your operator as an API endpoint.
+    
+    DO NOT CALL THIS DIRECTLY, use `nbx serve new` CLI command instead.
+
+    EXPERIMENTAL: can break anytime
+    """
+    raise NotImplementedError(f"In-progress will be released in v1.0.0 (currently {__version__})")
+    if workspace_id == None:
+      stub_all_depl = nbox_ws_v1.user.deployments
+    else:
+      stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
+    logger.debug(f"deployments stub: {stub_all_depl}")
+
+    # filter and get "id" and "name"
+    deployments = list(filter(
+      lambda x: x["deployment_id"] == deployment_id_or_name or x["deployment_name"] == deployment_id_or_name,
+      stub_all_depl()["data"]
+    ))
+    if len(deployments) == 0:
+      logger.warning(f"No deployment found with id '{deployment_id_or_name}', creating one with same name")
+      deployment_id = None
+      deployment_name = deployment_id_or_name
+    elif len(deployments) > 1:
+      raise ValueError(f"Multiple deployments found for '{deployment_id_or_name}', try passing ID")
+    else:
+      data = deployments[0]
+      deployment_id = data["deployment_id"]
+      deployment_name = data["deployment_name"]
+
+    logger.info(f"Deployment name: {deployment_name}")
+    logger.info(f"Deployment ID: {deployment_id}")
+
+    # create a serve proto and use that to serve the model using NBX-Infra
+    _starts = get_current_timestamp()
+    serving_proto = Serving(
+      name = deployment_name,
+      created_at = _starts,
+      resource = Resource(
+        cpu = "100m",         # 100mCPU
+        memory = "200Mi",     # MiB
+        disk_size = "1Gi",    # GiB
+      ) if resource == None else resource
+    )
+
+    if workspace_id != None:
+      serving_proto.workspace_id = workspace_id
+    if deployment_id != None:
+      serving_proto.id = deployment_id
+
+    # create the runner stub: in case of jobs it will be python3 exe.py run
+
+    ## process the forward function and get the base_model_strings
+    # node_proto = Node()
+    # def_func_or_class()
+    import inspect, ast
+    from textwrap import dedent
+
+    forward_code = inspect.getsource(self.forward)
+    strings = get_fn_base_models(dedent(forward_code))
+
+    py_data = dict(
+      project_name = os.path.split(init_folder)[-1],
+      created_time = _starts.ToDatetime().strftime("%Y-%m-%d %H:%M:%S"),
+      email_id = None,
+      operator_name = self.__class__.__name__,
+      base_model_strings = strings
+    )
+    py_f_data = {k:v for k,v in py_data.items() if v is not None}
+    assets = U.join(U.folder(__file__), "assets")
+    path = U.join(assets, "job_serve.jinja")
+    with open(path, "r") as f, open("server.py", "w") as f2:
+      f2.write(jinja2.Template(f.read()).render(**py_f_data))
+
+    # zip all the files folder
+    all_f = [os.path.join(init_folder, x) for x in U.get_files_in_folder(init_folder)]
+    all_f = [f[len(init_folder)+1:] for f in all_f] # remove the init_folder from zip
+
+    for f in all_f:
+      hash_ = sha256()
+      with open(f, "rb") as f:
+        for c in iter(lambda: f.read(2 ** 20), b""):
+          hash_.update(c)
+    hash_ = hash_.hexdigest()
+    logger.info(f"SHA256 ( {init_folder} ): {hash_}")
+
+    zip_path = U.join(gettempdir(), f"project-{hash_}.nbox")
+    logger.info(f"Packing project to '{zip_path}'")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+      for f in all_f:
+        zip_file.write(f)
+
+    if _unittest:
+      return serving_proto
+
+    return deploy_serving(
+      export_model_path = zip_path,
+      stub_all_depl = stub_all_depl,
+      wait_for_deployment = wait_for_deployment
+    )
+
 
   # /nbx

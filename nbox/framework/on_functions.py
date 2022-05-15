@@ -318,6 +318,8 @@ def node_return(node: ast.Return, lines, node_proto: Node) -> Node:
   return node_proto
 
 def def_func_or_class(node, lines, node_proto: Node) -> Node:
+  print(node)
+
   node_proto.MergeFrom(Node(
     name = f"symbol-{node.name}",
     type = Node.NodeType.OP, # TODO: @yashbonde expand node types to include class/func definitions

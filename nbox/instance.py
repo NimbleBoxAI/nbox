@@ -51,7 +51,7 @@ def print_status(workspace_id: str = None, fields: List[str] = None):
 
 ################################################################################
 '''
-# NimbleBox.ai Instances
+# NimbleBox Build
 
 NBX-Instances is compute abstracted away to get the best hardware for your
 task. To that end each Instance from the platform is a single class.
@@ -143,11 +143,18 @@ class Instance():
       stub_all_projects = nbox_ws_v1.user.projects
     else:
       stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
-    out = stub_all_projects(_method = "post", project_name = project_name, storage_limit = storage_limit, project_type = project_type,
-    github_branch = "", github_link = "", template_id = 0, clone_id = 0
+    out = stub_all_projects(
+      _method = "post",
+      project_name = project_name,
+      storage_limit = storage_limit,
+      project_type = project_type,
+      github_branch = "",
+      github_link = "",
+      template_id = 0,
+      clone_id = 0
   )
-    print(out)
-    # return cls(project_name, url)
+    
+    return out
 
   ################################################################################
   """
@@ -422,6 +429,10 @@ class Instance():
 
     src = "/home/ubuntu/project/" + src[6:] if src_is_cloud else src
     dst = "/home/ubuntu/project/" + dst[6:] if dst_is_cloud else dst
+
+    # add checks like if the source is a folder, then add -r flag to the scp command
+    # should we add -C (compression) for SSH?
+    src_folder = os.path.dirname(src) if src_is_cloud else src
 
     # RPC
     logger.info(f"Moving {src} to {dst}")

@@ -167,7 +167,7 @@ def _build_job(project_name, workspace_id):
     f2.write(jinja2.Template(f.read()).render(**md_data))
 
 def new(project_name, b: bool = False, workspace_id: str = None):
-  """Create a new job, this can be run on NBX-Jobs or on an instance.
+  """Create a new folder, this can be run on NBX-Jobs or NBX-Deploy.
 
   Args:
     project_name (str): The name of the job folder
@@ -190,6 +190,60 @@ def new(project_name, b: bool = False, workspace_id: str = None):
     f.write(f"nbox=={__version__}")
 
   logger.debug("Completed")
+
+def new_model(project_name):
+  """Create a new folder, this can be run on NBX-Jobs or NBX-Deploy.
+
+  Args:
+    project_name (str): The name of the folder
+  """
+  project_name = str(project_name)
+  out = re.findall("^[a-zA-Z0-9_]+$", project_name)
+  if not out:
+    raise ValueError("Folder name can only contain letters and underscore")
+
+  if os.path.exists(project_name):
+    raise ValueError(f"Folder {project_name} already exists")
+
+  # Monday W34 [UTC 12 April, 2022 - 12:00:00]
+  _ct = datetime.now(timezone.utc)
+  _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+  created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+
+  deployment_id_or_name = input("> Deployment ID or name: ")
+
+  logger.info(f"Creating a folder: {project_name}")
+  os.mkdir(project_name)
+  os.chdir(project_name)
+  py_data = dict(
+    deployment_id_or_name = deployment_id_or_name,
+    project_name = project_name,
+    created_time = created_time,
+    scheduled = None,
+    import_string_nbox = None,
+  )
+  py_f_data = {k:v for k,v in py_data.items() if v is not None}
+
+  assets = U.join(U.folder(__file__), "assets")
+  path = U.join(assets, "job_new.jinja")
+  with open(path, "r") as f, open("nbx_user.py", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**py_f_data))
+
+  md_data = dict(
+    project_name = project_name,
+    created_time = created_time,
+    scheduled = False,
+  )
+
+  path = U.join(assets, "job_new_readme.jinja")
+  with open(path, "r") as f, open("README.md", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**md_data))
+
+  with open("requirements.txt", "w") as f:
+    f.write(f"nbox=={__version__}")
+
+  logger.info("Process complete")
+
 
 def get_job_list(workspace_id: str = None):
   """Get list of jobs, optionally in a workspace"""

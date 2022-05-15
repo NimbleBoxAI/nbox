@@ -16,8 +16,9 @@ import ssl
 import socket
 import socket
 import threading
-from functools import partial
+import subprocess
 from typing import List
+from functools import partial
 from datetime import datetime, timezone
 
 from nbox.utils import NBOX_HOME_DIR, logger as nbx_logger
@@ -276,15 +277,15 @@ class ConnectionManager:
     listen_socket.listen(20)
 
     while not self.done:
-      nbx_logger.info("Waiting for connection on port {}".format(localport))
+      nbx_logger.debug("Waiting for connection on port {}".format(localport))
       try:
         client_socket, _ = listen_socket.accept()
       except socket.timeout:
         break
 
-      nbx_logger.info('Client connected')
+      nbx_logger.debug('Client connected')
       self.connection_id += 1
-      nbx_logger.info(f'Total clients connected -> {self.connection_id}')
+      nbx_logger.debug(f'Total clients connected -> {self.connection_id}')
 
       # create the client
       secure = not self.notsecure
@@ -370,7 +371,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
     auth = instance.open_data.get("token"),
   )
   for localport, buildport in apps.items():
-    nbx_logger.info(f"Creating connection from NBX:{buildport} -> local:{localport}")
+    nbx_logger.debug(f"Creating connection from NBX:{buildport} -> local:{localport}")
     conman.add(localport, buildport, _ssh = _ssh)
   return conman
 
@@ -391,8 +392,10 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
   connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)
 
   try:
-    # start the ssh connection on terminal
-    import subprocess
+    # start the ssh connection on terminal    
+    # there is more to know about passing shell = True, see:
+    # https://medium.com/python-pandemonium/a-trap-of-shell-true-in-the-subprocess-module-6db7fc66cdfd
+    # https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess
     nbx_logger.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
     subprocess.call(f'ssh -p {port} ubuntu@localhost', shell=True)
   except KeyboardInterrupt:
