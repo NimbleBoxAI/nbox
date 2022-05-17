@@ -11,7 +11,10 @@ import requests
 from time import sleep
 from datetime import datetime, timedelta, timezone
 
+import grpc
+
 from google.protobuf.timestamp_pb2 import Timestamp
+from google.protobuf.field_mask_pb2 import FieldMask
 
 from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 from .hyperloop.job_pb2 import Job as JobProto
@@ -297,13 +300,43 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   code = JobProto.Code(size = max(file_size, 1), type = JobProto.Code.Type.ZIP)
   job_proto.code.MergeFrom(code)
 
+  # UploadJobCode is responsible for uploading the code of the job
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
     UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
     f"Failed to deploy job: {job_proto.id}"
   )
 
+  # # if there are change in resources / meta then update the job
+  # try:
+  #   old_job = Job(job_proto.id, job_proto.auth_info.workspace_id)
+  # except grpc.RpcError as e:
+  #   print(dir(e))
+  #   logger.error(f"Failed to update job metadata: {e}")
+  #   if e.code == grpc.StatusCode.UNKNOWN:
+  #     pass
+  #   else:
+  #     raise e
+
+  #   change_resources = old_job.job_proto.resource.SerializeToString() != job_proto.resource.SerializeToString()
+  #   change_schedule = old_job.job_proto.schedule.cron != job_proto.schedule.cron
+  #   if change_resources or change_schedule:
+  #     paths = []
+  #     if change_resources:
+  #       paths.append("resource")
+  #     if change_schedule:
+  #       paths.append("schedule")
+
+  #     response = rpc(
+  #       nbox_grpc_stub.UpdateJob,
+  #       UpdateJobRequest(
+  #         job = job_proto, update_mask = FieldMask(paths=paths)
+  #       ),
+  #       err_msg = f"Could not update job metadata, some things might not be updated"
+  #     )
+
   job_proto.MergeFrom(response)
+  
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
   logger.debug(f"Job ID: {job_proto.id}")
@@ -315,8 +348,17 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   except:
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
-  
+
   logger.info("Creating new run ...")
-  rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job: {job_proto.id}")
+  try:
+    job: JobProto = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job_proto))
+  except grpc.RpcError as e:
+    if e.code() == grpc.StatusCode.ALREADY_EXISTS:
+      logger.debug(f"Job {job_proto.id} already exists")
+    else:
+      raise e
+  except Exception as e:
+    logger.error(f"Failed to create job: {e}")
+    return
 
   return Job(job_proto.id, job_proto.auth_info.workspace_id)

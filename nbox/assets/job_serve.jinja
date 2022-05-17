@@ -22,10 +22,10 @@ async def ping():
   return {"message": "pong"}
 
 @app.post("/predict", status_code=200)
-async def predict(request: Request, hf_req: {{ operator_name }}_request, response: Response):
+async def predict(request: Request, request_model: {{ operator_name }}_request, response: Response):
   # try to get the data dict
   try:
-    data = hf_req.dict()
+    data = request_model.dict()
   except Exception as e:
     response.status_code = 400
     return {"data": None, "error": str(e),}

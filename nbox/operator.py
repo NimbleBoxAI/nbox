@@ -126,6 +126,12 @@ class Operator():
     self._op_trace = []
     self._tracer: Tracer = None
 
+  def __remote_init__(self):
+    """User can overwrite this function, this will be called only when running on remote.
+    This helps in with things like creating the models can caching them in self, instead
+    of ``lru_cache`` in forward."""
+    pass
+
   # mixin/
 
   to_airflow_operator = AirflowMixin.to_airflow_operator
@@ -410,7 +416,7 @@ class Operator():
         cpu = "100m",         # 100mCPU
         memory = "200Mi",     # MiB
         disk_size = "1Gi",    # GiB
-      ) if resource == None else resource
+      ) if resource == None else resource,
     )
 
     with open(U.join(init_folder, "job_proto.msg"), "wb") as f:
@@ -470,7 +476,9 @@ class Operator():
 
     EXPERIMENTAL: can break anytime
     """
-    raise NotImplementedError(f"In-progress will be released in v1.0.0 (currently {__version__})")
+    init_folder = os.path.abspath(init_folder)
+
+    # raise NotImplementedError(f"In-progress will be released in v1.0.0 (currently {__version__})")
     if workspace_id == None:
       stub_all_depl = nbox_ws_v1.user.deployments
     else:
@@ -483,7 +491,7 @@ class Operator():
       stub_all_depl()["data"]
     ))
     if len(deployments) == 0:
-      logger.warning(f"No deployment found with id '{deployment_id_or_name}', creating one with same name")
+      logger.warning(f"No deployment found with id '{deployment_id_or_name}', creating new with name!")
       deployment_id = None
       deployment_name = deployment_id_or_name
     elif len(deployments) > 1:
@@ -514,11 +522,7 @@ class Operator():
       serving_proto.id = deployment_id
 
     # create the runner stub: in case of jobs it will be python3 exe.py run
-
-    ## process the forward function and get the base_model_strings
-    # node_proto = Node()
-    # def_func_or_class()
-    import inspect, ast
+    import inspect
     from textwrap import dedent
 
     forward_code = inspect.getsource(self.forward)
@@ -534,26 +538,12 @@ class Operator():
     py_f_data = {k:v for k,v in py_data.items() if v is not None}
     assets = U.join(U.folder(__file__), "assets")
     path = U.join(assets, "job_serve.jinja")
-    with open(path, "r") as f, open("server.py", "w") as f2:
+    server_path = U.join(init_folder, f"server.py")
+    with open(path, "r") as f, open(server_path, "w") as f2:
       f2.write(jinja2.Template(f.read()).render(**py_f_data))
 
-    # zip all the files folder
-    all_f = [os.path.join(init_folder, x) for x in U.get_files_in_folder(init_folder)]
-    all_f = [f[len(init_folder)+1:] for f in all_f] # remove the init_folder from zip
-
-    for f in all_f:
-      hash_ = sha256()
-      with open(f, "rb") as f:
-        for c in iter(lambda: f.read(2 ** 20), b""):
-          hash_.update(c)
-    hash_ = hash_.hexdigest()
-    logger.info(f"SHA256 ( {init_folder} ): {hash_}")
-
-    zip_path = U.join(gettempdir(), f"project-{hash_}.nbox")
-    logger.info(f"Packing project to '{zip_path}'")
-    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
-      for f in all_f:
-        zip_file.write(f)
+    # zip tje folder
+    zip_path = self.zip(init_folder)
 
     if _unittest:
       return serving_proto
@@ -564,5 +554,31 @@ class Operator():
       wait_for_deployment = wait_for_deployment
     )
 
+  @staticmethod
+  def zip(init_folder: str):
+    all_f = [os.path.join(init_folder, x) for x in U.get_files_in_folder(init_folder)]
+    zip_arcnames = [x[len(init_folder)+1:] for x in all_f] # arcnames are the relative names inside the zip
+    for f in all_f:
+      hash_ = sha256()
+      with open(f, "rb") as f:
+        for c in iter(lambda: f.read(2 ** 20), b""):
+          hash_.update(c)
+    hash_ = hash_.hexdigest()
+    logger.info(f"SHA256 ( {init_folder} ): {hash_}")
+
+    zip_path = U.join(gettempdir(), f"project-{hash_}.nbox")
+    logger.info(f"Packing to path: {zip_path}")
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+      for f, arcname in zip(all_f, zip_arcnames):
+        zip_file.write(filename = f, arcname = arcname)
+
+    return zip_file
+
+  @staticmethod
+  def unzip(zip_path: str, dest_folder: str):
+    """Unzip a zip file to a folder.
+    """
+    with zipfile.ZipFile(zip_path, 'r') as zip_file:
+      zip_file.extractall(dest_folder)
 
   # /nbx

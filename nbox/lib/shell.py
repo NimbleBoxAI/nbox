@@ -1,5 +1,7 @@
 from nbox import Operator
 
+from nbox.lib.arch import StepOp
+
 class ShellCommand(Operator):
   def __init__(self, *commands):
     """Run multiple shell commands, uses ``shelex`` to prevent injection"""
@@ -19,7 +21,9 @@ class ShellCommand(Operator):
     for comm in self.commands:
       comm = comm.format(*args, **kwargs)
       comm = shlex.split(comm)
-      subprocess.run(comm, check = True)
+      called_process: subprocess.CompletedProcess = subprocess.run(comm, check = True)
+      if called_process.returncode != 0:
+        raise Exception(f"Command {comm} failed with return code {called_process.stdout}")
 
 
 class Python(Operator):
@@ -32,38 +36,33 @@ class Python(Operator):
     return self.fak[0](*self.fak[1], **self.fak[2])
 
 
-class PythonScript(Operator):
+class PythonScript(StepOp):
   def __init__(self, fpath, **kwargs):
     """Run any file in python as an operator"""
     super().__init__()
     self.fp = fpath
     self.kwargs = kwargs
 
-  def forward(self):
-    raise NotImplementedError("PythonScript is not implemented yet")
+    kwargs_strings = []
+    for k,v in kwargs.items():
+      if v != None:
+        kwargs_strings.append(f"--{k}={v}")
+      else:
+        kwargs_strings.append(f"--{k}")
+    kwargs_string = "\ \n".join(kwargs_strings)
+    self.add_step(ShellCommand(
+      f"./venv/bin/python {fpath} {kwargs_string}"
+    ))
 
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("script", self.fp)
-    script = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(script)
-    return script.main(**self.kwargs)
 
-
-class PythonNotebook(Operator):
-  def __init__(self, fpath, **kwargs):
+class PythonNotebook(StepOp):
+  def __init__(self, fpath):
     """Run any file in python as an operator"""
     super().__init__()
     self.fp = fpath
-    self.kwargs = kwargs
-
-  def forward(self):
-    raise NotImplementedError("PythonNotebook is not implemented yet")
-
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("notebook", self.fp)
-    notebook = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(notebook)
-    return notebook.main(**self.kwargs)
+    self.add_step(ShellCommand(
+      f"jupyter nbconvert --to notebook --execute {fpath}"
+    ))
 
 
 class GitClone(Operator):

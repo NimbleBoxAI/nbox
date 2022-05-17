@@ -94,7 +94,15 @@ class ServeCLINamespace(object):
     sys.path.append(folder)
     logger.info(f"Compiling serving: {folder}")
 
-    from nbx_user import get_op, get_resource
+    # get the items from users code
+    from nbx_user import get_op
+    try:
+      from nbx_user import get_resource
+      resource = get_resource()
+    except ImportError:
+      # old version problems
+      resource = None
+
     from nbox import Operator
 
     op: Operator = get_op()
@@ -102,22 +110,29 @@ class ServeCLINamespace(object):
       init_folder=init_folder,
       deployment_id_or_name = deployment_id_or_name,
       workspace_id = workspace_id,
-      resource = get_resource(), # whatever the user has defined
+      resource = resource,
       wait_for_deployment = wait_for_deployment,
     )
 
+def get_dict():
+  from .operator import Operator
+  NBX = dict(
+    login = login                  , # nbox login
+    tunnel = ssh.tunnel            , # nbox tunnel
+    home = open_home               , # nbox home
+    compile = compile              , # nbox compile: internal for autogen code
+    get = get                      , # nbox get "/workspace/88fn83/projects"
+    #
+    build = Instance               , # nbox build
+    jobs = Job                     , # nbox jobs
+    serve = ServeCLINamespace      , # nbox serve
+    unzip = Operator.unzip         , # nbox unzip (convinience)
+  )
+  return NBX
 
-NBX = dict(
-  login = login                  , # nbox login
-  tunnel = ssh.tunnel            , # nbox tunnel
-  home = open_home               , # nbox home
-  compile = compile              , # nbox compile: internal for autogen code
-  get = get                      , # nbox get "/workspace/88fn83/projects"
-  #
-  build = Instance               , # nbox build
-  jobs = Job                     , # nbox jobs
-  serve = ServeCLINamespace,                               
-)
+def main():
+  data = get_dict()
+  fire.Fire(data)
 
 if __name__ == "__main__":
-  fire.Fire(NBX)
+  main()

@@ -364,6 +364,7 @@ class Instance():
     try:
       # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
       command = shlex.split(comm)
+      logger.info(f"Running command: {comm}")
       result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
       result = result.stdout
     except KeyboardInterrupt:
@@ -430,13 +431,12 @@ class Instance():
     src = "/home/ubuntu/project/" + src[6:] if src_is_cloud else src
     dst = "/home/ubuntu/project/" + dst[6:] if dst_is_cloud else dst
 
-    # add checks like if the source is a folder, then add -r flag to the scp command
-    # should we add -C (compression) for SSH?
-    src_folder = os.path.dirname(src) if src_is_cloud else src
+    src_folder = os.path.isdir(src) if not src_is_cloud else os.path.isdir(src)
+    src_folder = "-r" if src_folder else ""
 
     # RPC
     logger.info(f"Moving {src} to {dst}")
-    result = self.__run_command(f'scp -P {port} {src} localhost:{dst}', port)
+    result = self.__run_command(f'scp {src_folder} -P {port} {src} localhost:{dst}', port)
     return result
 
   def rm(self, file: str, *, port: int = 6174):

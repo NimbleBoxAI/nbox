@@ -245,7 +245,7 @@ def new_model(project_name):
   logger.info("Process complete")
 
 
-def get_job_list(workspace_id: str = None):
+def get_job_list(workspace_id: str = None, sort: str = "name"):
   """Get list of jobs, optionally in a workspace"""
   auth_info = NBXAuthInfo(workspace_id = workspace_id)
   out: ListJobsResponse = rpc(
@@ -261,8 +261,9 @@ def get_job_list(workspace_id: str = None):
 
   # filters = [f.upper() for f in filters]
   headers=list(out["Jobs"][0].keys())
+  sorted_jobs = sorted(out["Jobs"], key = lambda x: x[sort])
   data = []
-  for j in out["Jobs"]:
+  for j in sorted_jobs:
     _row = []
     for x in headers:
       if x == "status":
