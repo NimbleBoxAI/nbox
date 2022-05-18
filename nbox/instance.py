@@ -358,11 +358,10 @@ class Instance():
       logger.error('    - python3 -m nbox build ... start ...')
       raise ValueError("Instance is not opened, please call .open() first")
 
-  def __run_command(self, comm, port):
+  def __run_command(self, comm: str, port: int) -> str:
     from nbox.sub_utils.ssh import _create_threads
     connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id, _ssh = False)
     try:
-      # https://serverfault.com/questions/242176/is-there-a-way-to-do-a-remote-ls-much-like-scp-does-a-remote-copy
       command = shlex.split(comm)
       logger.info(f"Running command: {comm}")
       result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)

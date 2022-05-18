@@ -161,8 +161,6 @@ def deploy_serving(
     if access_key != None or "failed" in curr_st:
       break
 
-  logger.debug("Process Complete")
-  logger.debug("NBX Deploy")
   return server_endpoint, access_key
 
 class Schedule:
@@ -300,43 +298,34 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   code = JobProto.Code(size = max(file_size, 1), type = JobProto.Code.Type.ZIP)
   job_proto.code.MergeFrom(code)
 
+  # this means that this job already exists, we check if there are some metadata changes
+  job_exists = job_proto.id != ""
+  if job_exists:
+    logger.debug("Found existing job, checking for update masks")
+    old_job_proto = Job(job_proto.id, job_proto.auth_info.workspace_id).job_proto
+    paths = []
+    if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
+      paths.append("resource")
+    if old_job_proto.schedule.cron != job_proto.schedule.cron:
+      paths.append("schedule.cron")
+
+    # update the job
+    if paths:
+      logger.debug(f"Updating paths: {paths}")
+      nbox_grpc_stub.UpdateJob(
+        UpdateJobRequest(
+          job = job_proto, update_mask = FieldMask(paths=paths)
+        ),
+      )
+
   # UploadJobCode is responsible for uploading the code of the job
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
     UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
     f"Failed to deploy job: {job_proto.id}"
   )
-
-  # # if there are change in resources / meta then update the job
-  # try:
-  #   old_job = Job(job_proto.id, job_proto.auth_info.workspace_id)
-  # except grpc.RpcError as e:
-  #   print(dir(e))
-  #   logger.error(f"Failed to update job metadata: {e}")
-  #   if e.code == grpc.StatusCode.UNKNOWN:
-  #     pass
-  #   else:
-  #     raise e
-
-  #   change_resources = old_job.job_proto.resource.SerializeToString() != job_proto.resource.SerializeToString()
-  #   change_schedule = old_job.job_proto.schedule.cron != job_proto.schedule.cron
-  #   if change_resources or change_schedule:
-  #     paths = []
-  #     if change_resources:
-  #       paths.append("resource")
-  #     if change_schedule:
-  #       paths.append("schedule")
-
-  #     response = rpc(
-  #       nbox_grpc_stub.UpdateJob,
-  #       UpdateJobRequest(
-  #         job = job_proto, update_mask = FieldMask(paths=paths)
-  #       ),
-  #       err_msg = f"Could not update job metadata, some things might not be updated"
-  #     )
-
   job_proto.MergeFrom(response)
-  
+
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
   logger.debug(f"Job ID: {job_proto.id}")
@@ -360,5 +349,16 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   except Exception as e:
     logger.error(f"Failed to create job: {e}")
     return
+
+  # write out all the commands for this job
+  logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
+  _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
+  _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
+  _curl = f"curl -X POST https://app.nimblebox.ai/api/v1/workpace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  _webpage = f"https://app.nimblebox.ai/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
+  logger.info(f" [python] - {_api}")
+  logger.info(f"   [curl] - {_curl} -H 'Authorization: Bearer TOKEN'")
+  logger.info(f"    [CLI] - {_cli}")
+  logger.info(f"   [page] -  {_webpage}")
 
   return Job(job_proto.id, job_proto.auth_info.workspace_id)

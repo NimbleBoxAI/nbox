@@ -5,20 +5,22 @@
 
 import os
 
+#nbx nbox_setup/
+
 os.environ["NBOX_LOG_LEVEL"] = "INFO" # Keep it the way you like
 
 from nbox import Operator
 from nbox.hyperloop.job_pb2 import Resource
 
 def get_op() -> Operator:
-  """Function to initialising your job, it might require passing a bunch of arguments.
-  Use this function to get the operator by manually defining things here"""
+
+  job = None # <<< YOUR Operator HERE #
+
+  # confused? uncomment lines below
   # from nbox.nbxlib.ops import Magic
-  # return Magic()
+  # job = Magic()
 
-  # >>> YOUR CODE HERE <<< #
-
-  return
+  return job
 
 def get_resource() -> Resource:
   """Define your pod config here"""
@@ -26,4 +28,10 @@ def get_resource() -> Resource:
     cpu = "100m",         # 100mCPU
     memory = "200Mi",     # MiB
     disk_size = "1Gi",    # GiB
+    gpu = "",             # keep "" for no GPU
+    gpu_count = "",       # keep "" when no GPU
+    timeout = 300_000,    # 300s
+    max_retries = 3,      # third times the charm
   )
+
+#nbx /nbox_setup
