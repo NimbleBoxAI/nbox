@@ -279,35 +279,6 @@ class Instance():
     with open(U.join(NBOX_HOME_DIR, "methods.py"), "w") as f:
       f.write(out["data"])
 
-    sys.path.append(NBOX_HOME_DIR)
-    from methods import __all__ as m_all
-    for m in m_all:
-      trg_name = f"bios_{m}"
-      exec(f"from methods import {m} as {trg_name}")
-      fn = partial(
-        locals()[trg_name],
-        cs_sub = self.compute_server,
-        ws_sub = self.web_server,
-        logger = logger
-      )
-      setattr(self, m, fn)
-
-    # see if any developmental methods are saved locally
-    try:
-      from proto_methods import __all__ as p_all
-      for m in p_all:
-        trg_name = f"bios_{m}"
-        exec(f"from proto_methods import {m} as {trg_name}")
-        fn = partial(
-          locals()[trg_name],
-          cs_sub = self.compute_server,
-          ws_sub = self.web_server,
-          logger = logger
-        )
-        setattr(self, m, fn)
-    except:
-      pass
-
     self.__opened = True
 
   def stop(self):
@@ -482,6 +453,9 @@ class Instance():
     any IDE with checker is dead easy, however the performace guarantee is premium given high
     costs. Thus the logic to parsing these will have to be written as a seperate module.
     """
+    self.__unopened_error()
+    raise NotImplementedError("Core talking method, not implemented yet")
+
     if not self.__opened:
       raise ValueError("Instance is not opened, please call .start() first")
     if not isinstance(x, str):

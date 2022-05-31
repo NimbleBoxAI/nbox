@@ -50,6 +50,7 @@ from .instance import Instance
 from .sub_utils import ssh
 from .framework.autogen import compile
 from .init import nbox_ws_v1
+from nbox import utils as U
 
 def open_home():
   """Open current NBX platform"""

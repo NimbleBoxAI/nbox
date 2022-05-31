@@ -44,13 +44,26 @@ from uuid import uuid4
 from pythonjsonlogger import jsonlogger
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
+class ENVVARS:
+  """
+  Single namespace for all environment variables.
+  
+  #. ``NBOX_LOG_LEVEL``: Logging level for ``nbox``, set ``NBOX_LOG_LEVEL=info|debug|warning"
+  #. ``NBOX_JSON_LOG``: Whether to print json-logs, set ``NBOX_JSON_LOG=1``
+  #. ``NBOX_JOB_FOLDER``: Folder path for the job, set ``NBOX_JOB_FOLDER=/tmp/nbox/jobs"``
+  """
+  NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
+  NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
+  NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
+  NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
+
 
 def get_logger():
   logger = logging.getLogger("utils")
-  lvl = os.getenv("NBOX_LOG_LEVEL", "info").upper()
+  lvl = ENVVARS.NBOX_LOG_LEVEL("info").upper()
   logger.setLevel(getattr(logging, lvl))
 
-  if os.environ.get("NBOX_JSON_LOG", False):
+  if ENVVARS.NBOX_JSON_LOG(False):
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(jsonlogger.JsonFormatter(
       '%(timestamp)s %(levelname)s %(message)s ',
