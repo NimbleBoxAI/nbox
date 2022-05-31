@@ -52,13 +52,17 @@ def _repl_schedule(return_proto: bool = False):
     return cron_instr
   return schedule_proto
 
-def _nbx_job(project_name: str, workspace_id: str = None):
+def _nbx_job(project_name: str):
   # Monday W34 [UTC 12 April, 2022 - 12:00:00]
   _ct = datetime.now(timezone.utc)
   _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
-  created_time = f"{_day} W{_ct.isocalendar().week} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+  created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+  # created_time = None
 
   job_id_or_name = input("> Job ID or name: ")
+  workspace_id = input("> Workspace ID (leave blank for personal): ")
+  if not workspace_id:
+    workspace_id = None
 
   scheduled = None
   logger.info("This job will run on NBX-Jobs")
@@ -100,12 +104,16 @@ def _nbx_job(project_name: str, workspace_id: str = None):
   with open(path, "r") as f, open("README.md", "w") as f2:
     f2.write(jinja2.Template(f.read()).render(**md_data))
 
-def _build_job(project_name, workspace_id):
+def _build_job(project_name):
   _ct = datetime.now(timezone.utc)
   _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
-  created_time = f"{_day} W{_ct.isocalendar().week} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+  created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
 
   project_id = input("> Project ID: ")
+  workspace_id = input("> Workspace ID (leave blank for personal): ")
+  if not workspace_id:
+    workspace_id = None
+
   inst = Instance(i = project_id, workspace_id = workspace_id)
   cpu, gpu_name, gpu_count = None, None, None
   if not inst.status == "RUNNING":
@@ -165,8 +173,8 @@ def _build_job(project_name, workspace_id):
   with open(path, "r") as f, open("README.md", "w") as f2:
     f2.write(jinja2.Template(f.read()).render(**md_data))
 
-def new(project_name, b: bool = False, workspace_id: str = None):
-  """Create a new job, this can be run on NBX-Jobs or on an instance.
+def new(project_name, b: bool = False):
+  """Create a new folder, this can be run on NBX-Jobs or NBX-Deploy.
 
   Args:
     project_name (str): The name of the job folder
@@ -183,14 +191,68 @@ def new(project_name, b: bool = False, workspace_id: str = None):
     raise ValueError(f"Project {project_name} already exists")
 
   fn = _build_job if b else _nbx_job
-  fn(project_name, workspace_id)
+  fn(project_name)
 
   with open("requirements.txt", "w") as f:
     f.write(f"nbox=={__version__}")
 
   logger.debug("Completed")
 
-def get_job_list(workspace_id: str = None):
+def new_model(project_name):
+  """Create a new folder, this can be run on NBX-Jobs or NBX-Deploy.
+
+  Args:
+    project_name (str): The name of the folder
+  """
+  project_name = str(project_name)
+  out = re.findall("^[a-zA-Z0-9_]+$", project_name)
+  if not out:
+    raise ValueError("Folder name can only contain letters and underscore")
+
+  if os.path.exists(project_name):
+    raise ValueError(f"Folder {project_name} already exists")
+
+  # Monday W34 [UTC 12 April, 2022 - 12:00:00]
+  _ct = datetime.now(timezone.utc)
+  _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+  created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+
+  deployment_id_or_name = input("> Deployment ID or name: ")
+
+  logger.info(f"Creating a folder: {project_name}")
+  os.mkdir(project_name)
+  os.chdir(project_name)
+  py_data = dict(
+    deployment_id_or_name = deployment_id_or_name,
+    project_name = project_name,
+    created_time = created_time,
+    scheduled = None,
+    import_string_nbox = None,
+  )
+  py_f_data = {k:v for k,v in py_data.items() if v is not None}
+
+  assets = U.join(U.folder(__file__), "assets")
+  path = U.join(assets, "job_new.jinja")
+  with open(path, "r") as f, open("nbx_user.py", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**py_f_data))
+
+  md_data = dict(
+    project_name = project_name,
+    created_time = created_time,
+    scheduled = False,
+  )
+
+  path = U.join(assets, "job_new_readme.jinja")
+  with open(path, "r") as f, open("README.md", "w") as f2:
+    f2.write(jinja2.Template(f.read()).render(**md_data))
+
+  with open("requirements.txt", "w") as f:
+    f.write(f"nbox=={__version__}")
+
+  logger.info("Process complete")
+
+
+def get_job_list(workspace_id: str = None, sort: str = "name"):
   """Get list of jobs, optionally in a workspace"""
   auth_info = NBXAuthInfo(workspace_id = workspace_id)
   out: ListJobsResponse = rpc(
@@ -206,8 +268,9 @@ def get_job_list(workspace_id: str = None):
 
   # filters = [f.upper() for f in filters]
   headers=list(out["Jobs"][0].keys())
+  sorted_jobs = sorted(out["Jobs"], key = lambda x: x[sort])
   data = []
-  for j in out["Jobs"]:
+  for j in sorted_jobs:
     _row = []
     for x in headers:
       if x == "status":
@@ -249,7 +312,7 @@ class Job:
 
   def change_schedule(self, new_schedule: 'Schedule' = None):
     """Change schedule this job"""
-    logger.info(f"Updating job '{self.job_proto.id}'")
+    logger.debug(f"Updating job '{self.job_proto.id}'")
     if new_schedule == None:
       new_schedule = _repl_schedule(True) # get the information from REPL
     self.job_proto.schedule.MergeFrom(new_schedule.get_message())
@@ -259,7 +322,7 @@ class Job:
       "Could not update job schedule",
       raise_on_error = True
     )
-    logger.info(f"Updated job '{self.job_proto.id}'")
+    logger.debug(f"Updated job '{self.job_proto.id}'")
     self.refresh()
 
   def __repr__(self) -> str:
@@ -272,7 +335,7 @@ class Job:
 
   def logs(self, f = sys.stdout):
     """Stream logs of the job, ``f`` can be anything has a ``.write/.flush`` methods"""
-    logger.info(f"Streaming logs of job '{self.job_proto.id}'")
+    logger.debug(f"Streaming logs of job '{self.job_proto.id}'")
     for job_log in streaming_rpc(
       nbox_grpc_stub.GetJobLogs,
       JobLogsRequest(job = JobInfo(job = self.job_proto)),
@@ -292,13 +355,13 @@ class Job:
 
   def refresh(self):
     """Refresh Job statistics"""
-    logger.info(f"Updating job '{self.job_proto.id}'")
+    logger.debug(f"Updating job '{self.job_proto.id}'")
     self.job_proto: JobProto = rpc(
       nbox_grpc_stub.GetJob, JobInfo(job = self.job_proto), f"Could not get job {self.job_proto.id}"
     )
     self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
     self.job_info.CopyFrom(JobInfo(job = self.job_proto))
-    logger.info(f"Updated job '{self.job_proto.id}'")
+    logger.debug(f"Updated job '{self.job_proto.id}'")
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
@@ -306,7 +369,7 @@ class Job:
     """Manually triger this job"""
     logger.info(f"Triggering job '{self.job_proto.id}'")
     rpc(nbox_grpc_stub.TriggerJob, JobInfo(job=self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
-    logger.info(f"Triggered job '{self.job_proto.id}'")
+    logger.debug(f"Triggered job '{self.job_proto.id}'")
     self.refresh()
 
   def __call__(self):
@@ -320,7 +383,7 @@ class Job:
     job: JobProto = self.job_proto
     job.status = JobProto.Status.PAUSED
     rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
-    logger.info(f"Paused job '{self.job_proto.id}'")
+    logger.debug(f"Paused job '{self.job_proto.id}'")
     self.refresh()
   
   def resume(self):
@@ -329,5 +392,5 @@ class Job:
     job: JobProto = self.job_proto
     job.status = JobProto.Status.SCHEDULED
     rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
-    logger.info(f"Resumed job '{self.job_proto.id}'")
+    logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()

@@ -11,7 +11,10 @@ import requests
 from time import sleep
 from datetime import datetime, timedelta, timezone
 
+import grpc
+
 from google.protobuf.timestamp_pb2 import Timestamp
+from google.protobuf.field_mask_pb2 import FieldMask
 
 from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 from .hyperloop.job_pb2 import Job as JobProto
@@ -158,8 +161,6 @@ def deploy_serving(
     if access_key != None or "failed" in curr_st:
       break
 
-  logger.debug("Process Complete")
-  logger.debug("NBX Deploy")
   return server_endpoint, access_key
 
 class Schedule:
@@ -297,13 +298,34 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   code = JobProto.Code(size = max(file_size, 1), type = JobProto.Code.Type.ZIP)
   job_proto.code.MergeFrom(code)
 
+  # this means that this job already exists, we check if there are some metadata changes
+  job_exists = job_proto.id != ""
+  if job_exists:
+    logger.debug("Found existing job, checking for update masks")
+    old_job_proto = Job(job_proto.id, job_proto.auth_info.workspace_id).job_proto
+    paths = []
+    if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
+      paths.append("resource")
+    if old_job_proto.schedule.cron != job_proto.schedule.cron:
+      paths.append("schedule.cron")
+
+    # update the job
+    if paths:
+      logger.debug(f"Updating paths: {paths}")
+      nbox_grpc_stub.UpdateJob(
+        UpdateJobRequest(
+          job = job_proto, update_mask = FieldMask(paths=paths)
+        ),
+      )
+
+  # UploadJobCode is responsible for uploading the code of the job
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
     UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
     f"Failed to deploy job: {job_proto.id}"
   )
-
   job_proto.MergeFrom(response)
+
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
   logger.debug(f"Job ID: {job_proto.id}")
@@ -315,8 +337,28 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   except:
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
-  
+
   logger.info("Creating new run ...")
-  rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job: {job_proto.id}")
+  try:
+    job: JobProto = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job_proto))
+  except grpc.RpcError as e:
+    if e.code() == grpc.StatusCode.ALREADY_EXISTS:
+      logger.debug(f"Job {job_proto.id} already exists")
+    else:
+      raise e
+  except Exception as e:
+    logger.error(f"Failed to create job: {e}")
+    return
+
+  # write out all the commands for this job
+  logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
+  _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
+  _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
+  _curl = f"curl -X POST https://app.nimblebox.ai/api/v1/workpace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  _webpage = f"https://app.nimblebox.ai/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
+  logger.info(f" [python] - {_api}")
+  logger.info(f"   [curl] - {_curl} -H 'Authorization: Bearer TOKEN'")
+  logger.info(f"    [CLI] - {_cli}")
+  logger.info(f"   [page] -  {_webpage}")
 
   return Job(job_proto.id, job_proto.auth_info.workspace_id)

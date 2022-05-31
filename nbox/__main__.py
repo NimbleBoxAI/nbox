@@ -1,5 +1,4 @@
-from .cli import NBX
-import fire
+from .cli import main
 
 if __name__ == "__main__":
-  fire.Fire(NBX)
+  main()

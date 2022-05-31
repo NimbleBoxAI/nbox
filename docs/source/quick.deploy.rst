@@ -1,26 +1,11 @@
-
-QuickStart with Deployment
+QuickStart with NBX-Deploy
 ==========================
-
-File: `torch_resnet18.py <https://github.com/NimbleBoxAI/nbox/blob/staging/recipes/torch_resnet18.py>`_
 
 Deployment is a major bottleneck for DS/ML engineers to get their systems into production. Unless any
 model is in production there really is no way to complete a project. ``nbox`` as an SDK makes deployment just one
 command, **literally**\ ! 
 
-.. **NOTE:** ``nan`` is not a valid json-able value so we covert that to ``-1.46290``!
-
-When on our platform, first step is to:
-
-
-* open terminal from the App Bar on your left and type the command below, it initialises the ``cuda101`` environment and installs our SDK ``nbox``\ :
-
-.. code-block::
-
-   conda activate cuda101 && pip install nbox
-
-
-* open ``jupyter notebook`` and type the command ``!pip install nbox`` and restart the notebook.
+Open your favorite IDE, whether ``jupyter`` or ``VSCode``. 
 
 First you need to do some imports and you can load your own model, for this tutorial we want to deploy ``torchvision/resnet18``. Loading models is super easy, either use a publicly available models or bring in your own models.
 

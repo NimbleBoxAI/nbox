@@ -11,13 +11,14 @@ Takes in the following arguments:
 """
 
 import os
+import sys
 import ssl
 import socket
-import logging
+import socket
 import threading
-from io import StringIO
-from functools import partial
+import subprocess
 from typing import List
+from functools import partial
 from datetime import datetime, timezone
 
 from nbox.utils import NBOX_HOME_DIR, logger as nbx_logger
@@ -107,23 +108,16 @@ class RSockClient:
     self.log('Client init complete')
 
   def __repr__(self):
-    return f"""RSockClient(
-  connection_id={self.connection_id},
-  client_socket={self.client_socket},
-  user={self.user},
-  subdomain={self.subdomain},
-  instance_port={self.instance_port},
-  auth={self.auth},
-)"""
+    return f"RSockClient({self.subdomain} | {self.connection_id})"
   
-  def log(self, message, level=logging.INFO):
+  def log(self, message, level="INFO"):
     self.logger.info(f"[{self.connection_id}] [{level}] {message}")
   
   def connect_to_rsock_server(self):
     """
     Connects to RSockServer.
     """
-    self.log('Connecting to RSockServer', logging.DEBUG)
+    self.log('Connecting to RSockServer', "DEBUG")
     rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     rsock_socket.connect(('rsock.rc.nimblebox.ai', 886))
 
@@ -146,7 +140,7 @@ class RSockClient:
     if auth == 'OK':
       self.log('Client authenticated')
     else:
-      self.log('Client authentication failed', logging.ERROR)
+      self.log('Client authentication failed', "ERROR")
       self.client_auth = False
       exit(1)
   
@@ -164,7 +158,7 @@ class RSockClient:
       self.client_auth = True
       self.log('Config set')
     else:
-      self.log('Config set failed', logging.ERROR)
+      self.log('Config set failed', "ERROR")
       exit(1)
 
   def connect(self):
@@ -182,7 +176,7 @@ class RSockClient:
       if connect_status == 'OK':
         self.log('Connected to project...')
       else:
-        self.log('Connect failed', logging.ERROR)
+        self.log('Connect failed', "ERROR")
         exit(1)
 
       # start the io_copy loop
@@ -195,7 +189,7 @@ class RSockClient:
       self.rsock_thread.start()
       self.client_thread.start()
     else:
-      self.log('Client authentication failed', logging.ERROR)
+      self.log('Client authentication failed', "ERROR")
       exit(1)
 
   def io_copy(self, direction):
@@ -222,112 +216,126 @@ class RSockClient:
           self.log('{} connection closed'.format(direction))
           break
       except Exception as e:
-        self.log('Error in {} io_copy: {}'.format(direction, e), logging.ERROR)
+        self.log('Error in {} io_copy: {}'.format(direction, e), "ERROR")
         break
 
     self.rsock_thread_running = False
     self.rsock_thread_running = False
     
     self.log('Stopping {} io_copy'.format(direction))
+  
+  def stop(self):
+    """
+    Stops the client.
+    """
+    self.log('Stopping client')
+    self.rsock_thread_running = False
+    self.client_thread_running = False
+    self.client_socket.close()
+    self.rsock_socket.close()
+    self.log('Client stopped')
 
 
-def create_connection(
-  localport: int,
-  user: str,
-  subdomain: str,
-  port: int,
-  file_logger: str,
-  auth: str,
-  notsecure: bool = False,
-):
-  """
-  Args:
-    localport: The port that the client will be listening on.
-    user: The user that the client will be connecting as.
-    subdomain: The subdomain that the client will be connecting to.
-    port: The port that the server will be listening on.
-    auth: The build auth token that the client will be using.
-    notsecure: Whether or not to use SSL.
-  """
-  listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  listen_socket.bind(('localhost', localport))
-  listen_socket.listen(20)
+class ConnectionManager:
+  def __init__(self, user: str, subdomain: str, file_logger: str, auth: str, notsecure: bool = False):
+    """
+    Args:
+      localport: The port that the client will be listening on.
+      user: The user that the client will be connecting as.
+      subdomain: The subdomain that the client will be connecting to.
+      port: The port that the server will be listening on.
+      auth: The build auth token that the client will be using.
+      notsecure: Whether or not to use SSL.
+    """
+    self.user = user
+    self.subdomain = subdomain
+    self.file_logger = file_logger
+    self.auth = auth
+    self.notsecure = notsecure
+    self.connection_id = 0
 
-  connection_id = 0
-  # print(localport, user, subdomain, port, file_logger, auth)
+    self.done = False
+    self.clients = []
+    self.threads = []
 
-  while True:
-    logging.info('Waiting for client')
-    client_socket, _ = listen_socket.accept()
-    logging.info('Client connected')
+  def __repr__(self) -> str:
+    return f"ConnectionManager({self.subdomain}: {len(self.threads)} Connections)"
 
-    connection_id += 1
-    logging.info(f'Total clients connected -> {connection_id}')
+  def add(self, localport, buildport, *, _ssh: bool = True):
+    """
+    Adds a client to the list of clients.
+    """
+    t = threading.Thread(target = self.start, args = (localport, buildport, _ssh))
+    t.start()
+    self.threads.append(t)
 
-    # create the client
-    secure = not notsecure
-    client = RSockClient(connection_id, client_socket, user, subdomain, port, file_logger, auth, secure)
+  def start(self, localport, buildport, _ssh: bool = True):
+    listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    if not _ssh:
+      listen_socket.settimeout(1.0)
+    listen_socket.bind(('localhost', localport))
+    listen_socket.listen(20)
 
-    # start the client
-    client.connect()
+    while not self.done:
+      nbx_logger.debug("Waiting for connection on port {}".format(localport))
+      try:
+        client_socket, _ = listen_socket.accept()
+      except socket.timeout:
+        break
+
+      nbx_logger.debug('Client connected')
+      self.connection_id += 1
+      nbx_logger.debug(f'Total clients connected -> {self.connection_id}')
+
+      # create the client
+      secure = not self.notsecure
+      client = RSockClient(self.connection_id, client_socket, self.user, self.subdomain, buildport, self.file_logger, self.auth, secure)
+      self.clients.append(client)
+
+      # start the client
+      client.connect()
+
+  def quit(self):
+    self.done = False
+    for client in self.clients:
+      client.stop()
+    for thread in self.threads:
+      thread.join()
 
 
 def port_in_use(port: int) -> bool:
-  import socket
   with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     return s.connect_ex(('localhost', port)) == 0
 
 
-def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
-  """the nbox way to SSH into your instance, by default ``"jupyter": 8888 and "mlflow": 5000``
+def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: str, _ssh: bool = True) -> ConnectionManager:
+  def _sanity():
+    if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
+      pass
+    elif sys.platform == "darwin":
+      pass
+    elif sys.platform == "win32":
+      # Windows (either 32-bit or 64-bit)
+      raise Exception("Windows is unsupported platform, raise issue: https://github.com/NimbleBoxAI/nbox/issues")
+    else:
+      raise Exception(f"Unkwown platform '{sys.platform}', raise issue: https://github.com/NimbleBoxAI/nbox/issues")
 
-  Usage:
-    tunn.py 8000 notebook:8000 2000:8001 -i "nbox-dev"
+    # sanity checks because python fire does not handle empty strings
+    if i == "":
+      raise Exception("Instance name cannot be empty")
+    if workspace_id == "":
+      raise Exception("Workspace ID cannot be empty")
 
-  Args:
-    ssh: Local port to connect SSH to
-    *apps_to_ports: A tuple of values ``<app_name/instance_port>:<localport>``.
-      For example, ``jupyter:8888`` or ``2001:8002``
-    i(str): The instance to connect to
-    pwd (str): password to connect to that instance.
-  """
+  _sanity() # run sanity checks
 
-  import sys
-
-  if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
-    pass
-  elif sys.platform == "darwin":
-    pass
-  elif sys.platform == "win32":
-    # Windows (either 32-bit or 64-bit)
-    raise Exception("Windows is unsupported platform, raise issue: https://github.com/NimbleBoxAI/nbox/issues")
-  else:
-    raise Exception(f"Unkwown platform '{sys.platform}', raise issue: https://github.com/NimbleBoxAI/nbox/issues")
-
-  folder = U.join(NBOX_HOME_DIR, "tunnel_logs")
-  os.makedirs(folder, exist_ok=True)
-  filepath = U.join(folder, f"tunnel_{i}.log")
-  file_logger = FileLogger(filepath)
-  nbx_logger.info(f"Logging to {filepath}")
-
-  # ===============
-
-  default_ports = {
-    "jupyter": 1050,
-  }
   apps = {} # <localport-cloudport>
   for ap in apps_to_ports:
-    app, port = ap.split(':')
-    port = int(port)
-    if not app or not port:
-      raise ValueError(f"Invalid app:port pair {ap}")
     try:
-      apps[int(app)] = port
-    except:
-      if app not in default_ports:
-        raise ValueError(f"Unknown '{app}' should be either integer or one of {', ' .join(default_ports.keys())}")
-      apps[port] = default_ports[app]
-  apps[ssh] = 2222 # hard code
+      localport, buildport = ap.split(':')
+      apps[int(localport)] = int(buildport)
+    except ValueError:
+      raise ValueError(f"Incorrect local:build '{ap}', are you passing integers?")
+  apps[port] = 2222 # hard code
 
   ports_used = []
   for k in apps:
@@ -345,31 +353,54 @@ def tunnel(ssh: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     nbx_logger.info(f"nbx build --i '{instance.project_id}' --workspace_id '{workspace_id}' start")
     U.log_and_exit(f"Project {instance.project_id} is not running")
 
+  # create logging for RSock
+  folder = U.join(NBOX_HOME_DIR, "tunnel_logs")
+  os.makedirs(folder, exist_ok=True)
+  filepath = U.join(folder, f"tunnel_{instance.project_id}.log") # consistency with IDs instead of names
+  file_logger = FileLogger(filepath)
+  nbx_logger.info(f"Logging to {filepath}")
+
+  # start the instance with _ssh mode
   instance.start(_ssh = True)
 
-  # create the connection
-  threads = []
-  for localport, cloudport in apps.items():
-    nbx_logger.info(f"Creating connection from {cloudport} -> {localport}")
-    t = threading.Thread(target=create_connection, args=(
-      localport,                       # localport
-      secret.get("username"),          # user
-      instance.open_data.get("url"),   # subdomain
-      cloudport,                       # port
-      file_logger,                     # filelogger
-      instance.open_data.get("token"), # auth
-    ))
-    t.start()
-    threads.append(t)
+  # conman runs threads internally for multiple connections
+  conman = ConnectionManager(
+    file_logger = file_logger,
+    user = secret.get("username"), 
+    subdomain = instance.open_data.get("url"),
+    auth = instance.open_data.get("token"),
+  )
+  for localport, buildport in apps.items():
+    nbx_logger.debug(f"Creating connection from NBX:{buildport} -> local:{localport}")
+    conman.add(localport, buildport, _ssh = _ssh)
+  return conman
+
+
+def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
+  """the nbox way to SSH into your instance.
+
+  Usage:
+    tunn.py 8000 -i "nbox-dev"
+
+  Args:
+    port: Local port for terminal
+    *apps_to_ports: A tuple of values `buildport:localport`. For example, ``jupyter:8888`` or ``2001:8002``
+    i(str): The instance to connect to
+    pwd (str): password to connect to that instance.
+  """
+  
+  connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)
 
   try:
-    # start the ssh connection on terminal
-    import subprocess
+    # start the ssh connection on terminal    
+    # there is more to know about passing shell = True, see:
+    # https://medium.com/python-pandemonium/a-trap-of-shell-true-in-the-subprocess-module-6db7fc66cdfd
+    # https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess
     nbx_logger.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
-    subprocess.call(f'ssh -p {ssh} ubuntu@localhost', shell=True)
+    subprocess.call(f'ssh -p {port} ubuntu@localhost', shell=True)
   except KeyboardInterrupt:
     nbx_logger.info("KeyboardInterrupt, closing connections")
-    for t in threads:
-      t.join()
+    connection.quit()
 
+  connection.quit()
   sys.exit(0) # graceful exit

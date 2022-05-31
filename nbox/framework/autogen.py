@@ -7,14 +7,18 @@ from textwrap import indent
 from typing import Callable, List
 from datetime import datetime, timezone
 
-from .. import utils as U
-from ..utils import logger
+from nbox.framework.model_spec_pb2 import ModelSpec
+
+from nbox import utils as U
+from nbox.utils import logger
 
 class MLFrameworkRegistry:
   def __init__(self):
     self.stub_classes = {}
     self.conditional_fns = {}
     self.repr_string = []
+
+    self.packages = {}
 
   def __repr__(self) -> str:
     return f"< nbox.framework.{self.__class__.__qualname__}\n" + \
@@ -29,6 +33,62 @@ class MLFrameworkRegistry:
       self.conditional_fns[framework] = fn
       return fn
     return _wrapper
+
+  def register_package(
+    package_name: str,
+    conditional_fn: Callable,
+    requirements_txt: List[str],
+  ):
+    # registers a package and supporting items
+    pass
+
+  def register_deserializer(
+    package_name: str,
+    framework_name: str,
+    stub_name: str,
+    stub_function_import_string: str,
+  ):
+    # these are the set of functions that are used to import a model into nbox.Model like
+    # nbox.Model.from_xxx(...)
+
+    """
+    Ex. Importing from torchscript
+
+    package_name = "torch"
+    framework_name = "torchscript"
+    stub_name = "TorchScriptLoad"
+    stub_function_import_string = "from torch.jit import load"
+
+    nbox.Model.from_torchscript(
+      TorchScriptLoad(...), # <-- "load" fn arguments converted to a stub
+      NboxOptions(...),     #
+    )
+    """
+    pass
+
+  def register_serializer(
+    package_name: str,
+    framework_name: str,
+    stub_name: str,
+    stub_function_import_string: str,
+  ) -> ModelSpec:
+    # these are the set of functions that are used to export a nbox.Model object to some other format
+    # nbox.Model.to_xxx(...)
+
+    """
+    Ex: Exporting torch to torchscript
+
+    package_name = "torch"
+    framework_name = "torchscript"
+    stub_name = "TorchToTorchScript"
+    stub_function_import_string = "from torch.jit import trace"
+
+    nbox.Model.to_torchscript(
+      TorchToTorchScript(...), # <-- "trace" fn arguments converted to a stub
+      NboxOptions(...),        # 
+    )
+    """
+    pass
 
   def register(
     self,
