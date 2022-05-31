@@ -6,7 +6,7 @@ import os
 from nbox.jobs import Job
 
 from ..auth import secret
-from ..utils import logger
+from ..utils import logger, ENVVARS
 from .. import utils as U
 from ..init import nbox_grpc_stub
 from ..hyperloop.dag_pb2 import Node
@@ -21,7 +21,7 @@ class Tracer:
       self.network_tracer = False
       return
     
-    init_folder = os.getenv("NBOX_JOB_FOLDER", None)
+    init_folder = ENVVARS.NBOX_JOB_FOLDER(None)
     if init_folder == None:
       raise RuntimeError("NBOX_JOB_FOLDER not set")
     if not os.path.exists(init_folder):

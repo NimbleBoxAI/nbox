@@ -15,8 +15,7 @@ import requests
 import webbrowser
 from getpass import getpass
 
-from .utils import join, NBOX_HOME_DIR, isthere, logger
-from .subway import Subway
+from .utils import join, NBOX_HOME_DIR, isthere, logger, ENVVARS
 
 # ------ AWS Auth ------ #
 
@@ -243,6 +242,8 @@ class NBXClient:
 
 def init_secret():
   # add any logic here for creating secrets
-  return NBXClient()
+  if not ENVVARS.NBOX_NO_AUTH(False):
+    return NBXClient()
+  return None
 
 secret = init_secret()

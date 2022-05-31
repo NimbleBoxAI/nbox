@@ -44,13 +44,26 @@ from uuid import uuid4
 from pythonjsonlogger import jsonlogger
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
+class ENVVARS:
+  """
+  Single namespace for all environment variables.
+  
+  #. ``NBOX_LOG_LEVEL``: Logging level for ``nbox``, set ``NBOX_LOG_LEVEL=info|debug|warning"
+  #. ``NBOX_JSON_LOG``: Whether to print json-logs, set ``NBOX_JSON_LOG=1``
+  #. ``NBOX_JOB_FOLDER``: Folder path for the job, set ``NBOX_JOB_FOLDER=/tmp/nbox/jobs"``
+  """
+  NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
+  NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
+  NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
+  NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
+
 
 def get_logger():
   logger = logging.getLogger("utils")
-  lvl = os.getenv("NBOX_LOG_LEVEL", "info").upper()
+  lvl = ENVVARS.NBOX_LOG_LEVEL("info").upper()
   logger.setLevel(getattr(logging, lvl))
 
-  if os.environ.get("NBOX_JSON_LOG", False):
+  if ENVVARS.NBOX_JSON_LOG(False):
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(jsonlogger.JsonFormatter(
       '%(timestamp)s %(levelname)s %(message)s ',
@@ -273,7 +286,7 @@ def convert_to_list(x):
 # pool/
 
 class PoolBranch:
-  def __init__(self, mode = "thread", max_workers = 2):
+  def __init__(self, mode = "thread", max_workers = 2, _name: str = None):
     """Threading is hard, your brain is not wired to handle parallelism. You are a blocking
     python program. So a blocking function for you. There are some conditions:
 
@@ -333,7 +346,7 @@ class PoolBranch:
     self.mode = mode
     self.item_id = -1 # because +1 later
     self.futures = {}
-    self._name = get_random_name(True)
+    self._name = _name or get_random_name(True)
 
     if mode == "thread":
       self.executor = ThreadPoolExecutor(
@@ -388,64 +401,3 @@ class PoolBranch:
     return res
 
 # /pool
-
-# --- classes
-
-# this needs to be redone
-# # Console is a rich console wrapper for beautifying statuses
-# class Console:
-#   T = SimpleNamespace(
-#     clk="deep_sky_blue1", # timer
-#     st="bold dark_cyan", # status + print
-#     fail="bold red", # fail
-#     inp="bold yellow", # in-progress
-#     nbx="bold bright_black", # text with NBX at top and bottom
-#     rule="dark_cyan", # ruler at top and bottom
-#     spinner="weather", # status theme
-#   )
-#
-#   def __init__(self):
-#     self.c = richConsole()
-#     self._in_status = False
-#     self.__reset()
-#
-#   def rule(self, title: str):
-#     self.c.rule(f"[{self.T.nbx}]{title}[/{self.T.nbx}]", style=self.T.rule)
-#
-#   def __reset(self):
-#     self.st = time()
-#
-#   def __call__(self, x, *y):
-#     cont = " ".join([str(x)] + [str(_y) for _y in y])
-#     if not self._in_status:
-#       self._log(cont)
-#     else:
-#       self._update(cont)
-#
-#   def sleep(self, t: int):
-#     for i in range(t):
-#       self(f"Sleeping for {t-i}s ...")
-#       _sleep(1)
-#
-#   def _log(self, x, *y):
-#     cont = " ".join([str(x)] + [str(_y) for _y in y])
-#     t = str(timedelta(seconds=int(time() - self.st)))[2:]
-#     self.c.print(f"[[{self.T.clk}]{t}[/{self.T.clk}]] {cont}")
-#
-#   def start(self, x="", *y):
-#     self.__reset()
-#     cont = " ".join([str(x)] + [str(_y) for _y in y])
-#     self.status = self.c.status(f"[{self.T.st}]{cont}[/{self.T.st}]", spinner=self.T.spinner)
-#     self.status.start()
-#     self._in_status = True
-#
-#   def _update(self, x, *y):
-#     t = str(timedelta(seconds=int(time() - self.st)))[2:]
-#     cont = " ".join([str(x)] + [str(_y) for _y in y])
-#     self.status.update(f"[[{self.T.clk}]{t}[/{self.T.clk}]] [{self.T.st}]{cont}[/{self.T.st}]")
-#
-#   def stop(self, x):
-#     self.status.stop()
-#     del self.status
-#     self._log(x)
-#     self._in_status = False

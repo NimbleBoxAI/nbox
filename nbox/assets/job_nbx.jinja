@@ -16,7 +16,7 @@ import fire
 # of correct env vars, the first import is made in the user stub
 os.environ["NBOX_JOB_FOLDER"] = os.getcwd() # Do not touch
 
-from nbx_user import get_op # << nbox imported here, fill all envs here
+from nbx_user import get_op, get_resource # << nbox imported here, fill all envs here
 
 import nbox.utils as U
 from nbox.nbxlib.tracer import Tracer
@@ -52,6 +52,7 @@ from nbox.messages import get_current_timestamp
     job_id_or_name = '{{job_id_or_name}}',{%if workspace_id%}
     workspace_id = '{{workspace_id}}',{%endif%}{% if scheduled %}
     schedule = {{scheduled}},{% endif %}
+    resource = get_resource(), # use whatever the user has defined
 
     init_folder = U.folder(__file__), # ! ~ do not change this
   )

@@ -4,6 +4,7 @@ the machine (start, stop, etc.), can be used to transfer files to and from the m
 and to an extent running and managing programs (WIP).
 """
 
+import os
 import sys
 import time
 import shlex
@@ -11,6 +12,7 @@ from typing import List
 from functools import partial
 from tabulate import tabulate
 from tempfile import gettempdir
+from subprocess import PIPE, run
 from requests.sessions import Session
 
 from .subway import SpecSubway,  TIMEOUT_CALLS
@@ -21,10 +23,12 @@ from .auth import secret
 
 
 ################################################################################
+'''
 # NBX-Instances Functions
-# =======================
-# The methods below are used to talk to the Webserver APIs and other methods
-# make the entire process functional.
+
+The methods below are used to talk to the Webserver APIs and other methods
+make the entire process functional.
+'''
 ################################################################################
 
 def print_status(workspace_id: str = None, fields: List[str] = None):
@@ -46,10 +50,12 @@ def print_status(workspace_id: str = None, fields: List[str] = None):
     logger.info(x)
 
 ################################################################################
-# NimbleBox.ai Instances
-# ======================
-# NBX-Instances is compute abstracted away to get the best hardware for your
-# task. To that end each Instance from the platform is a single class.
+'''
+# NimbleBox Build
+
+NBX-Instances is compute abstracted away to get the best hardware for your
+task. To that end each Instance from the platform is a single class.
+'''
 ################################################################################
 
 class Instance():
@@ -77,6 +83,7 @@ class Instance():
     # simply add useful keys to the instance
     self.project_id: str = None
     self.project_name: str = None
+    self.workspace_id: str = workspace_id
     self.size_used: float = None
     self.size: float = None
     self.state: str = None
@@ -124,25 +131,84 @@ class Instance():
   def __repr__(self):
     return f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys + ['cs_url']])})>"
 
+  """
+  # Classmethods (WIP)
+
+  Functions to create instances.
+  """
+
   @classmethod
   def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
     if workspace_id == None:
       stub_all_projects = nbox_ws_v1.user.projects
     else:
       stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
-    out = stub_all_projects(_method = "post", project_name = project_name, storage_limit = storage_limit, project_type = project_type,
-    github_branch = "", github_link = "", template_id = 0, clone_id = 0
+    out = stub_all_projects(
+      _method = "post",
+      project_name = project_name,
+      storage_limit = storage_limit,
+      project_type = project_type,
+      github_branch = "",
+      github_link = "",
+      template_id = 0,
+      clone_id = 0
   )
-    print(out)
-    # return cls(project_name, url)
+    
+    return out
 
-  mv = None # atleast registered
+  ################################################################################
+  """
+  # State Methods
+
+  Functions here are responsible for managing the states (metadata + turn on/off) of the instances.
+  """
+  ################################################################################
+
+  def is_running(self) -> bool:
+    """Check if the instance is running.
+
+    Returns:
+        bool: True if the instance is running, False otherwise.
+    """
+    return self.state == "RUNNING"
 
   def refresh(self):
     """Update the data, get latest state"""
     self.data = self.stub_ws_instance()["data"] # GET /user/projects/{project_id}
     for k in self.useful_keys:
       setattr(self, k, self.data[k])
+
+  def _start(self, cpu, gpu, gpu_count, auto_shutdown, dedicated_hw, zone):
+    """Turn on the the unserlying compute"""
+    logger.info(f"Starting instance {self.project_name} ({self.project_id})")
+    hw_config = {
+      "cpu":f"n1-standard-{cpu}"
+    }
+    if gpu_count > 0:
+      hw_config["gpu"] = f"nvidia-tesla-{gpu}"
+      hw_config["gpu_count"] = gpu_count
+    else:
+      # things nimblebox does, for nimblebox reasons
+      hw_config["gpu"] = 'null'
+
+    self.stub_ws_instance.start(
+      auto_shutdown = auto_shutdown == 0,
+      auto_shutdown_value = auto_shutdown,
+      dedicated_hw = dedicated_hw,
+      hw = "cpu" if gpu_count == 0 else "gpu",
+      hw_config = hw_config,
+      zone = zone
+    )
+
+    logger.info(f"Waiting for instance {self.project_name} ({self.project_id}) to start ...")
+    _i = 0
+    while self.state != "RUNNING":
+      time.sleep(5)
+      self.refresh()
+      _i += 1
+      if _i > TIMEOUT_CALLS:
+        raise TimeoutError("Instance did not start within timeout, please check dashboard")
+    logger.info(f"Instance {self.project_name} ({self.project_id}) started")
 
   def start(
     self,
@@ -157,6 +223,8 @@ class Instance():
   ):
     """Start instance if not already running and loads APIs from the compute server.
 
+    Actual start is implemented in `_start` method, this combines other things 
+
     Args:
         cpu (int, optional): CPU count should be one of ``[2, 4, 8]``
         gpu (str, optional): GPU name should be one of ``["t5", "p100", "v100", "k80"]``
@@ -166,43 +234,15 @@ class Instance():
         zone (str, optional): GCP cloud regions, defaults to "asia-south-1".
     """
     if _ssh:
-      # need to move to app.rc.
-      self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
+      if "app.nimblebox.ai" in self.stub_ws_instance._url:
+        self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
 
     if auto_shutdown < 0:
       raise ValueError("auto_shutdown must be a positive integer (hours)")
     gpu_count = int(gpu_count)
 
     if not self.state == "RUNNING":
-      logger.info(f"Starting instance {self.project_name} ({self.project_id})")
-      hw_config = {
-        "cpu":f"n1-standard-{cpu}"
-      }
-      if gpu_count > 0:
-        hw_config["gpu"] = f"nvidia-tesla-{gpu}"
-        hw_config["gpu_count"] = gpu_count
-      else:
-        # things nimblebox does, for nimblebox reasons
-        hw_config["gpu"] = 'null'
-
-      self.stub_ws_instance.start(
-        auto_shutdown = auto_shutdown == 0,
-        auto_shutdown_value = auto_shutdown,
-        dedicated_hw = dedicated_hw,
-        hw = "cpu" if gpu_count == 0 else "gpu",
-        hw_config = hw_config,
-        zone = zone
-      )
-
-      logger.info(f"Waiting for instance {self.project_name} ({self.project_id}) to start ...")
-      _i = 0
-      while self.state != "RUNNING":
-        time.sleep(5)
-        self.refresh()
-        _i += 1
-        if _i > TIMEOUT_CALLS:
-          raise TimeoutError("Instance did not start within timeout, please check dashboard")
-      logger.info(f"Instance {self.project_name} ({self.project_id}) started")
+      self._start(cpu, gpu, gpu_count, auto_shutdown, dedicated_hw, zone)
     else:
       # TODO: @yashbonde: inform user in case of hardware mismatch?
       logger.info(f"Instance {self.project_name} ({self.project_id}) is already running")
@@ -239,35 +279,6 @@ class Instance():
     with open(U.join(NBOX_HOME_DIR, "methods.py"), "w") as f:
       f.write(out["data"])
 
-    sys.path.append(NBOX_HOME_DIR)
-    from methods import __all__ as m_all
-    for m in m_all:
-      trg_name = f"bios_{m}"
-      exec(f"from methods import {m} as {trg_name}")
-      fn = partial(
-        locals()[trg_name],
-        cs_sub = self.compute_server,
-        ws_sub = self.web_server,
-        logger = logger
-      )
-      setattr(self, m, fn)
-
-    # see if any developmental methods are saved locally
-    try:
-      from proto_methods import __all__ as p_all
-      for m in p_all:
-        trg_name = f"bios_{m}"
-        exec(f"from proto_methods import {m} as {trg_name}")
-        fn = partial(
-          locals()[trg_name],
-          cs_sub = self.compute_server,
-          ws_sub = self.web_server,
-          logger = logger
-        )
-        setattr(self, m, fn)
-    except:
-      pass
-
     self.__opened = True
 
   def stop(self):
@@ -294,7 +305,7 @@ class Instance():
     self.__opened = False
 
   def delete(self, force = False):
-    """Delete Instance"""
+    """With great power comes great responsibility."""
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
     logger.warning(f"Deleting instance {self.project_name} ({self.project_id})")
@@ -303,15 +314,127 @@ class Instance():
     else:
       logger.warning("Aborted")
 
-  def run_py(self, fp: str, *args, write_fp = sys.stdout):
-    """Run any python file
+  ################################################################################
+  """
+  # Interaction Methods
+
+  Doing things with the project-build.
+  """
+  ################################################################################
+
+  def __unopened_error(self):
+    if not self.__opened:
+      logger.error("You are trying to move files to a NOT-RUNNING instance, you will have to start the instance first:")
+      logger.error('    -         nbox.Instance(...).start(...)')
+      logger.error('    - python3 -m nbox build ... start ...')
+      raise ValueError("Instance is not opened, please call .open() first")
+
+  def __run_command(self, comm: str, port: int) -> str:
+    from nbox.sub_utils.ssh import _create_threads
+    connection = _create_threads(port, i = self.project_id, workspace_id = self.workspace_id, _ssh = False)
+    try:
+      command = shlex.split(comm)
+      logger.info(f"Running command: {comm}")
+      result = run(command, stdout=PIPE, stderr=PIPE, universal_newlines=True)
+      result = result.stdout
+    except KeyboardInterrupt:
+      logger.info("KeyboardInterrupt, closing connections")
+      result = ""
+    connection.quit()
+    return result
+
+  def ls(self, path: str, *, port: int = 6174):
+    """
+    List files in a directory relative to '/home/ubuntu/project'
+
+    ```
+    [nbox API] - nbox.Instance(...).ls("/)
+    [nbox CLI] - python3 -m nbox build ... ls /
+    ```
+    """
+    self.__unopened_error()
+
+    if path == "":
+      raise ValueError("Path cannot be empty")
+    path = "/home/ubuntu/project/" + path.strip("/")
+
+    # RPC
+    logger.info(f"Looking in folder: {path}")
+    result = self.__run_command(f"ssh -p {port} ubuntu@localhost 'ls -l {path}'", port)
+    return result
+
+  def mv(self, src: str, dst: str, force: bool = False, *, port: int = 6174):
+    """
+    Move files to and fro NBX-Build.
     
-    EXPERIMENTAL: FEATURES MIGHT BREAK"""
-    fp = fp.replace("nbx://", "/mnt/disks/user/project/")
-    pid = self(fp)
-    from time import sleep
-    while self(pid) == "running":
-      sleep(10)
+    Use 'nbx://' as prefix for Instance, all files will be placed relative to
+    "/home/ubuntu/project/" folder.
+    """
+    self.__unopened_error()
+
+    src_is_cloud = src.startswith("nbx://")
+    dst_is_cloud = dst.startswith("nbx://")
+
+    if src_is_cloud and dst_is_cloud:
+      raise ValueError("Cannot move files between two instances")
+    if not src_is_cloud and not dst_is_cloud:
+      raise ValueError("Cannot move files on your machine")
+    elif src_is_cloud:
+      if os.path.exists(dst) and not force:
+        raise ValueError(f"Source file '{dst}' already exists, pass force=True to overwrite")
+    elif dst_is_cloud:
+      assert os.path.exists(src), f"Source file '{src}' does not exist"
+    
+    # check if this file already exists
+    cloud_file = src if src_is_cloud else dst
+    cloud_file = cloud_file.replace("nbx://", "")
+
+    ls_res = self.ls(cloud_file)
+    logger.info(f"ls_res: {ls_res}")
+    if ls_res:
+      logger.info(f"File {cloud_file} already exists")
+      if not force:
+        logger.error("Aborted, use --force to override")
+        return
+      logger.info("Overriding file")
+
+    src = "/home/ubuntu/project/" + src[6:] if src_is_cloud else src
+    dst = "/home/ubuntu/project/" + dst[6:] if dst_is_cloud else dst
+
+    src_folder = os.path.isdir(src) if not src_is_cloud else os.path.isdir(src)
+    src_folder = "-r" if src_folder else ""
+
+    # RPC
+    logger.info(f"Moving {src} to {dst}")
+    result = self.__run_command(f'scp {src_folder} -P {port} {src} localhost:{dst}', port)
+    return result
+
+  def rm(self, file: str, *, port: int = 6174):
+    """
+    Remove file from NBX-Build.
+    """
+    self.__unopened_error()
+
+    if not file.startswith("nbx://"):
+      raise ValueError("File must be on NBX-Build, try adding 'nbx://' to start!")
+    file = "/home/ubuntu/project/" + file.replace("nbx://", "")
+
+    # RPC
+    logger.info(f"Removing file: {file}")
+    result = self.__run_command(f"ssh -p {port} ubuntu@localhost 'rm {file}'", port)
+    return result
+
+  def remote(self, x: str, *, port: int = 6174):
+    """
+    Run any command using SSH, in the underlying system it will setup a SSH connection and execute
+    any command.
+    """
+    self.__unopened_error()
+
+    # RPC
+    logger.info(f"Running command: {x}")
+    result = self.__run_command(f"ssh -p {port} ubuntu@localhost '{x}'", port)
+    return result
 
   def __call__(self, x: str):
     """EXPERIMENTAL: FEATURES MIGHT BREAK
@@ -330,6 +453,9 @@ class Instance():
     any IDE with checker is dead easy, however the performace guarantee is premium given high
     costs. Thus the logic to parsing these will have to be written as a seperate module.
     """
+    self.__unopened_error()
+    raise NotImplementedError("Core talking method, not implemented yet")
+
     if not self.__opened:
       raise ValueError("Instance is not opened, please call .start() first")
     if not isinstance(x, str):
