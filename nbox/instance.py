@@ -218,10 +218,6 @@ class Instance():
     }
     self.__opened = True
 
-  def _prepare_for_rc(self):
-    if "app.nimblebox.ai" in self.stub_ws_instance._url:
-      self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
-
   # def _revert_to_app(self):
   #   if "app.rc." in self.stub_ws_instance._url:
   #     self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.rc.", "app.")
@@ -324,9 +320,9 @@ class Instance():
     file_logger = FileLogger(filepath)
     logger.debug(f"Logging RSock server to {filepath}")
 
-    if "app.nimblebox.ai" in self.stub_ws_instance._url:
-      self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
-      self._open() # open using the updated URL
+    # if "app.nimblebox.ai" in self.stub_ws_instance._url:
+    #   self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.", "app.rc.")
+    self._open() # open using the updated URL
 
     conman = ConnectionManager(
       file_logger = file_logger,

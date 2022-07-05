@@ -120,7 +120,7 @@ class RSockClient:
     """
     self.log('Connecting to RSockServer', "DEBUG")
     rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    rsock_socket.connect(('rsock.rc.nimblebox.ai', 886))
+    rsock_socket.connect(('rsock.nimblebox.ai', 886))
 
     if self.secure:
       self.log('Starting SSL')
