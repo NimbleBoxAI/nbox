@@ -107,19 +107,19 @@ Here's documentation to the code:
 
 import os
 import tarfile
-from typing import Any, Dict, Union
 from types import SimpleNamespace
+from typing import Any, Dict, Union
 
 
-from . import utils as U
-from .utils import logger
-from .init import nbox_ws_v1
-from .network import deploy_serving
-from .instance import Instance
-from .subway import NboxModelSubway
-from .framework import get_model_functions
-from .framework import ModelSpec, Deployment, NboxOptions
-from .messages import message_to_json, dict_to_message
+import nbox.utils as U
+from nbox.utils import logger
+from nbox.init import nbox_ws_v1
+from nbox.instance import Instance
+from nbox.network import deploy_serving
+from nbox.subway import NboxModelSubway
+from nbox.framework import get_model_functions
+from nbox.messages import message_to_json, dict_to_message
+from nbox.framework import ModelSpec, Deployment, NboxOptions
 
 # model/
 
@@ -274,7 +274,7 @@ class Model:
 
     deployments = list(filter(
       lambda x: x["deployment_id"] == deployment_id_or_name or x["deployment_name"] == deployment_id_or_name,
-      stub_all_depl()["data"]
+      stub_all_depl()
     ))
     if len(deployments) == 0:
       logger.warning(f"No deployment found with id '{deployment_id_or_name}', creating one with same name")

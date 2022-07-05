@@ -7,161 +7,30 @@ manages the quirkyness of our backend and packs multiple steps as one function.
 """
 
 import os
-import requests
-from time import sleep
-from datetime import datetime, timedelta, timezone
-
+import re
 import grpc
-
+import jinja2
+import fnmatch
+import zipfile
+import requests
+from tempfile import gettempdir
+from datetime import datetime, timedelta, timezone
 from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.field_mask_pb2 import FieldMask
 
-from .hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
-from .hyperloop.job_pb2 import Job as JobProto
-
-from .init import nbox_grpc_stub
-from .auth import secret
-from .jobs import Job
-from .messages import message_to_dict, rpc
-from .framework.model_spec_pb2 import ModelSpec
-from .subway import Sub30
-from .utils import logger
-from . import utils as U
-from .hyperloop.job_pb2 import Job as JobProto
-
+import nbox.utils as U
+from nbox.auth import secret
+from nbox.utils import logger
+from nbox.version import __version__
+from nbox.hyperloop.dag_pb2 import DAG
+from nbox.init import nbox_ws_v1, nbox_grpc_stub
+from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from nbox.messages import rpc, write_string_to_file, get_current_timestamp
+from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 
 class NBXAPIError(Exception):
   pass
 
-
-def deploy_serving(
-  export_model_path,
-  stub_all_depl: Sub30,
-  model_spec: ModelSpec,
-  wait_for_deployment=False,
-):
-  """One-Click-Deploy API to serve items on a NBX-Deploy
-
-  Args:
-    export_model_path (str): path to the file to upload
-    stub_all_depl (nbox.Sub30): Subway RPC stub for ``/deployments``
-    model_spec (nbox.ModelSpec): ModelSpec object
-    wait_for_deployment (bool, optional): if true, acts like a blocking call (sync vs async)
-
-  Returns:
-    if ``wait_for_deployment == True`` returns ``(url, key)`` pair
-  """
-  logger.info(f"stub_all_depl: {stub_all_depl}")
-  from nbox.auth import secret # it can refresh so add it in the method
-  access_token = secret.get("access_token")
-  URL = secret.get("nbx_url")
-
-  # intialise the console logger
-  logger.debug("-" * 30 + " NBX Deploy " + "-" * 30)
-  logger.debug(f"Deploying on URL: {URL}")
-  deployment_type = "nbox" # model_spec.deploy.type
-  deployment_id = model_spec.deploy.id
-  deployment_name = model_spec.deploy.name
-  model_name = model_spec.name
-
-  logger.debug(f"Deployment Type: '{deployment_type}', Deployment ID: '{deployment_id}'")
-
-  if not deployment_id and not deployment_name:
-    logger.debug("Deployment ID not passed will create a new deployment with name >>")
-    deployment_name = U.get_random_name().replace("-", "_")
-
-  file_size = os.stat(export_model_path).st_size // (1024 ** 2) # because in MB
-  logger.debug(
-    f"Deployment Name: '{deployment_name}', Model Name: '{model_name}', Model Path: '{export_model_path}', file_size: {file_size} MBs"
-  )
-  logger.debug("Getting bucket URL")
-
-  # get bucket URL and upload the data
-  out = stub_all_depl.u(deployment_id).get_upload_url(
-    _method = "put",
-    convert_args = "",
-    deployment_meta = {},
-    deployment_name = deployment_name,
-    deployment_type = deployment_type, # "nbox" or "ovms2"
-    file_size = str(file_size),
-    file_type = "nbox",
-    model_name = model_name,
-    nbox_meta = message_to_dict(model_spec) , # message_to_json(model_spec), # annoying, but otherwise only the first key would be sent
-    # deployment_id = deployment_id,
-  )
-  model_id = out["fields"]["x-amz-meta-model_id"]
-  deployment_id = out["fields"]["x-amz-meta-deployment_id"]
-  logger.debug(f"model_id: {model_id}")
-  logger.debug(f"deployment_id: {deployment_id}")
-
-  # upload the file to a S3 -> don't raise for status here
-  logger.debug("Uploading model to S3 ...")
-  r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(export_model_path, "rb"))})
-
-  # checking if file is successfully uploaded on S3 and tell webserver
-  # whether upload is completed or not because client tells
-  ws_stub_model = stub_all_depl.u(model_spec.deploy.id).models.u(model_id) # eager create the stub
-  ws_stub_model.update(_method = "post", status = r.status_code == 204)
-
-  # polling
-  endpoint = None
-  _stat_done = [] # status calls performed
-  total_retries = 0 # number of hits it took
-  access_key = None # this key is used for calling the model
-  logger.debug(f"Check your deployment at {URL}/oneclick")
-  if not wait_for_deployment:
-    logger.debug("NBX Deploy")
-    return endpoint, access_key
-
-  logger.debug("Start Polling ...")
-  while True:
-    total_retries += 1
-
-    # don't keep polling for very long, kill after sometime
-    if total_retries > 50 and not wait_for_deployment:
-      logger.debug(f"Stopping polling, please check status at: {URL}/oneclick")
-      break
-
-    sleep(5)
-
-    # get the status update
-    logger.debug(f"Getting updates ...")
-    updates = ws_stub_model.history()["data"]
-    for st in updates["model_history"]:
-      curr_st = st["status"]
-      logger.debug(f"Status: {curr_st}")
-      if curr_st in _stat_done:
-        continue
-      logger.info(f"Status: {curr_st}")
-      _stat_done.append(curr_st)
-
-    if curr_st == "deployment.success":
-      # if we do not have api key then query web server for it
-      if access_key is None:
-        server_endpoint = updates["model_data"]["api_url"]
-        if server_endpoint is None:
-          if wait_for_deployment:
-            continue
-          logger.debug("Deployment in progress ...")
-          logger.debug(f"Endpoint to be setup, please check status at: {URL}/oneclick")
-          break
-
-    elif curr_st == "deployment.ready":
-      out = stub_all_depl.u(model_spec.deploy.id).get_access_key()["data"]
-      access_key = out["access_key"]
-
-      # keep hitting /metadata and see if model is ready or not
-      r = requests.get(url=f"{server_endpoint}/metadata", headers={"NBX-KEY": access_key, "Authorization": f"Bearer {access_token}"})
-      if r.status_code == 200:
-        logger.info(f"Model is ready")
-        break
-
-    # actual break condition happens here: bug in webserver where it does not return ready
-    # curr_st == "ready"
-    if access_key != None or "failed" in curr_st:
-      break
-
-  return server_endpoint, access_key
 
 class Schedule:
   _days = {
@@ -230,7 +99,7 @@ class Schedule:
     elif self.hour != None:
       assert self.hour in list(range(0, 24)), f"Hour must be in range 0-23, got {self.hour}"
       self.mode = "every"
-      self.minute = "*"
+      self.minute = datetime.now(timezone.utc).strftime("%m") # run every this minute past this hour
       self.hour = f"*/{self.hour}"
     elif self.minute != None:
       self.hour = self.minute // 60
@@ -278,29 +147,171 @@ class Schedule:
     return str(self.get_dict())
 
 
-def deploy_job(zip_path: str, job_proto: JobProto):
-  """Deploy an NBX-Job
+def deploy_serving(
+  init_folder: str,
+  deployment_id_or_name: str,
+  workspace_id: str = None,
+  resource: Resource = None,
+  wait_for_deployment: bool = False,
+  *,
+  _unittest = False
+):
+  """Use the NBX-Deploy Infrastructure"""
+  # check if this is a valid folder or not
+  if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
+    raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+  
+  # filter and get "id" and "name"
+  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
+  all_jobs = stub_all_depl()
+  jobs = list(filter(lambda x: x["deployment_id"] == deployment_id_or_name or x["deployment_name"] == deployment_id_or_name, all_jobs))
+  if len(jobs) == 0:
+    logger.info(f"No Job found with ID or name: {deployment_id_or_name}, will create a new one")
+    serving_name =  deployment_id_or_name
+    serving_id = None
+  elif len(jobs) > 1:
+    raise ValueError(f"Multiple jobs found for '{deployment_id_or_name}', try passing ID")
+  else:
+    logger.info(f"Found job with ID or name: {deployment_id_or_name}, will update it")
+    data = jobs[0]
+    serving_name = data["deployment_name"]
+    serving_id = data["deployment_id"]
+
+  logger.info(f"Serving name: {serving_name}")
+  logger.info(f"Serving ID: {serving_id}")
+  model_name = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+  logger.debug(f"Model name: {model_name}")
+
+  # zip init folder
+  zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name)
+  file_size = os.stat(zip_path).st_size # serving in bytes
+
+  # get bucket URL and upload the data
+  out = stub_all_depl.u(serving_id).get_upload_url(
+    _method = "put",
+    convert_args = "",
+    deployment_meta = {},
+    deployment_name = serving_name,
+    deployment_type = "nbox_op", # "nbox" or "ovms2"
+    file_size = str(file_size),
+    file_type = "nbox",
+    model_name = model_name,
+    nbox_meta = {},
+  )
+
+  model_id = out["fields"]["x-amz-meta-model_id"]
+  deployment_id = out["fields"]["x-amz-meta-deployment_id"]
+  logger.debug(f"model_id: {model_id}")
+  logger.debug(f"deployment_id: {deployment_id}")
+
+  # upload the file to a S3 -> don't raise for status here
+  logger.debug("Uploading model to S3 ...")
+  r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(zip_path, "rb"))})
+  status = r.status_code == 204
+  logger.debug(f"Upload status: {status}")
+
+  # checking if file is successfully uploaded on S3 and tell webserver whether upload is completed or not
+  ws_stub_model = stub_all_depl.u(deployment_id).models.u(model_id) # eager create the stub
+  ws_stub_model.update(_method = "post", status = status)
+  logger.debug(f"Webserver informed: {r.status_code}")
+
+  # # write out all the commands for this deployment
+  logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
+  # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
+  # _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
+  # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  # _webpage = f"{secret.get('nbx_url')}/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
+  # logger.info(f" [python] - {_api}")
+  # logger.info(f"    [CLI] - {_cli}")
+  # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
+  # logger.info(f"   [page] - {_webpage}")
+
+
+def deploy_job(
+  init_folder: str,
+  job_id_or_name: str,
+  dag: DAG,
+  workspace_id: str = None,
+  schedule: Schedule = None,
+  resource: Resource = None,
+  *,
+  _unittest = False
+) -> None:
+  """Upload code for a NBX-Job.
 
   Args:
-      zip_path (str): Path to the zip file
-      schedule (Schedule): Schedule of the job
+    init_folder (str, optional): Name the folder to zip
+    job_id_or_name (Union[str, int], optional): Name or ID of the job
+    dag (DAG): DAG to upload
+    workspace_id (str): Workspace ID to deploy to, if not specified, will use the personal workspace
+    schedule (Schedule, optional): If ``None`` will run only once, else will schedule the job
+    cache_dir (str, optional): Folder where to put the zipped file, if ``None`` will be ``tempdir``
   Returns:
-      nbox.Job: the job object
+    Job: Job object
   """
+  # check if this is a valid folder or not
+  if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
+    raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
 
-  URL = secret.get("nbx_url")
-  file_size = int(os.stat(zip_path).st_size // (1024 ** 2)) # in MBs
+  # get stub
+  if workspace_id == None:
+    stub_all_jobs = nbox_ws_v1.user.jobs
+  else:
+    stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
+
+  # filter and get "id" and "name"
+  all_jobs = stub_all_jobs()
+  jobs = list(filter(lambda x: x["job_id"] == job_id_or_name or x["name"] == job_id_or_name, all_jobs))
+  if len(jobs) == 0:
+    logger.info(f"No Job found with ID or name: {job_id_or_name}, will create a new one")
+    job_name =  job_id_or_name
+    job_id = None
+  elif len(jobs) > 1:
+    raise ValueError(f"Multiple jobs found for '{job_id_or_name}', try passing ID")
+  else:
+    logger.info(f"Found job with ID or name: {job_id_or_name}, will update it")
+    data = jobs[0]
+    job_name = data["name"]
+    job_id = data["job_id"]
+  
+  logger.info(f"Job name: {job_name}")
+  logger.info(f"Job ID: {job_id}")
 
   # intialise the console logger
+  URL = secret.get("nbx_url")
+  logger.debug(f"Schedule: {schedule}")
   logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
 
-  code = JobProto.Code(size = max(file_size, 1), type = JobProto.Code.Type.ZIP)
-  job_proto.code.MergeFrom(code)
+  # create the proto for this Operator
+  job_proto = JobProto(
+    id = job_id,
+    name = job_name if job_name else U.get_random_name(True).split("-")[0],
+    created_at = get_current_timestamp(),
+    auth_info = NBXAuthInfo(
+      username = secret.get("username"),
+      workspace_id = workspace_id,
+    ),
+    schedule = schedule.get_message() if schedule != None else None,
+    dag = dag,
+    resource = Resource(
+      cpu = "100m",         # 100mCPU
+      memory = "200Mi",     # MiB
+      disk_size = "1Gi",    # GiB
+    ) if resource == None else resource,
+  )
+  proto_path = U.join(init_folder, "job_proto.pbtxt")
+  write_string_to_file(job_proto, proto_path)
 
-  # this means that this job already exists, we check if there are some metadata changes
-  job_exists = job_proto.id != ""
-  if job_exists:
+  if _unittest:
+    return job_proto
+
+  # zip the entire init folder to zip, this will be response
+  zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id)
+
+  # incase an old job exists, we need to update few things with the new information
+  if job_id != None:
+    from nbox.jobs import Job
     logger.debug("Found existing job, checking for update masks")
     old_job_proto = Job(job_proto.id, job_proto.auth_info.workspace_id).job_proto
     paths = []
@@ -308,15 +319,16 @@ def deploy_job(zip_path: str, job_proto: JobProto):
       paths.append("resource")
     if old_job_proto.schedule.cron != job_proto.schedule.cron:
       paths.append("schedule.cron")
+    logger.debug(f"Updating fields: {paths}")
+    nbox_grpc_stub.UpdateJob(
+      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths)),
+    )
 
-    # update the job
-    if paths:
-      logger.debug(f"Updating paths: {paths}")
-      nbox_grpc_stub.UpdateJob(
-        UpdateJobRequest(
-          job = job_proto, update_mask = FieldMask(paths=paths)
-        ),
-      )
+  # update the JobProto with file sizes
+  job_proto.code.MergeFrom(JobProto.Code(
+    size = max(os.stat(zip_path).st_size / (1024 ** 2), 1), # jobs in MiB
+    type = JobProto.Code.Type.ZIP,
+  ))
 
   # UploadJobCode is responsible for uploading the code of the job
   response: JobProto = rpc(
@@ -325,10 +337,8 @@ def deploy_job(zip_path: str, job_proto: JobProto):
     f"Failed to deploy job: {job_proto.id}"
   )
   job_proto.MergeFrom(response)
-
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
-  logger.debug(f"Job ID: {job_proto.id}")
 
   logger.debug("Uploading model to S3 ...")
   r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
@@ -354,11 +364,72 @@ def deploy_job(zip_path: str, job_proto: JobProto):
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
   _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
-  _curl = f"curl -X POST https://app.nimblebox.ai/api/v1/workpace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
-  _webpage = f"https://app.nimblebox.ai/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
+  _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  _webpage = f"{secret.get('nbx_url')}/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
   logger.info(f" [python] - {_api}")
-  logger.info(f"   [curl] - {_curl} -H 'Authorization: Bearer TOKEN'")
   logger.info(f"    [CLI] - {_cli}")
-  logger.info(f"   [page] -  {_webpage}")
+  logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
+  logger.info(f"   [page] - {_webpage}")
 
-  return Job(job_proto.id, job_proto.auth_info.workspace_id)
+
+def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
+  # zip all the files folder
+  all_f = U.get_files_in_folder(init_folder)
+
+  # find a .nboxignore file and ignore items in it
+  to_ignore_pat = []
+  to_ignore_folder = []
+  for f in all_f:
+    if f.split("/")[-1] == ".nboxignore":
+      with open(f, "r") as _f:
+        for pat in _f:
+          pat = pat.strip()
+          if pat.endswith("/"):
+            to_ignore_folder.append(pat)
+          else:
+            to_ignore_pat.append(pat)
+      break
+
+  # two different lists for convinience
+  to_remove = []
+  for ignore in to_ignore_pat:
+    x = fnmatch.filter(all_f, ignore)
+    to_remove.extend(x)
+  to_remove_folder = []
+  for ignore in to_ignore_folder:
+    for f in all_f:
+      if re.search(ignore, f):
+        to_remove_folder.append(f)
+  to_remove += to_remove_folder
+
+  all_f = [x for x in all_f if x not in to_remove]
+  logger.info(f"Will zip {len(all_f)} files")
+
+  # zip all the files folder
+  zip_path = U.join(gettempdir(), f"nbxjd_{id}@{workspace_id}.nbox")
+  logger.info(f"Packing project to '{zip_path}'")
+  with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+    abspath_init_folder = os.path.abspath(init_folder)
+    for f in all_f:
+      arcname = f[len(abspath_init_folder)+1:]
+      logger.debug(f"Zipping {f} => {arcname}")
+      zip_file.write(f, arcname = arcname)
+
+    # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
+    _ct = datetime.now(timezone.utc)
+    _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+    created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+
+    # create the exe.py file
+    exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
+    exe_path = U.join(gettempdir(), "exe.py")
+    logger.debug(f"Writing exe to: {exe_path}")
+    with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
+      f2.write(jinja2.Template(f.read()).render({
+        "created_time": created_time,
+        "nbox_version": __version__,
+        **jinja_kwargs
+      }))
+    zip_file.write(exe_path, arcname = "exe.py")
+
+  return zip_path

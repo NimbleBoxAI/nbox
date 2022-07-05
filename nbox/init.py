@@ -13,11 +13,10 @@ This file loads first and is responsible for setting up all the global networkin
 import grpc
 import requests
 
-from .auth import secret
-from .utils import logger
-from .subway import Sub30
-from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
-from . import version as V
+from nbox.auth import secret
+from nbox.utils import logger
+from nbox.subway import Sub30
+from nbox.hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
 
 def get_stub() -> WSJobServiceStub:
   """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``

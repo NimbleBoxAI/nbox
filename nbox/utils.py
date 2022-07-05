@@ -51,11 +51,16 @@ class ENVVARS:
   #. ``NBOX_LOG_LEVEL``: Logging level for ``nbox``, set ``NBOX_LOG_LEVEL=info|debug|warning"
   #. ``NBOX_JSON_LOG``: Whether to print json-logs, set ``NBOX_JSON_LOG=1``
   #. ``NBOX_JOB_FOLDER``: Folder path for the job, set ``NBOX_JOB_FOLDER=/tmp/nbox/jobs"``
+  #. ``NBOX_NO_AUTH``: If set ``secrets = None``, this will break any API request and is good only for local testing
+  #. ``NBOX_SSH_NO_HOST_CHECKING``: If set, ``ssh`` will not check for host key
+  #. ``NBOX_HOME_DIR``: By default ~/.nbx folder
   """
   NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
   NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
   NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
   NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
+  NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
+  NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
 
 
 def get_logger():
@@ -152,7 +157,8 @@ def get_files_in_folder(folder, ext = ["*"]):
   all_paths = []
   _all = "*" in ext # wildcard means everything so speed up
 
-  for root,_,files in os.walk(folder):
+  folder_abs = os.path.abspath(folder)
+  for root,_,files in os.walk(folder_abs):
     if _all:
       all_paths.extend([join(root, f) for f in files])
       continue
@@ -192,7 +198,6 @@ def from_pickle(path):
   with open(path, "rb") as f:
     return dill.load(f)
 
-NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", join(os.path.expanduser("~"), ".nbx"))
 
 # /path
 
