@@ -100,8 +100,8 @@ def print_cache_status():
 
 
 def serve(
-  host: str,
-  port: int,
+  host: str = "0.0.0.0",
+  port: int = 8000,
   debug: bool = False,
 ):
   from uvicorn import run

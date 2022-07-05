@@ -160,7 +160,7 @@ def deploy_serving(
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
-
+  
   # filter and get "id" and "name"
   stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
   all_jobs = stub_all_depl()
@@ -273,7 +273,7 @@ def deploy_job(
     data = jobs[0]
     job_name = data["name"]
     job_id = data["job_id"]
-
+  
   logger.info(f"Job name: {job_name}")
   logger.info(f"Job ID: {job_id}")
 
