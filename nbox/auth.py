@@ -15,7 +15,7 @@ import requests
 import webbrowser
 from getpass import getpass
 
-from .utils import join, NBOX_HOME_DIR, isthere, logger, ENVVARS
+from nbox.utils import join, isthere, logger, ENVVARS
 
 # ------ AWS Auth ------ #
 
@@ -191,8 +191,8 @@ class NBXClient:
     """We try to find the values secrets file in the ``~/.nbx/secrets.json``, if not
     found, we ask the user for the email and direct them to browser.
     """
-    os.makedirs(NBOX_HOME_DIR, exist_ok=True)
-    fp = join(NBOX_HOME_DIR, "secrets.json")
+    os.makedirs(ENVVARS.NBOX_HOME_DIR, exist_ok=True)
+    fp = join(ENVVARS.NBOX_HOME_DIR, "secrets.json")
 
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(fp):
@@ -204,13 +204,14 @@ class NBXClient:
       
       # Once we have the access token, we can get the secrets
       r = requests.get(f"{nbx_url}/api/v1/user/account_details", headers={"Authorization": f"Bearer {access_token}"})
+      r.raise_for_status()
       try:
-        r.raise_for_status()
         username = r.json()["data"]["username"]
         email = r.json()["data"]["email"]
-      except:
-        username = ""
-        email = ""
+      except Exception as e:
+        logger.error(f"Could not get the username and email from the response")
+        logger.error(f"This should not have happened, please contact NimbleBox support.")
+        raise e
 
       # create the objects
       self.secrets = {
@@ -236,7 +237,7 @@ class NBXClient:
   def put(self, item, value, persist: bool = False):
     self.secrets[item] = value
     if persist:
-      with open(join(NBOX_HOME_DIR, "secrets.json"), "w") as f:
+      with open(join(ENVVARS.NBOX_HOME_DIR, "secrets.json"), "w") as f:
         f.write(repr(self))
 
 

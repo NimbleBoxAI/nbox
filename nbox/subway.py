@@ -22,11 +22,13 @@ Based os these ideas there are three types of subways:
 """
 
 import re
+import time
 import string
+import threading
 from requests import Session
 from functools import lru_cache
 
-from .utils import logger
+from nbox.utils import logger
 
 TIMEOUT_CALLS = 60
 
@@ -71,7 +73,7 @@ def filter_templates(paths):
   return re_temps
 
 class Sub30:
-  def __init__(self, _url, _api, _session: Session, *, prefix = ""):
+  def __init__(self, _url, _api, _session: Session, _default_key: str = "data", *, prefix = ""):
     """Like Subway but built for Nimblebox Webserver APIs.
 
     Usage:
@@ -91,9 +93,36 @@ class Sub30:
       prefix (str, optional): This is internal, do not use it explicitly.
     """
     self._url = _url.strip("/")
-    self._session = _session
     self._api = _api
+    self._session = _session
+    self._default_key = _default_key
     self._prefix = prefix
+
+  def _create_keepalive(self):
+    """Creates a keepalive thread. Need to define this as a function because sleeping
+    can cause it to behave unlike a normal blocking program, so use this carefully."""
+
+    def _keep_alive():
+      # This is a hack to keep the session alive.
+      # https://github.com/psf/requests/issues/4937
+      # another more elegant solution is given here:
+      # https://github.com/psf/requests/issues/4937#issuecomment-788899804
+      while True:
+        try:
+          self._session.get(f"{self._url}")
+        except Exception as e:
+          pass
+        
+        if self.thread_kill_event.is_set():
+          break
+        time.sleep(30)
+
+    self.thread = threading.Thread(target = _keep_alive)
+    self.thread.start()
+    self.thread_kill_event = threading.Event()
+
+  def _stop(self):
+    self.thread_kill_event.set()
 
   def __repr__(self):
     return f"<Sub30 ({self._url})>"
@@ -171,7 +200,13 @@ class Sub30:
     except Exception as e:
       logger.error(r.content.decode())
       raise e
-    return r.json()
+
+    out = r.json()
+    try:
+      out = out[self._default_key]
+    except KeyError:
+      pass
+    return out
 
 
 class SpecSubway():

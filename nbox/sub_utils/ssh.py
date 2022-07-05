@@ -17,11 +17,12 @@ import socket
 import socket
 import threading
 import subprocess
+from time import sleep
 from typing import List
 from functools import partial
 from datetime import datetime, timezone
 
-from nbox.utils import NBOX_HOME_DIR, logger as nbx_logger
+from nbox.utils import logger as nbx_logger
 from nbox import utils as U
 from nbox.auth import secret
 from nbox.instance import Instance
@@ -257,6 +258,7 @@ class ConnectionManager:
     self.done = False
     self.clients = []
     self.threads = []
+    self.connections = {}
 
   def __repr__(self) -> str:
     return f"ConnectionManager({self.subdomain}: {len(self.threads)} Connections)"
@@ -265,9 +267,11 @@ class ConnectionManager:
     """
     Adds a client to the list of clients.
     """
+    nbx_logger.debug(f"Creating a connection: [NBX] {buildport} => {localport} [Local]")
     t = threading.Thread(target = self.start, args = (localport, buildport, _ssh))
     t.start()
     self.threads.append(t)
+    self.connections[localport] = buildport
 
   def start(self, localport, buildport, _ssh: bool = True):
     listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -294,11 +298,13 @@ class ConnectionManager:
 
       # start the client
       client.connect()
+    listen_socket.close()
 
   def quit(self):
     self.done = False
+    sleep(2)
     for client in self.clients:
-      client.stop()
+      client.rsock_socket.close()
     for thread in self.threads:
       thread.join()
 
@@ -310,15 +316,8 @@ def port_in_use(port: int) -> bool:
 
 def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: str, _ssh: bool = True) -> ConnectionManager:
   def _sanity():
-    if sys.platform.startswith("linux"):  # could be "linux", "linux2", "linux3", ...
-      pass
-    elif sys.platform == "darwin":
-      pass
-    elif sys.platform == "win32":
-      # Windows (either 32-bit or 64-bit)
-      raise Exception("Windows is unsupported platform, raise issue: https://github.com/NimbleBoxAI/nbox/issues")
-    else:
-      raise Exception(f"Unkwown platform '{sys.platform}', raise issue: https://github.com/NimbleBoxAI/nbox/issues")
+    if not (sys.platform.startswith("linux") or sys.platform == "darwin"):
+      raise Exception(f"Unsupported platform '{sys.platform}', raise issue: https://github.com/NimbleBoxAI/nbox/issues")
 
     # sanity checks because python fire does not handle empty strings
     if i == "":
@@ -347,14 +346,10 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
 
   # check if instance is the correct one
   instance = Instance(i, workspace_id)
-  if not instance.state == "RUNNING":
-    # raise ValueError("Instance is not running")
-    nbx_logger.error(f"Project {instance.project_id} is not running, use command:")
-    nbx_logger.info(f"nbx build --i '{instance.project_id}' --workspace_id '{workspace_id}' start")
-    U.log_and_exit(f"Project {instance.project_id} is not running")
+  instance._unopened_error()
 
   # create logging for RSock
-  folder = U.join(NBOX_HOME_DIR, "tunnel_logs")
+  folder = U.join(U.ENVVARS.NBOX_HOME_DIR, "tunnel_logs")
   os.makedirs(folder, exist_ok=True)
   filepath = U.join(folder, f"tunnel_{instance.project_id}.log") # consistency with IDs instead of names
   file_logger = FileLogger(filepath)
@@ -397,7 +392,11 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     # https://medium.com/python-pandemonium/a-trap-of-shell-true-in-the-subprocess-module-6db7fc66cdfd
     # https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess
     nbx_logger.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
-    subprocess.call(f'ssh -p {port} ubuntu@localhost', shell=True)
+    comm = "ssh"
+    if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+      comm += " -o StrictHostKeychecking=no"
+    comm += f" -p {port} ubuntu@localhost"
+    subprocess.call(comm, shell=True)
   except KeyboardInterrupt:
     nbx_logger.info("KeyboardInterrupt, closing connections")
     connection.quit()
