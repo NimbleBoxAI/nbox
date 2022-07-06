@@ -21,8 +21,10 @@ os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do
 from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
 
 @lru_cache(1)
-def get_op():
-  return get_op_user()
+def get_op(cloud = False):
+  op = get_op_user()
+  if cloud:
+    op.__remote_init__()
 
 import nbox.utils as U
 from nbox.nbxlib.tracer import Tracer
@@ -33,7 +35,7 @@ from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 
 
 def run():
-  op: Operator = get_op()
+  op: Operator = get_op(True)
   op.propagate(_tracer = Tracer())
   if hasattr(op._tracer, "job_proto"):
     op.thaw(op._tracer.job_proto)
@@ -69,7 +71,7 @@ def get_fastapi_fwd():
 
   # first time loading the operator, will automatically create a cache miss and then all the rest will
   # be cache hits
-  op = get_op() 
+  op = get_op(True)
   
   # we use inspect signature instead of writing our own ast thing
   signature = inspect.signature(op.forward)

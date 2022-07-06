@@ -396,6 +396,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
       comm += " -o StrictHostKeychecking=no"
     comm += f" -p {port} ubuntu@localhost"
+    nbx_logger.debug(f"Running command: {comm}")
     subprocess.call(comm, shell=True)
   except KeyboardInterrupt:
     nbx_logger.info("KeyboardInterrupt, closing connections")

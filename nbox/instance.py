@@ -62,7 +62,7 @@ class Instance():
   # each instance has a lot of data against it, we need to store only a few as attributes
   useful_keys = ["project_id", "project_name", "size_used", "size", "state"]
 
-  def __init__(self, i: str, workspace_id: int = None, cs_endpoint = "server"):
+  def __init__(self, i: str, workspace_id: int = None):
     """NBX-Build Instance class manages the both individual instance, but provides
     webserver functionality using ``nbox_ws_v1``, such as starting and stopping,
     deletion and more.
@@ -74,7 +74,7 @@ class Instance():
         cs_endpoint (str, optional): endpoint to use for the webserver, this will connect
           to the custom ports functionality of the instance. Defaults to ``server``,
     """
-    if i == None:
+    if not i:
       raise ValueError("Instance id must be provided, try --i='8h57f9'")
     i = str(i)
 

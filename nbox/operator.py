@@ -46,6 +46,7 @@ certainly if we come up with that high abstraction we will refactor this:
 # modifications: research@nimblebox.ai 2022
 
 import inspect
+import requests
 from typing import Iterable, List
 from collections import OrderedDict
 
@@ -57,8 +58,8 @@ from nbox.messages import get_current_timestamp
 from nbox.framework.on_functions import get_nbx_flow
 from nbox.framework import AirflowMixin, PrefectMixin
 from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
-from nbox.network import deploy_job, Schedule, deploy_serving
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
+from nbox.network import deploy_job, Schedule, deploy_serving, _get_deployment_data
 
 
 class Operator():
@@ -66,6 +67,7 @@ class Operator():
   node = Node()
   source_edges: List[Node] = None
   _inputs = []
+  _raise_on_io = True
 
   def __init__(self) -> None:
     """Create an operator, which abstracts your code into sharable, bulding blocks which
@@ -124,8 +126,88 @@ class Operator():
   def from_job(self, job_id_or_name, workspace_id: str = None):
     raise NotImplementedError(...)
 
-  def from_serving(self, model_id, deployment_id_or_name, workspace_id: str = None):
-    raise NotImplementedError(...)
+  @classmethod
+  def from_serving(cls, deployment_id_or_name, token: str, workspace_id: str = None):
+    """Latch to an existing serving operator
+    
+    Args:
+      deployment_id_or_name (str):
+    """
+    if workspace_id is None:
+      raise DeprecationWarning("Personal workspace does not support serving")
+    serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id)
+    if serving_id is None:
+      raise ValueError(f"No serving found with name {serving_name}")
+
+    # common things
+    session = requests.Session()
+    session.headers.update({"NBX-KEY": token})
+
+    REQ = type("REQ", (object,), {})
+
+    # get the OpenAPI spec for the serving
+    url = f"https://api.nimblebox.ai/{serving_id}/openapi.json"
+    r = session.get(url)
+    data = r.json()
+
+    # get the arguments
+    data = data["components"]["schemas"]
+    key = list(filter(lambda x: x.endswith("_Request"), data))[0]
+    comp = data[key]
+    args = comp["properties"]
+    args_dict = {k: v.get("default", REQ) for k, v in args.items()}
+
+    # define the forward function for this serving operator, the objective is that this will be able to handle
+    # args, kwargs just like how it works on the local machine
+    def forward(*args, **kwargs):
+      # check in the kwargs if we have any arguments to pass
+      _data = {} # create the final dicst 
+      for i, (k, v) in enumerate(args_dict.items()):
+        if len(args) == i:
+          break
+        _data[k] = args[i]
+      for k, v in kwargs.items():
+        _data[k] = v
+
+      # client-side check for unknown vars
+      unknown_args = set()
+      for k, v in _data.items():
+        if k not in args_dict:
+          unknown_args.add(k)
+      if len(unknown_args):
+        raise ValueError(f"Unknown arguments: {unknown_args}")
+
+      missing_args = set()
+      for k, v in args_dict.items():
+        if k not in _data and v == REQ:
+          missing_args.add(k)
+      if len(missing_args):
+        raise ValueError(f"Missing required arguments: {missing_args}")
+
+      # _data.update({"self": None})
+
+      # make a POST call to /forward and return the json
+      url = f"https://api.nimblebox.ai/{serving_id}/forward"
+      logger.debug(f"Hitting URL: {url}")
+      logger.debug(f"Data: {kwargs}")
+      r = session.post(url, json = _data)
+      if r.status_code != 200:
+        raise Exception(r.text)
+      try:
+        data = r.json()
+      except:
+        data = {}
+        print(r.text)
+      return data
+
+
+    # create the class and override some values to make more sense
+    _op = cls()
+    _op.__class__.__name__ = key[:-8] + "_Serving"
+    _op._raise_on_io = False
+    _op.forward = forward
+    return _op
+
 
   # /mixin
 
@@ -232,30 +314,33 @@ class Operator():
 
   @property
   def inputs(self):
-    args = inspect.getfullargspec(self.forward).args
-    try:
-      args.remove('self')
-    except:
-      raise ValueError("forward function must have 'self' as first argument")
-    if self._inputs:
-      args += self._inputs
-    return args
+    if self._raise_on_io:
+      args = inspect.getfullargspec(self.forward).args
+      try:
+        args.remove('self')
+      except:
+        raise ValueError("forward function must have 'self' as first argument")
+      if self._inputs:
+        args += self._inputs
+      return args
+    return []
 
   def __call__(self, *args, **kwargs):
-    # Type Checking and create input dicts
-    inputs = self.inputs
-    len_inputs = len(args) + len(kwargs)
-    if len_inputs > len(inputs):
-      raise ValueError(f"Number of arguments ({len(inputs)}) does not match number of inputs ({len_inputs})")
-    elif len_inputs < len(args):
-      raise ValueError(f"Need at least arguments ({len(args)}) but got ({len_inputs})")
+    # # Type Checking and create input dicts
+    # inputs = self.inputs
+    # if self._raise_on_io:
+    #   len_inputs = len(args) + len(kwargs)
+    #   if len_inputs > len(inputs):
+    #     raise ValueError(f"Number of arguments ({len(inputs)}) does not match number of inputs ({len_inputs})")
+    #   elif len_inputs < len(args):
+    #     raise ValueError(f"Need at least arguments ({len(args)}) but got ({len_inputs})")
 
     input_dict = {}
-    for i, arg in enumerate(args):
-      input_dict[self.inputs[i]] = arg
-    for key, value in kwargs.items():
-      if key in inputs:
-        input_dict[key] = value
+    # for i, arg in enumerate(args):
+    #   input_dict[self.inputs[i]] = arg
+    # for key, value in kwargs.items():
+    #   if key in inputs:
+    #     input_dict[key] = value
 
     logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
     _ts = get_current_timestamp()
@@ -270,14 +355,14 @@ class Operator():
 
     # ---- USER SEPERATION BOUNDARY ---- #
     outputs = {}
-    if out is None:
-      outputs = {"out_0": str(type(None))}
-    elif isinstance(out, dict):
-      outputs = {k: str(type(v)) for k, v in out.items()}
-    elif isinstance(out, (list, tuple)):
-      outputs = {f"out_{i}": str(type(v)) for i, v in enumerate(out)}
-    else:
-      outputs = {"out_0": str(type(out))}
+    # if out is None:
+    #   outputs = {"out_0": str(type(None))}
+    # elif isinstance(out, dict):
+    #   outputs = {k: str(type(v)) for k, v in out.items()}
+    # elif isinstance(out, (list, tuple)):
+    #   outputs = {f"out_{i}": str(type(v)) for i, v in enumerate(out)}
+    # else:
+    #   outputs = {"out_0": str(type(out))}
 
     logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
     _ts = get_current_timestamp()

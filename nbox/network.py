@@ -147,6 +147,25 @@ class Schedule:
     return str(self.get_dict())
 
 
+def _get_deployment_data(id_or_name, workspace_id):
+  # filter and get "id" and "name"
+  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
+  all_jobs = stub_all_depl()
+  jobs = list(filter(lambda x: x["deployment_id"] == id_or_name or x["deployment_name"] == id_or_name, all_jobs))
+  if len(jobs) == 0:
+    logger.info(f"No Job found with ID or name: {id_or_name}, will create a new one")
+    serving_name = id_or_name
+    serving_id = None
+  elif len(jobs) > 1:
+    raise ValueError(f"Multiple jobs found for '{id_or_name}', try passing ID")
+  else:
+    logger.info(f"Found job with ID or name: {id_or_name}, will update it")
+    data = jobs[0]
+    serving_name = data["deployment_name"]
+    serving_id = data["deployment_id"]
+  return serving_id, serving_name
+
+
 def deploy_serving(
   init_folder: str,
   deployment_id_or_name: str,
@@ -161,22 +180,7 @@ def deploy_serving(
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
   
-  # filter and get "id" and "name"
-  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
-  all_jobs = stub_all_depl()
-  jobs = list(filter(lambda x: x["deployment_id"] == deployment_id_or_name or x["deployment_name"] == deployment_id_or_name, all_jobs))
-  if len(jobs) == 0:
-    logger.info(f"No Job found with ID or name: {deployment_id_or_name}, will create a new one")
-    serving_name =  deployment_id_or_name
-    serving_id = None
-  elif len(jobs) > 1:
-    raise ValueError(f"Multiple jobs found for '{deployment_id_or_name}', try passing ID")
-  else:
-    logger.info(f"Found job with ID or name: {deployment_id_or_name}, will update it")
-    data = jobs[0]
-    serving_name = data["deployment_name"]
-    serving_id = data["deployment_id"]
-
+  serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
   model_name = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
@@ -184,9 +188,13 @@ def deploy_serving(
 
   # zip init folder
   zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name)
+  _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
+
+def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name):
   file_size = os.stat(zip_path).st_size # serving in bytes
 
   # get bucket URL and upload the data
+  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
   out = stub_all_depl.u(serving_id).get_upload_url(
     _method = "put",
     convert_args = "",
@@ -216,8 +224,8 @@ def deploy_serving(
   logger.debug(f"Webserver informed: {r.status_code}")
 
   # # write out all the commands for this deployment
-  logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
-  # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
+  # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
+  # _api = f"nbox.Operator(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
   # _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
   # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
   # _webpage = f"{secret.get('nbx_url')}/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
@@ -225,6 +233,31 @@ def deploy_serving(
   # logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   # logger.info(f"   [page] - {_webpage}")
+
+
+def _get_job_data(id_or_name, workspace_id):
+  # get stub
+  if workspace_id == None:
+    stub_all_jobs = nbox_ws_v1.user.jobs
+  else:
+    stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
+
+  # filter and get "id" and "name"
+  all_jobs = stub_all_jobs()
+  jobs = list(filter(lambda x: x["job_id"] == id_or_name or x["name"] == id_or_name, all_jobs))
+  if len(jobs) == 0:
+    logger.info(f"No Job found with ID or name: {id_or_name}, will create a new one")
+    job_name =  id_or_name
+    job_id = None
+  elif len(jobs) > 1:
+    raise ValueError(f"Multiple jobs found for '{id_or_name}', try passing ID")
+  else:
+    logger.info(f"Found job with ID or name: {id_or_name}, will update it")
+    data = jobs[0]
+    job_name = data["name"]
+    job_id = data["job_id"]
+  
+  return job_id, job_name
 
 
 def deploy_job(
@@ -253,27 +286,7 @@ def deploy_job(
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
 
-  # get stub
-  if workspace_id == None:
-    stub_all_jobs = nbox_ws_v1.user.jobs
-  else:
-    stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
-
-  # filter and get "id" and "name"
-  all_jobs = stub_all_jobs()
-  jobs = list(filter(lambda x: x["job_id"] == job_id_or_name or x["name"] == job_id_or_name, all_jobs))
-  if len(jobs) == 0:
-    logger.info(f"No Job found with ID or name: {job_id_or_name}, will create a new one")
-    job_name =  job_id_or_name
-    job_id = None
-  elif len(jobs) > 1:
-    raise ValueError(f"Multiple jobs found for '{job_id_or_name}', try passing ID")
-  else:
-    logger.info(f"Found job with ID or name: {job_id_or_name}, will update it")
-    data = jobs[0]
-    job_name = data["name"]
-    job_id = data["job_id"]
-  
+  job_id, job_name = _get_job_data(job_id_or_name, workspace_id)
   logger.info(f"Job name: {job_name}")
   logger.info(f"Job ID: {job_id}")
 
@@ -286,13 +299,13 @@ def deploy_job(
   # create the proto for this Operator
   job_proto = JobProto(
     id = job_id,
-    name = job_name if job_name else U.get_random_name(True).split("-")[0],
+    name = job_name or U.get_random_name(True).split("-")[0],
     created_at = get_current_timestamp(),
     auth_info = NBXAuthInfo(
       username = secret.get("username"),
       workspace_id = workspace_id,
     ),
-    schedule = schedule.get_message() if schedule != None else None,
+    schedule = schedule.get_message() if schedule is not None else None,
     dag = dag,
     resource = Resource(
       cpu = "100m",         # 100mCPU
@@ -308,6 +321,9 @@ def deploy_job(
 
   # zip the entire init folder to zip, this will be response
   zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id)
+  _upload_job_zip(zip_path, job_id, job_proto)
+
+def _upload_job_zip(zip_path, job_id, job_proto):
 
   # incase an old job exists, we need to update few things with the new information
   if job_id != None:

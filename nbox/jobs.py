@@ -9,8 +9,10 @@ Notes
 
 import os
 import sys
+import json
 import jinja2
 import tabulate
+import requests
 from functools import partial
 from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
@@ -19,8 +21,9 @@ import nbox.utils as U
 from nbox.utils import logger
 from nbox.auth import secret
 from nbox.version import __version__
-from nbox.init import nbox_grpc_stub
 from nbox.hyperloop.nbox_ws_pb2 import JobInfo
+from nbox.init import nbox_grpc_stub, nbox_ws_v1
+from nbox.network import _get_deployment_data
 from nbox.messages import message_to_dict, rpc, streaming_rpc
 from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
@@ -281,10 +284,20 @@ the highest levels of consistency with the NBX-Jobs API.
 def get_serving_list(workspace_id: str = None, sort: str = "name"):
   raise NotImplementedError("Not implemented yet")
 
+
+def serving_forward(id_or_name: str, token: str, workspace_id: str = None, **kwargs):
+  if workspace_id is None:
+    raise DeprecationWarning("Personal workspace does not support serving")
+  from nbox.operator import Operator
+  op = Operator.from_serving(id_or_name, token, workspace_id)
+  out = op(**kwargs)
+  logger.info(out)
+
 class Serve:
   new = staticmethod(new) # create a new folder, alias but `jobs new` should be used
   status = staticmethod(get_serving_list)
   upload = staticmethod(partial(upload_job_folder, "serving"))
+  forward = staticmethod(serving_forward)
 
   def __init__(self, id, workspace_id = None) -> None:
     """Python wrapper for NBX-Serving gRPC API
@@ -293,13 +306,20 @@ class Serve:
       id (str): job ID
       workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
-    raise NotImplementedError("Serve is not implemented yet")
     self.id = id
     self.workspace_id = workspace_id
-    self.serving_proto = ServingProto(id = id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
-    self.serving_info = ServingInfo(job=self.job_proto)
-    self.refresh()
+    # self.serving_proto = ServingProto(id = id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
+    # self.serving_info = ServingInfo(job=self.job_proto)
+    # self.refresh()
 
+    if workspace_id is None:
+      raise DeprecationWarning("Personal workspace does not support serving")
+    else:
+      serving_id, serving_name = _get_deployment_data(self.id, self.workspace_id)
+    self.serving_id = serving_id
+    self.serving_name = serving_name
+    self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
+    
   def change_behaviour(self, new_behaviour: 'Behaviour' = None):
     raise NotImplementedError("Not implemented yet")
 
