@@ -4,11 +4,12 @@ the machine (start, stop, etc.), can be used to transfer files to and from the m
 and to an extent running and managing programs (WIP).
 """
 
+import io
 import os
 import time
 import shlex
 from json import loads
-from subprocess import run
+from subprocess import run, check_output
 from tabulate import tabulate
 from typing import Dict, List
 from requests.sessions import Session
@@ -127,11 +128,13 @@ class Instance():
   def __repr__(self):
     return f"<Instance ({', '.join([f'{k}:{getattr(self, k)}' for k in self.useful_keys])})>"
 
+  ################################################################################
   """
-  # Classmethods (WIP)
+  # Classmethods
 
   Functions to create instances.
   """
+  ################################################################################
 
   @classmethod
   def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
@@ -217,10 +220,6 @@ class Instance():
       "token": self.stub_ws_instance._session.cookies.get_dict()[f"instance_token_{base_domain}"]
     }
     self.__opened = True
-
-  # def _revert_to_app(self):
-  #   if "app.rc." in self.stub_ws_instance._url:
-  #     self.stub_ws_instance._url = self.stub_ws_instance._url.replace("app.rc.", "app.")
 
   def start(
     self,
@@ -333,18 +332,24 @@ class Instance():
     conman.add(localport = port, buildport = 2222, _ssh = False)
     return conman
 
-  def __run_command(self, comm: str, port: int) -> str:
+  def __run_command(self, comm: str, port: int, return_output: bool = False) -> str:
     connection = self.__create_connection(port = port)
     try:
       command = shlex.split(comm)
       logger.info(f"Running command: {comm}")
-      result = run(command, universal_newlines=True)
-      result = result.stdout
+
+      # there are some commands that require output in which case we run the commands 
+      if return_output:
+        result = check_output(command, universal_newlines=True)
+      else:
+        result = run(command, universal_newlines=True)
+        result = result.stdout
+        result = "" if result is None else result
     except KeyboardInterrupt:
       logger.info("KeyboardInterrupt, closing connections")
       result = ""
     except Exception as e:
-      logger.error(f"Error: {e}")
+      U.log_traceback()
       result = ""
 
     # Right now we close the connections the moment we are done with the execution, which means
@@ -352,7 +357,7 @@ class Instance():
     # open a connection and keep it open till the process is done? Does that also introduce a
     # security risk?
     connection.quit()
-    return result
+    return result.strip()
 
   def ls(self, path: str, *, port: int = 6174):
     """
@@ -364,7 +369,8 @@ class Instance():
     ```
     """
     self._unopened_error()
-
+    if path.startswith("nbx://"):
+      path = path[6:]
     if path == "":
       raise ValueError("Path cannot be empty")
     path = "/home/ubuntu/project/" + path.strip("/")
@@ -375,7 +381,7 @@ class Instance():
     if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
       comm += " -o StrictHostKeychecking=no"
     comm += f" -p {port} ubuntu@localhost 'ls -l {path}'"
-    result = self.__run_command(comm, port)
+    result = self.__run_command(comm, port, return_output=True)
     return result
 
   def mv(self, src: str, dst: str, force: bool = False, *, port: int = 6174):
@@ -395,12 +401,18 @@ class Instance():
     if not src_is_cloud and not dst_is_cloud:
       raise ValueError("Cannot move files on your machine")
     elif src_is_cloud:
-      if os.path.exists(dst) and not force:
+      # if the dst is . or ./ it means to copy it to the folder where command is run so that
+      # is acceptable but any other path is not acceptable
+      if not dst in ["./", "."] and os.path.exists(dst) and not force:
         raise ValueError(f"Source file '{dst}' already exists, pass --force to override")
+      ls_res = self.ls(src, port = port)
+      src_is_dir = ls_res.startswith("total")
+      if not src_is_dir:
+        logger.info(f"ls result on cloud: {ls_res}")
     elif dst_is_cloud:
       assert os.path.exists(src), f"Source file '{src}' does not exist"
       # check if this file already exists on the cloud
-      ls_res = self.ls(dst.replace("nbx://", ""), port = port)
+      ls_res = self.ls(dst, port = port)
       logger.info(f"ls result on cloud: {ls_res}")
       if ls_res:
         logger.info(f"File {dst} already exists")
@@ -408,6 +420,7 @@ class Instance():
           logger.error("Aborted, use --force to override")
           return
         logger.info("Overriding file")
+      src_is_dir = os.path.isdir(src)
 
     src = "/home/ubuntu/project/" + src[6:] if src_is_cloud else src
     dst = "/home/ubuntu/project/" + dst[6:] if dst_is_cloud else dst
@@ -415,7 +428,11 @@ class Instance():
     # RPC, note order sensitivity for src and dst along with user@host
     logger.info(f"Moving {src} to {dst}")
     comm = "scp"
+    if src_is_dir:
+      logger.debug(f"Source is a directory")
+      comm += " -r" # recursive
     if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+      logger.debug("Host checking is disabled")
       comm += " -o StrictHostKeychecking=no"
     comm += f" -P {port}"
     if src_is_cloud:

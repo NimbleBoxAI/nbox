@@ -47,7 +47,7 @@ certainly if we come up with that high abstraction we will refactor this:
 
 import inspect
 import requests
-from typing import Iterable, List
+from typing import Dict, Iterable, List
 from collections import OrderedDict
 
 from nbox.utils import logger
@@ -59,7 +59,8 @@ from nbox.framework.on_functions import get_nbx_flow
 from nbox.framework import AirflowMixin, PrefectMixin
 from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
-from nbox.network import deploy_job, Schedule, deploy_serving, _get_deployment_data
+from nbox.network import deploy_job, deploy_serving, _get_deployment_data
+from nbox.jobs import Schedule
 
 
 class Operator():
@@ -82,7 +83,7 @@ class Operator():
           ... # initialisation of job happens here
 
           # use prebuilt operators to define the entire process
-          from .nbxlib.ops import Shell
+          from nbox.lib.shell import Shell
           self.download_binary = Shell("wget https://nbox.ai/{hash}")
 
           # keep a library of organisation wide operators
@@ -102,7 +103,7 @@ class Operator():
       # deploy this as a batch process
       job.deploy()
     """
-    self._operators = OrderedDict() # {name: operator}
+    self._operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
     self._op_trace = []
     self._tracer: Tracer = None
 
@@ -111,6 +112,12 @@ class Operator():
     This helps in with things like creating the models can caching them in self, instead
     of ``lru_cache`` in forward."""
     pass
+
+  def remote_init(self):
+    """Triggers `__remote_init__` across the entire tree."""
+    self.__remote_init__()
+    for _, op in self._operators.items():
+      op.remote_init()
 
   # mixin/
 
@@ -129,7 +136,7 @@ class Operator():
   @classmethod
   def from_serving(cls, deployment_id_or_name, token: str, workspace_id: str = None):
     """Latch to an existing serving operator
-    
+
     Args:
       deployment_id_or_name (str):
     """
@@ -138,6 +145,8 @@ class Operator():
     serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id)
     if serving_id is None:
       raise ValueError(f"No serving found with name {serving_name}")
+    
+    logger.debug(f"Latching to serving '{serving_name}' ({serving_id})")
 
     # common things
     session = requests.Session()
@@ -199,7 +208,6 @@ class Operator():
         data = {}
         print(r.text)
       return data
-
 
     # create the class and override some values to make more sense
     _op = cls()
@@ -450,7 +458,7 @@ class Operator():
     
     DO NOT CALL THIS DIRECTLY, use `nbx serve upload` CLI command instead.
     """
-    deploy_serving(
+    return deploy_serving(
       init_folder = init_folder,
       deployment_id_or_name = id_or_name,
       workspace_id = workspace_id,

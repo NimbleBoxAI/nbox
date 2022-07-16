@@ -14,8 +14,7 @@ import fnmatch
 import zipfile
 import requests
 from tempfile import gettempdir
-from datetime import datetime, timedelta, timezone
-from google.protobuf.timestamp_pb2 import Timestamp
+from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
@@ -26,144 +25,17 @@ from nbox.hyperloop.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub
 from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from nbox.messages import rpc, write_string_to_file, get_current_timestamp
+from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo
 from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 
-class NBXAPIError(Exception):
-  pass
 
+#######################################################################################################################
+"""
+# Serving
 
-class Schedule:
-  _days = {
-    k:str(i) for i,k in enumerate(
-      ["sun","mon","tue","wed","thu","fri","sat"]
-    )
-  }
-  _months = {
-    k:str(i+1) for i,k in enumerate(
-      ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"]
-    )
-  }
-
-  def __init__(
-    self,
-    hour: int  = None,
-    minute: int = None,
-    days: list = [],
-    months: list = [],
-    starts: datetime = None,
-    ends: datetime = None,
-  ):
-    """Make scheduling natural.
-
-    Usage:
-
-    .. code-block:: python
-
-      # 4:20 everyday
-      Schedule(4, 0)
-
-      # 4:20 every friday
-      Schedule(4, 20, ["fri"])
-
-      # 4:20 every friday from jan to feb
-      Schedule(4, 20, ["fri"], ["jan", "feb"])
-
-      # 4:20 everyday starting in 2 days and runs for 3 days
-      starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
-      Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
-
-      # Every 1 hour
-      Schedule(1)
-
-      # Every 69 minutes
-      Schedule(minute = 69)
-
-    Args:
-        hour (int): Hour of the day, if only this value is passed it will run every ``hour``
-        minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
-        days (list, optional): List of days (first three chars) of the week, if not passed it will run every day.
-        months (list, optional): List of months (first three chars) of the year, if not passed it will run every month.
-        starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
-        ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
-    """
-    self.hour = hour
-    self.minute = minute
-
-    self._is_repeating = self.hour or self.minute
-    self.mode = None
-    if self.hour == None and self.minute == None:
-      raise ValueError("Atleast one of hour or minute should be passed")
-    elif self.hour != None and self.minute != None:
-      assert self.hour in list(range(0, 24)), f"Hour must be in range 0-23, got {self.hour}"
-      assert self.minute in list(range(0, 60)), f"Minute must be in range 0-59, got {self.minute}"
-    elif self.hour != None:
-      assert self.hour in list(range(0, 24)), f"Hour must be in range 0-23, got {self.hour}"
-      self.mode = "every"
-      self.minute = datetime.now(timezone.utc).strftime("%m") # run every this minute past this hour
-      self.hour = f"*/{self.hour}"
-    elif self.minute != None:
-      self.hour = self.minute // 60
-      assert self.hour in list(range(0, 24)), f"Hour must be in range 0-23, got {self.hour}"
-      self.minute = f"*/{self.minute % 60}"
-      self.hour = f"*/{self.hour}" if self.hour > 0 else "*"
-      self.mode = "every"
-
-    diff = set(days) - set(self._days.keys())
-    if diff != set():
-      raise ValueError(f"Invalid days: {diff}")
-    self.days = ",".join([self._days[d] for d in days]) if days else "*"
-
-    diff = set(months) - set(self._months.keys())
-    if diff != set():
-      raise ValueError(f"Invalid months: {diff}")
-    self.months = ",".join([self._months[m] for m in months]) if months else "*"
-
-    self.starts = starts or datetime.now(timezone.utc)
-    self.ends = ends or datetime.now(timezone.utc) + timedelta(days = 7)
-
-  @property
-  def cron(self):
-    """Cron string"""
-    if self.mode == "every":
-      return f"{self.minute} {self.hour} * * *"
-    return f"{self.minute} {self.hour} * {self.months} {self.days}"
-
-  def get_dict(self):
-    return {
-      "cron": self.cron,
-      "mode": self.mode,
-      "starts": self.starts,
-      "ends": self.ends,
-    }
-
-  def get_message(self) -> JobProto.Schedule:
-    """Get the JobProto.Schedule object for this Schedule"""
-    _starts = Timestamp(); _starts.GetCurrentTime()
-    _ends = Timestamp(); _ends.FromDatetime(self.ends)
-    # return JobProto.Schedule(start = _starts, end = _ends, cron = self.cron)
-    return JobProto.Schedule(cron = self.cron)
-
-  def __repr__(self):
-    return str(self.get_dict())
-
-
-def _get_deployment_data(id_or_name, workspace_id):
-  # filter and get "id" and "name"
-  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
-  all_jobs = stub_all_depl()
-  jobs = list(filter(lambda x: x["deployment_id"] == id_or_name or x["deployment_name"] == id_or_name, all_jobs))
-  if len(jobs) == 0:
-    logger.info(f"No Job found with ID or name: {id_or_name}, will create a new one")
-    serving_name = id_or_name
-    serving_id = None
-  elif len(jobs) > 1:
-    raise ValueError(f"Multiple jobs found for '{id_or_name}', try passing ID")
-  else:
-    logger.info(f"Found job with ID or name: {id_or_name}, will update it")
-    data = jobs[0]
-    serving_name = data["deployment_name"]
-    serving_id = data["deployment_id"]
-  return serving_id, serving_name
+Function related to serving of any model.
+"""
+#######################################################################################################################
 
 
 def deploy_serving(
@@ -179,7 +51,12 @@ def deploy_serving(
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
-  
+
+  if resource is not None:
+    logger.warning("Resource is coming in the following release!")
+  if wait_for_deployment:
+    logger.warning("Wait for deployment is coming in the following release!")
+
   serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
@@ -189,6 +66,7 @@ def deploy_serving(
   # zip init folder
   zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name)
   _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
+
 
 def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name):
   file_size = os.stat(zip_path).st_size # serving in bytes
@@ -223,41 +101,25 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_
   ws_stub_model.update(_method = "post", status = status)
   logger.debug(f"Webserver informed: {r.status_code}")
 
-  # # write out all the commands for this deployment
-  # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
-  # _api = f"nbox.Operator(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
-  # _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
-  # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
-  # _webpage = f"{secret.get('nbx_url')}/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
-  # logger.info(f" [python] - {_api}")
-  # logger.info(f"    [CLI] - {_cli}")
-  # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
-  # logger.info(f"   [page] - {_webpage}")
+  # write out all the commands for this deployment
+  logger.info("API will soon be hosted, here's how you can use it:")
+  _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
+  _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
+  _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
+  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
+  logger.info(f" [python] - {_api}")
+  logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
+  logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'w' -d " + "'{}'")
+  logger.info(f"   [page] - {_webpage}")
 
 
-def _get_job_data(id_or_name, workspace_id):
-  # get stub
-  if workspace_id == None:
-    stub_all_jobs = nbox_ws_v1.user.jobs
-  else:
-    stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
+#######################################################################################################################
+"""
+# Jobs
 
-  # filter and get "id" and "name"
-  all_jobs = stub_all_jobs()
-  jobs = list(filter(lambda x: x["job_id"] == id_or_name or x["name"] == id_or_name, all_jobs))
-  if len(jobs) == 0:
-    logger.info(f"No Job found with ID or name: {id_or_name}, will create a new one")
-    job_name =  id_or_name
-    job_id = None
-  elif len(jobs) > 1:
-    raise ValueError(f"Multiple jobs found for '{id_or_name}', try passing ID")
-  else:
-    logger.info(f"Found job with ID or name: {id_or_name}, will update it")
-    data = jobs[0]
-    job_name = data["name"]
-    job_id = data["job_id"]
-  
-  return job_id, job_name
+Function related to batch processing of any model.
+"""
+#######################################################################################################################
 
 
 def deploy_job(
@@ -313,20 +175,28 @@ def deploy_job(
       disk_size = "1Gi",    # GiB
     ) if resource == None else resource,
   )
-  proto_path = U.join(init_folder, "job_proto.pbtxt")
-  write_string_to_file(job_proto, proto_path)
+  write_string_to_file(job_proto, U.join(init_folder, "job_proto.pbtxt"))
 
   if _unittest:
     return job_proto
 
-  # zip the entire init folder to zip, this will be response
+  # zip the entire init folder to zip
   zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id)
-  _upload_job_zip(zip_path, job_id, job_proto)
+  _upload_job_zip(zip_path, job_proto)
 
-def _upload_job_zip(zip_path, job_id, job_proto):
+def _upload_job_zip(zip_path: str, job_proto: JobProto):
+  # determine if it's a new Job based on GetJob API
+  try:
+    j: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = job_proto))
+    new_job = j.status == JobProto.Status.NOT_SET
+  except grpc.RpcError as e:
+    if e.code() == grpc.StatusCode.NOT_FOUND:
+      new_job = True
+    else:
+      raise e
 
-  # incase an old job exists, we need to update few things with the new information
-  if job_id != None:
+  if not new_job:
+    # incase an old job exists, we need to update few things with the new information
     from nbox.jobs import Job
     logger.debug("Found existing job, checking for update masks")
     old_job_proto = Job(job_proto.id, job_proto.auth_info.workspace_id).job_proto
@@ -342,7 +212,7 @@ def _upload_job_zip(zip_path, job_id, job_proto):
 
   # update the JobProto with file sizes
   job_proto.code.MergeFrom(JobProto.Code(
-    size = max(os.stat(zip_path).st_size / (1024 ** 2), 1), # jobs in MiB
+    size = max(int(os.stat(zip_path).st_size / (1024 ** 2)), 1), # jobs in MiB
     type = JobProto.Code.Type.ZIP,
   ))
 
@@ -350,12 +220,11 @@ def _upload_job_zip(zip_path, job_id, job_proto):
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
     UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
-    f"Failed to deploy job: {job_proto.id}"
+    f"Failed to upload job: {job_proto.id} | {job_proto.name}"
   )
   job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
-
   logger.debug("Uploading model to S3 ...")
   r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
   try:
@@ -364,17 +233,9 @@ def _upload_job_zip(zip_path, job_id, job_proto):
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
 
-  logger.info("Creating new run ...")
-  try:
-    job: JobProto = nbox_grpc_stub.CreateJob(CreateJobRequest(job = job_proto))
-  except grpc.RpcError as e:
-    if e.code() == grpc.StatusCode.ALREADY_EXISTS:
-      logger.debug(f"Job {job_proto.id} already exists")
-    else:
-      raise e
-  except Exception as e:
-    logger.error(f"Failed to create job: {e}")
-    return
+  # if this is the first time this is being created
+  if new_job:
+    rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job")
 
   # write out all the commands for this job
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
@@ -387,6 +248,18 @@ def _upload_job_zip(zip_path, job_id, job_proto):
   logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   logger.info(f"   [page] - {_webpage}")
 
+  # create a Job object and return so CLI can do interesting things
+  from nbox.jobs import Job
+  return Job(job_proto.id, job_proto.auth_info.workspace_id)
+
+
+#######################################################################################################################
+"""
+# Common
+
+Function related to both NBX-Serving and NBX-Jobs
+"""
+#######################################################################################################################
 
 def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
   # zip all the files folder
@@ -431,21 +304,24 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
       logger.debug(f"Zipping {f} => {arcname}")
       zip_file.write(f, arcname = arcname)
 
-    # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
-    _ct = datetime.now(timezone.utc)
-    _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
-    created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+    if not "exe.py" in zip_file.namelist():
+      logger.debug("exe.py already in zip")
 
-    # create the exe.py file
-    exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
-    exe_path = U.join(gettempdir(), "exe.py")
-    logger.debug(f"Writing exe to: {exe_path}")
-    with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
-      f2.write(jinja2.Template(f.read()).render({
-        "created_time": created_time,
-        "nbox_version": __version__,
-        **jinja_kwargs
-      }))
-    zip_file.write(exe_path, arcname = "exe.py")
+      # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
+      _ct = datetime.now(timezone.utc)
+      _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+      created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+
+      # create the exe.py file
+      exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
+      exe_path = U.join(gettempdir(), "exe.py")
+      logger.debug(f"Writing exe to: {exe_path}")
+      with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
+        f2.write(jinja2.Template(f.read()).render({
+          "created_time": created_time,
+          "nbox_version": __version__,
+          **jinja_kwargs
+        }))
+      zip_file.write(exe_path, arcname = "exe.py")
 
   return zip_path

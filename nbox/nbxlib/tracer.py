@@ -8,14 +8,14 @@ import threading
 
 from nbox.jobs import Job
 
-from .. import utils as U
-from ..utils import logger
-from ..init import nbox_grpc_stub
-from ..auth import secret
-from ..hyperloop.job_pb2 import Job
-from ..hyperloop.dag_pb2 import Node
-from ..hyperloop.nbox_ws_pb2 import UpdateRunRequest
-from ..messages import rpc, get_current_timestamp, read_file_to_binary, read_file_to_string
+import nbox.utils as U
+from nbox.utils import logger
+from nbox.init import nbox_grpc_stub
+from nbox.auth import secret
+from nbox.hyperloop.job_pb2 import Job
+from nbox.hyperloop.dag_pb2 import Node
+from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from nbox.messages import rpc, get_current_timestamp, read_file_to_binary, read_file_to_string
 
 class Tracer:
   def __init__(self, heartbeat_every: int = 60):
@@ -39,9 +39,9 @@ class Tracer:
     fp_bin = U.join(init_folder, "job_proto.msg")
     fp_str = U.join(init_folder, "job_proto.pbtxt")
     if os.path.exists(fp_bin):
-      self.job_proto = read_file_to_binary(fp_bin, Job())
+      self.job_proto: Job = read_file_to_binary(fp_bin, Job())
     elif os.path.exists(fp_str):
-      self.job_proto = read_file_to_string(fp_str, Job())
+      self.job_proto: Job = read_file_to_string(fp_str, Job())
     else:
       raise RuntimeError("Could not find job_proto.msg or job_proto.pbtxt")
 
@@ -61,12 +61,12 @@ class Tracer:
 
   def __call__(self, node: Node, verbose: bool = True):
     if verbose:
-      logger.debug(node)
+      logger.debug()
     if not self.network_tracer:
       return
     self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this
     updated_at = node.run_status.start if node.run_status.end != None else node.run_status.end
-    logger.info(updated_at.ToDatetime())
+    logger.info(f"[NodeID: {node.id}] UpdateTime: {updated_at.ToDatetime()}")
     rpc(
       nbox_grpc_stub.UpdateRun,
       UpdateRunRequest(token = self.token, job = self.job_proto, updated_at = updated_at),

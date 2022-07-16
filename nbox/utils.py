@@ -39,6 +39,7 @@ import logging
 import hashlib
 import requests
 import tempfile
+import traceback
 import randomname
 from uuid import uuid4
 from pythonjsonlogger import jsonlogger
@@ -62,8 +63,14 @@ class ENVVARS:
   NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
   NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
 
+logger = None
 
 def get_logger():
+  # add some handling so files can use functional way of getting logger
+  global logger
+  if logger is not None:
+    return logger
+
   logger = logging.getLogger("utils")
   lvl = ENVVARS.NBOX_LOG_LEVEL("info").upper()
   logger.setLevel(getattr(logging, lvl))
@@ -212,6 +219,14 @@ def get_random_name(uuid = False):
 def hash_(item, fn="md5"):
   """Hash sting of any item"""
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
+
+
+def log_traceback():
+  f = io.StringIO("")
+  traceback.print_exception(*sys.exc_info(), file = f)
+  f.seek(0)
+  for _l in f.readlines():
+    logger.error(_l.rstrip())
 
 # /misc
 

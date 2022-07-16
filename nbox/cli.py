@@ -51,6 +51,9 @@ from nbox.auth import init_secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.framework.autogen import compile
+from nbox.version import __version__ as V
+
+logger = U.get_logger()
 
 def open_home():
   """Open current NBX platform"""
@@ -80,6 +83,10 @@ def login():
   os.remove(fp)
   init_secret()
 
+def version():
+  logger.info("NimbleBox.ai Client Library")
+  logger.info(f"    nbox version: {V}")
+
 
 def main():
   fire.Fire({
@@ -91,6 +98,7 @@ def main():
     "open"    : open_home,
     "serve"   : Serve,
     "tunnel"  : tunnel,
+    "version" : version,
   })
 
 if __name__ == "__main__":

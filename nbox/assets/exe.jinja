@@ -21,10 +21,15 @@ os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do
 from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
 
 @lru_cache(1)
-def get_op(cloud = False):
-  op = get_op_user()
+def get_op(cloud = False, serving: bool = False):
+  op = get_op_user(serving)
   if cloud:
-    op.__remote_init__()
+    if hasattr(op, "remote_init"):
+      op.remote_init() # >= v0.9.14rc27
+    else:
+      op.__remote_init__()
+  return op
+
 
 import nbox.utils as U
 from nbox.nbxlib.tracer import Tracer
@@ -35,35 +40,31 @@ from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 
 
 def run():
-  op: Operator = get_op(True)
+  op: Operator = get_op(cloud = True, serving = False)
   op.propagate(_tracer = Tracer())
   if hasattr(op._tracer, "job_proto"):
     op.thaw(op._tracer.job_proto)
 
   try:
     op()
+    status = Job.Status.COMPLETED
   except Exception as e:
-    f = io.StringIO("")
-    traceback.print_exception(*sys.exc_info(), file = f)
-    f.seek(0)
-    for _l in f.readlines():
-      U.logger.error(_l.rstrip())
-    os._exit(1)
+    U.log_traceback()
+    status = Job.Status.ERROR
   finally:
     if hasattr(op._tracer, "job_proto"):
-      op._tracer.job_proto.status = Job.Status.COMPLETED
+      op._tracer.job_proto.status = status
       rpc(
         nbox_grpc_stub.UpdateRun, UpdateRunRequest(
           token = op._tracer.token, job=op._tracer.job_proto, updated_at=get_current_timestamp()
         ), "Failed to end job!"
       )
     os._exit(0)
-  
+
   # why use os._exit over sys.exit:
   # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
   # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
   # tl;dr: os._exit kills without cleanup and so it's okay on the Pod
-
 
 
 def get_fastapi_fwd():
@@ -71,7 +72,7 @@ def get_fastapi_fwd():
 
   # first time loading the operator, will automatically create a cache miss and then all the rest will
   # be cache hits
-  op = get_op(True)
+  op = get_op(cloud = True, serving = True)
   
   # we use inspect signature instead of writing our own ast thing
   signature = inspect.signature(op.forward)
@@ -89,16 +90,10 @@ def get_fastapi_fwd():
   # pretty simple forward function, note that it gets operator using get_op which will be a cache hit
   async def forward(req: base_model):
     data = req.dict()
-    op = get_op()
+    op = get_op(cloud = True, serving = True)
     return op(**data)
 
   return forward
-
-
-def print_cache_status():
-  while True:
-    print(get_op.cache_info())
-    sleep(1)
 
 
 def serve(
@@ -110,7 +105,6 @@ def serve(
   from fastapi import FastAPI
   from fastapi.responses import JSONResponse
 
-  _forward = get_fastapi_fwd()
   app = FastAPI()
 
   # define ping endpoint
@@ -124,11 +118,19 @@ def serve(
   app.add_api_route("/metadata", metadata, methods=["GET"], response_class=JSONResponse)
 
   # define forward method
+  _forward = get_fastapi_fwd()
   app.add_api_route("/forward", _forward, methods=["POST"], response_class=JSONResponse)
 
   if debug:
     # this is for debugging purposes, it will print the cache status every second
-    Thread(target = print_cache_status).start()
+    def print_cache_status():
+      while True:
+        print(get_op.cache_info())
+        sleep(1)
+
+    # daemon thread means if main thread dies, these also eventually die
+    t = Thread(target = print_cache_status, daemon = True)
+    t.start()
 
   run(app, host = host, port = port,)
 

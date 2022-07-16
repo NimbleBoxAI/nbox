@@ -8,11 +8,16 @@ os.environ["NBOX_LOG_LEVEL"] = "INFO" # Keep it the way you like
 
 from nbox import Operator
 from nbox.hyperloop.job_pb2 import Resource
-from nbox.network import Schedule
+from nbox.jobs import Schedule
+from nbox import logger # Use this logger for printing
 
-def get_op() -> Operator:
-
-  operator = None # <<< YOUR Operator HERE #
+def get_op(serving: bool = False) -> Operator:
+  if serving:
+    # initialise your Operator for NBX-Serving here
+    operator = None
+  else:
+    # initialise your Operator for NBX-Job here
+    operator = None
 
   # confused? uncomment lines below
   # from nbox.nbxlib.ops import Magic
