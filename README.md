@@ -22,46 +22,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 ## 🧐 What is Nbox?
 
-`nbox` provides first class support API for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`:
-
-
-Deploy your machine learning or statistical models:
-
-```python
-from nbox import Model
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-# define your pre and post processing functions
-def pre(x: Dict):
-  return AutoTokenizer(**x)
-
-# load your classifier with functions
-model = AutoModelForSequenceClassification.from_pretrained("distill-bert")
-classifier = Model(model, pre = pre)
-
-# call your model
-classifier(f"Is this a good picture?")
-
-# get full control on exporting it
-spec = classifier.torch_to_onnx(
-  TorchToOnnx(...)
-)
-
-# confident? deploy it your cloud
-url, key = classifier.deploy(
-  spec, deployment_id_or_name = "classification"
-)
-
-# use it anywhere
-pred = requests.post(
-  url,
-  json = {
-    "text": f"Is this a good picture?"
-  },
-  header = {"Authorization": f"Bearer {key}"}
-).json()
-```
-
+`nbox` provides first class support API for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
 
 # 🤷Why nimblebox
 
@@ -75,6 +36,21 @@ pred = requests.post(
 - Share your projects
 - Collaborate with your team
 
+# 🎚 Features
+
+### Use the hardware you want
+![Use the hardware you want](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg1.c3679150.png&w=3840&q=75)
+### Secure SSH tunneling
+![Secure SSH tunneling](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg2.8c393e2c.png&w=3840&q=75)
+### Work with your favourite IDE
+![Work with your favourite IDE](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg3.d25060b5.png&w=3840&q=75)
+
+## ⏲ Schedule jobs
+### Seamless Integreation
+![Work with your favourite IDE](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FjobsImg1.b064d453.png&w=3840&q=75)
+
+## 🚀 Deploy with ease
+![deploy](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FdeployImg1.e4557546.png&w=3840&q=75)
 # 🏁 Get Started
 
 
@@ -115,7 +91,42 @@ nbox
    ├── __call__    # Run any command on the instance
    └── mv (WIP)    # Move files to and from NBX-Build
 ```
+###Deploy your machine learning or statistical models:
 
+```python
+from nbox import Model
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
+
+# define your pre and post processing functions
+def pre(x: Dict):
+  return AutoTokenizer(**x)
+
+# load your classifier with functions
+model = AutoModelForSequenceClassification.from_pretrained("distill-bert")
+classifier = Model(model, pre = pre)
+
+# call your model
+classifier(f"Is this a good picture?")
+
+# get full control on exporting it
+spec = classifier.torch_to_onnx(
+  TorchToOnnx(...)
+)
+
+# confident? deploy it your cloud
+url, key = classifier.deploy(
+  spec, deployment_id_or_name = "classification"
+)
+
+# use it anywhere
+pred = requests.post(
+  url,
+  json = {
+    "text": f"Is this a good picture?"
+  },
+  header = {"Authorization": f"Bearer {key}"}
+).json()
+```
 # 🛟 How to get help?
 
 Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our engineering team will respond
