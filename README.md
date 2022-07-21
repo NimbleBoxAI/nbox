@@ -91,7 +91,7 @@ nbox
    ├── __call__    # Run any command on the instance
    └── mv (WIP)    # Move files to and from NBX-Build
 ```
-###Deploy your machine learning or statistical models:
+### Deploy your machine learning or statistical models:
 
 ```python
 from nbox import Model
@@ -129,9 +129,9 @@ pred = requests.post(
 ```
 # 🛟 How to get help?
 
-Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our engineering team will respond
+Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our community or engineering team will respond!
 
-## 🔖Read our [Blog](https://nimblebox.ai/blog)
+## 🔖Read our [Blog](https://nimblebox.ai/blog).
 
 
 # 🧩 License
