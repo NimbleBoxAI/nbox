@@ -39,6 +39,7 @@ import logging
 import hashlib
 import requests
 import tempfile
+import traceback
 import randomname
 from uuid import uuid4
 from pythonjsonlogger import jsonlogger
@@ -51,14 +52,27 @@ class ENVVARS:
   #. ``NBOX_LOG_LEVEL``: Logging level for ``nbox``, set ``NBOX_LOG_LEVEL=info|debug|warning"
   #. ``NBOX_JSON_LOG``: Whether to print json-logs, set ``NBOX_JSON_LOG=1``
   #. ``NBOX_JOB_FOLDER``: Folder path for the job, set ``NBOX_JOB_FOLDER=/tmp/nbox/jobs"``
+  #. ``NBOX_NO_AUTH``: If set ``secrets = None``, this will break any API request and is good only for local testing
+  #. ``NBOX_SSH_NO_HOST_CHECKING``: If set, ``ssh`` will not check for host key
+  #. ``NBOX_HOME_DIR``: By default ~/.nbx folder
+  #. ``NBOX_USER_TOKEN``: User token for NimbleBox.ai from <app.nimblebox.ai/secrets>_
   """
   NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
   NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
   NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
   NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
+  NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
+  NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
+  NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
 
+logger = None
 
 def get_logger():
+  # add some handling so files can use functional way of getting logger
+  global logger
+  if logger is not None:
+    return logger
+
   logger = logging.getLogger("utils")
   lvl = ENVVARS.NBOX_LOG_LEVEL("info").upper()
   logger.setLevel(getattr(logging, lvl))
@@ -89,18 +103,6 @@ def log_and_exit(msg, *args, **kwargs):
 
 # lazy_loading/
 
-class Fn:
-  # TODO: @yashbonde build this, any arbitrary function
-  def __init__(self, fn, requirements = None):
-    self.fn = fn
-    self.requirements = requirements
-
-  def __repr__(self) -> str:
-    return f"<Fn {self.fn.__module__}.{self.fn.__qualname__}>"
-
-  def __call__(self, *args, **kwargs):
-    return self.fn(*args, **kwargs)
-
 def isthere(*packages, soft = True):
   """Checks all the packages
 
@@ -108,7 +110,7 @@ def isthere(*packages, soft = True):
       soft (bool, optional): If ``False`` raises ``ImportError``. Defaults to True.
   """
   def wrapper(fn):
-    _fn_ = Fn(fn, packages)
+    _fn_ = fn
     def _fn(*args, **kwargs):
       # since we are lazy evaluating this thing, we are checking when the function
       # is actually called. This allows checks not to happen during __init__.
@@ -152,7 +154,8 @@ def get_files_in_folder(folder, ext = ["*"]):
   all_paths = []
   _all = "*" in ext # wildcard means everything so speed up
 
-  for root,_,files in os.walk(folder):
+  folder_abs = os.path.abspath(folder)
+  for root,_,files in os.walk(folder_abs):
     if _all:
       all_paths.extend([join(root, f) for f in files])
       continue
@@ -192,7 +195,6 @@ def from_pickle(path):
   with open(path, "rb") as f:
     return dill.load(f)
 
-NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", join(os.path.expanduser("~"), ".nbx"))
 
 # /path
 
@@ -207,6 +209,14 @@ def get_random_name(uuid = False):
 def hash_(item, fn="md5"):
   """Hash sting of any item"""
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
+
+
+def log_traceback():
+  f = io.StringIO("")
+  traceback.print_exception(*sys.exc_info(), file = f)
+  f.seek(0)
+  for _l in f.readlines():
+    logger.error(_l.rstrip())
 
 # /misc
 

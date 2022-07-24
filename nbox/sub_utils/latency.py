@@ -53,7 +53,7 @@ def log_latency(region_name_or_function_to_decorate, log_level=None):
   """
 
   if log_level is None:
-    log_level = logging.INFO
+    log_level = logging.DEBUG
 
   if isinstance(region_name_or_function_to_decorate, str):
     region_name = region_name_or_function_to_decorate

@@ -22,11 +22,13 @@ Based os these ideas there are three types of subways:
 """
 
 import re
+import time
 import string
+import threading
 from requests import Session
 from functools import lru_cache
 
-from .utils import logger
+from nbox.utils import logger
 
 TIMEOUT_CALLS = 60
 
@@ -70,8 +72,9 @@ def filter_templates(paths):
       re_temps.append((re.compile("^"+x+"$"), x,))
   return re_temps
 
+
 class Sub30:
-  def __init__(self, _url, _api, _session: Session, *, prefix = ""):
+  def __init__(self, _url, _api, _session: Session, _default_key: str = "data", *, prefix = "", rl = None, bar = None):
     """Like Subway but built for Nimblebox Webserver APIs.
 
     Usage:
@@ -89,25 +92,58 @@ class Sub30:
       _api (dict): OpenAPI json dict
       _session (requests.Session): Session object to use for requests
       prefix (str, optional): This is internal, do not use it explicitly.
+      last_call_at (float, optional): This is internal, do not use it explicitly.
     """
     self._url = _url.strip("/")
-    self._session = _session
     self._api = _api
+    self._session = _session
+    self._default_key = _default_key
     self._prefix = prefix
+
+    self._bar = bar or threading.Barrier(2)
+    def _rate_limiter(s = 1.0):
+      while True:
+        self._bar.wait()
+        time.sleep(s)
+
+    if rl is None:
+      # daemon meaning: it will die when the main thread dies
+      # https://stackoverflow.com/questions/190010/daemon-threads-explanation
+      rl = threading.Thread(target=_rate_limiter, daemon=True)
+      rl.start()
+    self._rl = rl # the limiter function
+
+  def _create_keepalive(self):
+    """Creates a keepalive thread. Need to define this as a function because sleeping
+    can cause it to behave unlike a normal blocking program, so use this carefully."""
+
+    def _keep_alive():
+      # This is a hack to keep the session alive.
+      # https://github.com/psf/requests/issues/4937
+      # another more elegant solution is given here:
+      # https://github.com/psf/requests/issues/4937#issuecomment-788899804
+      while True:
+        try:
+          self._session.get(f"{self._url}")
+        except Exception as e:
+          pass
+        
+        if self.thread_kill_event.is_set():
+          break
+        time.sleep(30)
+
+    self.thread = threading.Thread(target = _keep_alive)
+    self.thread.start()
+    self.thread_kill_event = threading.Event()
+
+  def _stop(self):
+    self.thread_kill_event.set()
 
   def __repr__(self):
     return f"<Sub30 ({self._url})>"
 
   def __getattr__(self, attr):
-    return Sub30(f"{self._url}/{attr}", self._api, self._session, prefix=f"{self._prefix}/{attr}")
-
-  def data(self, _url = None, _api = None, _session = None, *, prefix = None):
-    return {
-      "_url": _url or self._url,
-      "_api": _api or self._api,
-      "_session": _session or self._session,
-      "_prefix": prefix or self._prefix,
-    }
+    return Sub30(f"{self._url}/{attr}", self._api, self._session, prefix=f"{self._prefix}/{attr}", rl = self._rl, bar = self._bar)
 
   def u(self, attr):
     return self.__getattr__(attr)
@@ -165,14 +201,27 @@ class Sub30:
     # call and return
     path = re.sub(r"\/_", "/", self._url)
     logger.debug(method.upper() + " " + path)
+    
+    # barrier will create a sync point for the rate limiter, i.e. if this is reached too quick
+    # the rate limiter will sleep for the same amount of time, else it would already be waiting
+    # for this
+    self._bar.wait()
     r = self._session.request(method, path, json = json, params = params)
     try:
       r.raise_for_status()
     except Exception as e:
       logger.error(r.content.decode())
       raise e
-    return r.json()
 
+    out = r.json()
+    try:
+      out = out[self._default_key]
+    except KeyError:
+      pass
+    return out
+
+  # _get = partial(__call__, _method = "get")
+  # _post = partial(__call__, _method = "post")
 
 class SpecSubway():
   def __init__(self, _url, _session, _spec, __name = None):
@@ -306,47 +355,3 @@ class SpecSubway():
         return out[0]
     return out
 
-
-################################################################################
-# Applications
-# ============
-# Anything that has an openapi.json spec can become a subway:
-#   NboxModel: A subway to vanilla nbox-serving fastapi server
-################################################################################
-
-class NboxModelSubway:
-  def __init__(self, x: str):
-    """Vanilla nbox-serving fastapi server"""
-    from requests import Session
-
-    url, key = self.pattern(x)
-    self.url = url
-    self.key = key
-    self.session = Session()
-    self.session.headers.update({"Authorization": f"Bearer {key}"})
-    r = self.session.get(url + "/openapi.json")
-    r.raise_for_status()
-    self.spec = r.json()
-    self.model_sub = SpecSubway(url, self.session, self.spec)
-
-  @staticmethod
-  def pattern(x):
-    import re
-    out = re.search(r"^_NBX-Deploy_([a-z0-9]+)_([a-z0-9]+_)?$", x)
-    if not out:
-      return False
-
-    x = out.groups()
-    if len(x) == 1:
-      return (x, None)
-    else:
-      return x
-
-  @staticmethod
-  def __eq__(other: str) -> bool:
-    if not isinstance(other, str):
-      return False
-    return NboxModelSubway.pattern(other) != False
-
-  def __call__(self, x):
-    return self.model_sub.predict(x)
