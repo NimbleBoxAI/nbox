@@ -99,7 +99,6 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_
   # checking if file is successfully uploaded on S3 and tell webserver whether upload is completed or not
   ws_stub_model = stub_all_depl.u(deployment_id).models.u(model_id) # eager create the stub
   ws_stub_model.update(_method = "post", status = status)
-  logger.debug(f"Webserver informed: {r.status_code}")
 
   # write out all the commands for this deployment
   logger.info("API will soon be hosted, here's how you can use it:")

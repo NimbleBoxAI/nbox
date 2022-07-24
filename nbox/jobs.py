@@ -110,12 +110,15 @@ def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_
   sys.path.append(init_folder)
   from nbx_user import get_op, get_resource, get_schedule
 
-  operator = get_op(method == "serving")
+  from nbox import Operator
+  from nbox.network import deploy_job, deploy_serving
+  operator: Operator = get_op(method == "serving")
 
   if method == "jobs":
-    out: Job = operator.deploy(
+    out: Job = deploy_job(
       init_folder = init_folder,
       job_id_or_name = id_or_name,
+      dag = operator._get_dag(),
       workspace_id = workspace_id,
       schedule = get_schedule(),
       resource = get_resource(),
@@ -123,13 +126,16 @@ def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_
     )
     return out
   elif method == "serving":
-    operator.serve(
+    out: Serve = deploy_serving(
       init_folder = init_folder,
-      id_or_name = id_or_name,
+      deployment_id_or_name = id_or_name,
       workspace_id = workspace_id,
       resource = get_resource(),
       wait_for_deployment = False,
+      _unittest = False
     )
+  
+  return out
 
 ################################################################################
 """

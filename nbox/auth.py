@@ -194,13 +194,16 @@ class NBXClient:
     os.makedirs(ENVVARS.NBOX_HOME_DIR, exist_ok=True)
     fp = join(ENVVARS.NBOX_HOME_DIR, "secrets.json")
 
+    access_token = ENVVARS.NBOX_USER_TOKEN("")
+
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(fp):
-      logger.info(f"Ensure that you put the email ID you have signed up with!")
-      _secrets_url = f"{nbx_url}/secrets"
-      logger.info(f"Opening: {_secrets_url}")
-      webbrowser.open(_secrets_url)
-      access_token = getpass("Access Token: ")
+      if not access_token:
+        logger.info(f"Ensure that you put the email ID you have signed up with!")
+        _secrets_url = f"{nbx_url}/secrets"
+        logger.info(f"Opening: {_secrets_url}")
+        webbrowser.open(_secrets_url)
+        access_token = getpass("Access Token: ")
       
       # Once we have the access token, we can get the secrets
       r = requests.get(f"{nbx_url}/api/v1/user/account_details", headers={"Authorization": f"Bearer {access_token}"})

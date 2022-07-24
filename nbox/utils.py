@@ -55,6 +55,7 @@ class ENVVARS:
   #. ``NBOX_NO_AUTH``: If set ``secrets = None``, this will break any API request and is good only for local testing
   #. ``NBOX_SSH_NO_HOST_CHECKING``: If set, ``ssh`` will not check for host key
   #. ``NBOX_HOME_DIR``: By default ~/.nbx folder
+  #. ``NBOX_USER_TOKEN``: User token for NimbleBox.ai from <app.nimblebox.ai/secrets>_
   """
   NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
   NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
@@ -62,6 +63,7 @@ class ENVVARS:
   NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
   NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
   NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
+  NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
 
 logger = None
 
@@ -101,18 +103,6 @@ def log_and_exit(msg, *args, **kwargs):
 
 # lazy_loading/
 
-class Fn:
-  # TODO: @yashbonde build this, any arbitrary function
-  def __init__(self, fn, requirements = None):
-    self.fn = fn
-    self.requirements = requirements
-
-  def __repr__(self) -> str:
-    return f"<Fn {self.fn.__module__}.{self.fn.__qualname__}>"
-
-  def __call__(self, *args, **kwargs):
-    return self.fn(*args, **kwargs)
-
 def isthere(*packages, soft = True):
   """Checks all the packages
 
@@ -120,7 +110,7 @@ def isthere(*packages, soft = True):
       soft (bool, optional): If ``False`` raises ``ImportError``. Defaults to True.
   """
   def wrapper(fn):
-    _fn_ = Fn(fn, packages)
+    _fn_ = fn
     def _fn(*args, **kwargs):
       # since we are lazy evaluating this thing, we are checking when the function
       # is actually called. This allows checks not to happen during __init__.

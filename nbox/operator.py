@@ -193,8 +193,6 @@ class Operator():
       if len(missing_args):
         raise ValueError(f"Missing required arguments: {missing_args}")
 
-      # _data.update({"self": None})
-
       # make a POST call to /forward and return the json
       url = f"https://api.nimblebox.ai/{serving_id}/forward"
       logger.debug(f"Hitting URL: {url}")
@@ -420,51 +418,8 @@ class Operator():
     dag.flowchart.CopyFrom(Flowchart(nodes = _nodes, edges = _edges))
     return dag
 
-  def deploy(
-    self,
-    init_folder: str,
-    job_id_or_name: str,
-    workspace_id: str = None,
-    schedule: Schedule = None,
-    resource: Resource = None,
-    *,
-    _unittest = False
-  ):
-    """Upload code as a batch process on NBX-Jobs infrastructure.
-    
-    DO NOT CALL THIS DIRECTLY, use `nbx serve upload` CLI command instead.
-    """
-    return deploy_job(
-      init_folder = init_folder,
-      job_id_or_name = job_id_or_name,
-      dag = self._get_dag(),
-      workspace_id = workspace_id,
-      schedule = schedule,
-      resource = resource,
-      _unittest = _unittest
-    )
-
-  def serve(
-    self,
-    init_folder: str,
-    id_or_name: str,
-    workspace_id: str = None,
-    resource: Resource = None,
-    wait_for_deployment: bool = False,
-    *,
-    _unittest = False,
-  ):
-    """Serve your operator as an API endpoint on NBX-Deploy infrastructure.
-    
-    DO NOT CALL THIS DIRECTLY, use `nbx serve upload` CLI command instead.
-    """
-    return deploy_serving(
-      init_folder = init_folder,
-      deployment_id_or_name = id_or_name,
-      workspace_id = workspace_id,
-      resource = resource,
-      wait_for_deployment = wait_for_deployment,
-      _unittest = _unittest
-    )
+  def deploy(self, resource: Resource = None, *, _unittest = False):
+    """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint"""
+    raise NotImplementedError("Under construction 🏗")
 
   # /nbx
