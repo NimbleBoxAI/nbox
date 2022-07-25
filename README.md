@@ -2,18 +2,6 @@
     <img src="https://media-exp1.licdn.com/dms/image/C4E1BAQH3ErUUfLXoHQ/company-background_10000/0/1536307975124?e=2159024400&v=beta&t=ZEgfg0K-n-14aYXq8m-aZRprGvwL5HMZF6YMPrUDiQI">
 </div>
 
-# 🏡 Know Our Team
-
-Nimblebox first came as an idea to help our founders fix a problem they were all dealing with. Why was setting up an AI environment such a hassle on traditional cloud platforms?
-
-
-Our founders decided to take matters into their own hands, by building an online AI platform out of a hacker house in a remote location by the beach.
-
-
-# 🎯 Mission and Values 
-Make AI accessible to everyone by making the barrier to entry almost negligible. NimbleBox wants to democratise AI.
-
-Imagine a world where K-12 students to experienced professionals are learning to code and trying to implement it in their daily workflow — that’s today. Now imagine a world where everyone is trying to learn and implement AI in their daily workflow — that’s the future we at NimbleBox envision.
 
 [![PyPI - Python
 Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)](https://pypi.org/project/nbox/)
@@ -39,18 +27,24 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 # 🎚 Features
 
 ### Use the hardware you want
-![Use the hardware you want](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg1.c3679150.png&w=3840&q=75)
+<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg1.c3679150.png&w=3840&q=75" width="700" >
+
 ### Secure SSH tunneling
-![Secure SSH tunneling](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg2.8c393e2c.png&w=3840&q=75)
-### Work with your favourite IDE
-![Work with your favourite IDE](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg3.d25060b5.png&w=3840&q=75)
+<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg2.8c393e2c.png&w=3840&q=75" width="700">
+
+### Work with your favourite IDE 
+<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Jupyter_logo.svg/1200px-Jupyter_logo.svg.png" width="70"><img src="https://code.visualstudio.com/assets/branding/app-icon.png" width="70">
+<img src="https://avatars.githubusercontent.com/u/22800682?s=280&v=4" width="70">
+
+<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg3.d25060b5.png&w=3840&q=75" width="700">
 
 ## ⏲ Schedule jobs
 ### Seamless Integreation
-![Work with your favourite IDE](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FjobsImg1.b064d453.png&w=3840&q=75)
+<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FjobsImg1.b064d453.png&w=3840&q=75" width="700">
 
 ## 🚀 Deploy with ease
-![deploy](https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FdeployImg1.e4557546.png&w=3840&q=75)
+<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FdeployImg1.e4557546.png&w=3840&q=75" width="700">
+
 # 🏁 Get Started
 
 
