@@ -418,7 +418,7 @@ class Operator():
     dag.flowchart.CopyFrom(Flowchart(nodes = _nodes, edges = _edges))
     return dag
 
-  def deploy(self, resource: Resource = None, *, _unittest = False):
+  def deploy(self, deployment_type = "job", resource: Resource = None, *, _unittest = False):
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint"""
     raise NotImplementedError("Under construction 🏗")
 

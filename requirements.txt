@@ -1,7 +1,7 @@
 randomname==0.1.3
 requests==2.25.1
 tabulate==0.8.9
-protobuf==4.21.1
+protobuf==3.20.1
 grpcio==1.46.3
 Jinja2==3.0.3
 dill==0.3.4

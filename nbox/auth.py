@@ -15,7 +15,8 @@ import requests
 import webbrowser
 from getpass import getpass
 
-from nbox.utils import join, isthere, logger, ENVVARS
+import nbox.utils as U
+from nbox.utils import join, isthere, logger
 
 # ------ AWS Auth ------ #
 
@@ -191,10 +192,10 @@ class NBXClient:
     """We try to find the values secrets file in the ``~/.nbx/secrets.json``, if not
     found, we ask the user for the email and direct them to browser.
     """
-    os.makedirs(ENVVARS.NBOX_HOME_DIR, exist_ok=True)
-    fp = join(ENVVARS.NBOX_HOME_DIR, "secrets.json")
+    os.makedirs(U.env.NBOX_HOME_DIR, exist_ok=True)
+    fp = join(U.env.NBOX_HOME_DIR, "secrets.json")
 
-    access_token = ENVVARS.NBOX_USER_TOKEN("")
+    access_token = U.env.NBOX_USER_TOKEN("")
 
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(fp):
@@ -240,13 +241,13 @@ class NBXClient:
   def put(self, item, value, persist: bool = False):
     self.secrets[item] = value
     if persist:
-      with open(join(ENVVARS.NBOX_HOME_DIR, "secrets.json"), "w") as f:
+      with open(join(U.env.NBOX_HOME_DIR, "secrets.json"), "w") as f:
         f.write(repr(self))
 
 
 def init_secret():
   # add any logic here for creating secrets
-  if not ENVVARS.NBOX_NO_AUTH(False):
+  if not U.env.NBOX_NO_AUTH(False):
     return NBXClient()
   return None
 

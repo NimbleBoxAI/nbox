@@ -349,7 +349,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   instance._unopened_error()
 
   # create logging for RSock
-  folder = U.join(U.ENVVARS.NBOX_HOME_DIR, "tunnel_logs")
+  folder = U.join(U.env.NBOX_HOME_DIR, "tunnel_logs")
   os.makedirs(folder, exist_ok=True)
   filepath = U.join(folder, f"tunnel_{instance.project_id}.log") # consistency with IDs instead of names
   file_logger = FileLogger(filepath)
@@ -393,7 +393,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     # https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess
     nbx_logger.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
     comm = "ssh"
-    if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+    if U.env.NBOX_SSH_NO_HOST_CHECKING(False):
       comm += " -o StrictHostKeychecking=no"
     comm += f" -p {port} ubuntu@localhost"
     nbx_logger.debug(f"Running command: {comm}")

@@ -14,7 +14,7 @@ import grpc
 import requests
 
 from nbox.auth import secret
-from nbox.utils import logger
+from nbox.utils import logger, env
 from nbox.subway import Sub30
 from nbox.hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
 
@@ -56,7 +56,10 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
 
 
 # common networking items that will be used everywhere
-nbox_grpc_stub: WSJobServiceStub  = get_stub()
+if env.NBOX_NO_LOAD_GRPC():
+  nbox_grpc_stub = None
+else:
+  nbox_grpc_stub: WSJobServiceStub  = get_stub()
 nbox_session = requests.Session()
 nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
 nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)

@@ -206,6 +206,7 @@ class Sub30:
     # the rate limiter will sleep for the same amount of time, else it would already be waiting
     # for this
     self._bar.wait()
+    # print(f"{method.upper()} {path} | {json}, {params}")
     r = self._session.request(method, path, json = json, params = params)
     try:
       r.raise_for_status()

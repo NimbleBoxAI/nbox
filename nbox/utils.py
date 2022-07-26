@@ -45,7 +45,7 @@ from uuid import uuid4
 from pythonjsonlogger import jsonlogger
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
-class ENVVARS:
+class env:
   """
   Single namespace for all environment variables.
   
@@ -64,6 +64,7 @@ class ENVVARS:
   NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
   NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
+  NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
 
 logger = None
 
@@ -74,10 +75,10 @@ def get_logger():
     return logger
 
   logger = logging.getLogger("utils")
-  lvl = ENVVARS.NBOX_LOG_LEVEL("info").upper()
+  lvl = env.NBOX_LOG_LEVEL("info").upper()
   logger.setLevel(getattr(logging, lvl))
 
-  if ENVVARS.NBOX_JSON_LOG(False):
+  if env.NBOX_JSON_LOG(False):
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(jsonlogger.JsonFormatter(
       '%(timestamp)s %(levelname)s %(message)s ',

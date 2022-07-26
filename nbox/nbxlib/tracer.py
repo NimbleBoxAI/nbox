@@ -25,7 +25,7 @@ class Tracer:
       self.network_tracer = False
       return
     
-    init_folder = U.ENVVARS.NBOX_JOB_FOLDER(None)
+    init_folder = U.env.NBOX_JOB_FOLDER(None)
     if init_folder == None:
       raise RuntimeError("NBOX_JOB_FOLDER not set")
     if not os.path.exists(init_folder):
