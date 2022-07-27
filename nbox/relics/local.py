@@ -19,14 +19,19 @@ class LocalStore(BaseStore):
     activity.log # contains the logs of this cache
   """
   def __init__(self, cache_dir: str = None, create: bool = True) -> Union[None, Any]:
-    self.cache_dir = cache_dir or os.path.join(env.NBOX_HOME_DIR(), ".relics")
+    self.cache_dir = cache_dir or os.path.join(env.NBOX_HOME_DIR(), "relics")
+    logger.info(f"Connecting object store: {cache_dir}")
     self._obejcts = {} # <key: item_path>
     self._objects_bin_path = f"{self.cache_dir}/_objects.bin"
     self._file_logger_path = f"{self.cache_dir}/activity.log"
 
+    # format = "pickle/pyarrow/tfrecords" in _put means have to write in the _get
+
     # Create the cache directory if it doesn't exist
     if not os.path.exists(self.cache_dir):
       Path(self.cache_dir).mkdir(parents=create)
+      # open(self._objects_bin_path, "w").close()
+      # open(self._file_logger_path, "w").close()
     
     # load the data from the cache
     if os.path.isdir(self.cache_dir):
@@ -41,11 +46,18 @@ class LocalStore(BaseStore):
     else:
       raise Exception(f"{self.cache_dir} is not a directory")
 
-  def _update(self,):
+  def _read_state(self):
+    if os.path.exists(self._objects_bin_path):
+      with open(self._objects_bin_path, "rb") as f:
+        self._obejcts = dill.load(f)
+
+  def _write_state(self):
     with open(self._objects_bin_path, "wb") as f:
       dill.dump(self._obejcts, f)
+  
+  def _put(self, key: str, value: bytes, ow: bool = False,) -> None:
+    self._read_state()
 
-  def _put(self, key: str, value: bytes, ow: bool = False) -> None:
     fp = f"{self.cache_dir}/{self._clean_key(key)}"
     _key = self.get_id(fp)
     item_path = f"{self.cache_dir}/items/{_key}"
@@ -58,9 +70,11 @@ class LocalStore(BaseStore):
     # update the statae
     self._obejcts[fp] = item_path
     self._logs.info(f"PUT {key}")
-    self._update()
+    self._write_state()
 
   def _get(self, key: str) -> bytes:
+    self._read_state()
+
     fp = f"{self.cache_dir}/{self._clean_key(key)}"
     item_path = self._obejcts.get(fp, None)
     if item_path is not None and os.path.exists(item_path):
@@ -71,10 +85,12 @@ class LocalStore(BaseStore):
     return None
 
   def _delete(self, key: str) -> None:
+    self._read_state()
+
     fp = f"{self.cache_dir}/{self._clean_key(key)}"
     item_path = self._obejcts.get(fp, None)
     if item_path is not None and os.path.exists(item_path):
       os.remove(item_path)
       del self._obejcts[key]
       self._logs.warning(f"DELETE {key}")
-      self._update()
+      self._write_state()

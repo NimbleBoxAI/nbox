@@ -2,22 +2,18 @@ import re
 from enum import Enum
 
 from nbox.init import nbox_ws_v1
-from nbox.relics.base import LocalStore
+from nbox.relics.local import LocalStore
 
 class RelicTypes(Enum):
   """
   Types of relics.
   """
   UNSET = 0
-
-  # all the files in this mode are going to be stored in some directory
-  LOCAL = 1
-
-  # this mode means that relic is the one run by NimbleBox
-  NBX = 0
-
-  # the backend in this case is the AWS S3
-  AWS_S3 = 3
+  LOCAL = 1 # all the files in this mode are going to be stored in some directory
+  NBX = 2 # this mode means that relic is the one run by NimbleBox
+  AWS_S3 = 3 # AWS S3
+  GCP_BUCKET = 4 # Google Cloud Storage
+  AZURE_BLOB = 5 # Azure Blob Storage
 
 
 class Relics():
@@ -56,6 +52,10 @@ class Relics():
     self.name = file_meta["name"]
     self.is_file = file_meta["is_file"]
     self.size = file_meta["size"]
+
+  @property
+  def metadata(self):
+    return {}
 
   def download(self, key, local_path):
     """download and store the file to local_path"""

@@ -87,7 +87,16 @@ def new(folder_name):
     f.write("__pycache__/")
   
   with open("requirements.txt", "w") as f:
-    f.write(f"nbox[serving]=={__version__} # do not change this")
+    f.write(f"""# This is where you list the third-party dependencies of your pipeline
+
+# Examples:
+# pandas
+# seaborn
+# torch
+
+nbox[serving]=={__version__} # do not change this
+""")
+
 
   assets = U.join(U.folder(__file__), "assets")
   path = U.join(assets, "user.jinja")

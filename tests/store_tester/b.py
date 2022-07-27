@@ -7,7 +7,7 @@ from nbox import Operator
 class StoreWriter(Operator):
   def __init__(self):
     super().__init__()
-    self.relic = Relics("local:/Users/yashbonde/.nbx/.relics")
+    self.relic = Relics("local:/Users/yashbonde/.nbx/relics")
     
   def forward(self):
     print("writing ...")
@@ -17,7 +17,7 @@ class StoreWriter(Operator):
 class StoreReader(Operator):
   def __init__(self):
     super().__init__()
-    self.relic = Relics("local:/Users/yashbonde/.nbx/.relics")
+    self.relic = Relics("local:/Users/yashbonde/.nbx/relics")
     
   def forward(self):
     print("reading ...")
@@ -31,9 +31,12 @@ class StoreTester(Operator):
     self.read = StoreReader()
 
   def forward(self):
-    self.write.forward()
-    self.read.forward()
+    self.write()
+    self.read()
 
 if __name__ == "__main__":
+  from shutil import rmtree
+  rmtree("/Users/yashbonde/.nbx/relics", ignore_errors=True)
+
   op = StoreTester()
   op()
