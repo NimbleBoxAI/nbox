@@ -79,7 +79,7 @@ def get(api_end: str, **kwargs):
   sys.stdout.flush()
 
 def login():
-  fp = U.join(U.env.NBOX_HOME_DIR, "secrets.json")
+  fp = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
   os.remove(fp)
   init_secret()
 

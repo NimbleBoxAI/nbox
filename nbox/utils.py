@@ -42,6 +42,8 @@ import tempfile
 import traceback
 import randomname
 from uuid import uuid4
+from functools import partial
+from datetime import datetime, timezone
 from pythonjsonlogger import jsonlogger
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
@@ -62,7 +64,7 @@ class env:
   NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
   NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
   NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
-  NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
+  NBOX_HOME_DIR = lambda : os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
 
@@ -96,6 +98,23 @@ def get_logger():
   return logger
 
 logger = get_logger() # package wide logger
+
+
+class FileLogger:
+  def __init__(self, filepath):
+    self.filepath = filepath
+    self.f = open(filepath, "a+")
+
+    self.debug = partial(self.log, level="debug",)
+    self.info = partial(self.log, level="info",)
+    self.warning = partial(self.log, level="warning",)
+    self.error = partial(self.log, level="error",)
+    self.critical = partial(self.log, level="critical",)
+
+  def log(self, message, level):
+    self.f.write(f"[{datetime.now(timezone.utc).isoformat()}] {level}: {message}\n")
+    self.f.flush()
+
 
 def log_and_exit(msg, *args, **kwargs):
   # convinience function to avoid tracebacks

@@ -19,30 +19,10 @@ import threading
 import subprocess
 from time import sleep
 from typing import List
-from functools import partial
-from datetime import datetime, timezone
-
-from nbox.utils import logger as nbx_logger
+from nbox.utils import logger as nbx_logger, FileLogger
 from nbox import utils as U
 from nbox.auth import secret
 from nbox.instance import Instance
-
-
-class FileLogger:
-  def __init__(self, filepath):
-    self.filepath = filepath
-    self.f = open(filepath, "a")
-
-    self.debug = partial(self.log, level="debug",)
-    self.info = partial(self.log, level="info",)
-    self.warning = partial(self.log, level="warning",)
-    self.error = partial(self.log, level="error",)
-    self.critical = partial(self.log, level="critical",)
-
-  def log(self, message, level):
-    self.f.write(f"[{datetime.now(timezone.utc).isoformat()}] {level}: {message}\n")
-    self.f.flush()
-
 
 class RSockClient:
   """
@@ -349,7 +329,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   instance._unopened_error()
 
   # create logging for RSock
-  folder = U.join(U.env.NBOX_HOME_DIR, "tunnel_logs")
+  folder = U.join(U.env.NBOX_HOME_DIR(), "tunnel_logs")
   os.makedirs(folder, exist_ok=True)
   filepath = U.join(folder, f"tunnel_{instance.project_id}.log") # consistency with IDs instead of names
   file_logger = FileLogger(filepath)

@@ -314,7 +314,7 @@ class Instance():
     from nbox.sub_utils.ssh import FileLogger, ConnectionManager
 
     # create logging for RSock
-    folder = U.join(U.env.NBOX_HOME_DIR, "tunnel_logs")
+    folder = U.join(U.env.NBOX_HOME_DIR(), "tunnel_logs")
     os.makedirs(folder, exist_ok=True)
     filepath = U.join(folder, f"tunnel_{self.project_id}.log") # consistency with IDs instead of names
     file_logger = FileLogger(filepath)

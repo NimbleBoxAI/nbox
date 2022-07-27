@@ -192,8 +192,8 @@ class NBXClient:
     """We try to find the values secrets file in the ``~/.nbx/secrets.json``, if not
     found, we ask the user for the email and direct them to browser.
     """
-    os.makedirs(U.env.NBOX_HOME_DIR, exist_ok=True)
-    fp = join(U.env.NBOX_HOME_DIR, "secrets.json")
+    os.makedirs(U.env.NBOX_HOME_DIR(), exist_ok=True)
+    fp = join(U.env.NBOX_HOME_DIR(), "secrets.json")
 
     access_token = U.env.NBOX_USER_TOKEN("")
 
@@ -241,7 +241,7 @@ class NBXClient:
   def put(self, item, value, persist: bool = False):
     self.secrets[item] = value
     if persist:
-      with open(join(U.env.NBOX_HOME_DIR, "secrets.json"), "w") as f:
+      with open(join(U.env.NBOX_HOME_DIR(), "secrets.json"), "w") as f:
         f.write(repr(self))
 
 
