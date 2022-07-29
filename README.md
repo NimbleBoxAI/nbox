@@ -1,8 +1,4 @@
-<div align="center">
-    <img src="https://media-exp1.licdn.com/dms/image/C4E1BAQH3ErUUfLXoHQ/company-background_10000/0/1536307975124?e=2159024400&v=beta&t=ZEgfg0K-n-14aYXq8m-aZRprGvwL5HMZF6YMPrUDiQI">
-</div>
-
-
+<a href="https://nimblebox.ai/" target="_blank"><img src="./assets/built_at_nbx.svg" align="right"></a>
 [![PyPI - Python
 Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue)](https://pypi.org/project/nbox/)
 [![Downloads](https://pepy.tech/badge/nbox)](https://pepy.tech/project/nbox)
@@ -26,24 +22,18 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 # 🎚 Features
 
-### Use the hardware you want
-<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg1.c3679150.png&w=3840&q=75" width="700" >
+### 🏗️ Freedom To Build
+![Build Landing Page (2)](https://user-images.githubusercontent.com/89596037/181773716-ba63f167-af0d-48aa-921a-02e13238c0f2.gif)
 
-### Secure SSH tunneling
-<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg2.8c393e2c.png&w=3840&q=75" width="700">
 
-### Work with your favourite IDE 
-<img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/38/Jupyter_logo.svg/1200px-Jupyter_logo.svg.png" width="70"><img src="https://code.visualstudio.com/assets/branding/app-icon.png" width="70">
-<img src="https://avatars.githubusercontent.com/u/22800682?s=280&v=4" width="70">
+### 🦾 Automate with Ease
+![Jobs Landing Page](https://user-images.githubusercontent.com/89596037/181774553-99120354-72f5-4064-9216-4f8a5aa050be.gif)
 
-<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FbuildImg3.d25060b5.png&w=3840&q=75" width="700">
 
-## ⏲ Schedule jobs
-### Seamless Integreation
-<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FjobsImg1.b064d453.png&w=3840&q=75" width="700">
 
-## 🚀 Deploy with ease
-<img src="https://nimblebox.ai/_next/image?url=%2F_next%2Fstatic%2Fmedia%2FdeployImg1.e4557546.png&w=3840&q=75" width="700">
+### 🚀 Intuitive Dashboard
+![Deploy Landing Page](https://user-images.githubusercontent.com/89596037/181775468-cc342a30-d87e-4576-8bdd-8ffdd75ff759.gif)
+
 
 # 🏁 Get Started
 
