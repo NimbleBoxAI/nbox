@@ -1,7 +1,7 @@
 """
-NBX-Build Instances are APIs to your machines. These APIs can be used to change state of
-the machine (start, stop, etc.), can be used to transfer files to and from the machine
-and to an extent running and managing programs (WIP).
+NBX-Build Instances are APIs to your machines. These APIs can be used to change state of the machine (start, stop,
+etc.), can be used to transfer files to and from the machine (using ``Instance.mv`` commands), calling any shell
+command using ``Instance.remote``.
 """
 
 import io

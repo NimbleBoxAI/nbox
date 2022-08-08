@@ -127,6 +127,7 @@ def load_module_from_path(fn_name, file_path):
 
 
 class FileLogger:
+  """Flush logs to a file, useful when we don't want to mess with current logging"""
   def __init__(self, filepath):
     self.filepath = filepath
     self.f = open(filepath, "a+")

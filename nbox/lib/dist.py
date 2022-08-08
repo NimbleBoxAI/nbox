@@ -1,3 +1,8 @@
+"""
+With NimbleBox you can run cluster wide workloads from anywhere. This requires capabilities around distributed computing,
+process managements. The code here is tested along with ``nbox.Relic`` to perform distributed local processing.
+"""
+
 import os
 import inspect
 import subprocess
@@ -15,8 +20,8 @@ PROC_FOLDER = "./nbx_autogen_proc"
 
 # Manager
 class RootRunner(Operator):
-  """This is the Operator which runs on the main Job pod and stores all the values"""
   def __init__(self, op: Operator, dist = False, verbose: str = False, *, _unittest: bool = False):
+    """This is the Operator which runs on the main Job pod and stores all the values"""
     super().__init__()
     self.op = op
     self.dist = dist
@@ -71,13 +76,13 @@ class RootRunner(Operator):
 
 
 class AgentOpRootStub(Operator):
-  """This is the root stub for the remote job. In the current implementation it will spin up a new process
-  and manage the connections and things for it.
-  
-  Hmmm... One day maybe [run go in python](https://medium.com/analytics-vidhya/running-go-code-from-python-a65b3ae34a2d)
-  
-  Think of this like kubelet or raylet"""
   def __init__(self, op: Operator, op_name:str , res: Resource, relic: Relic("local:")):
+    """This is the root stub for the remote job. In the current implementation it will spin up a new process
+    and manage the connections and things for it.
+    
+    Hmmm... One day maybe [run go in python](https://medium.com/analytics-vidhya/running-go-code-from-python-a65b3ae34a2d)
+    
+    Think of this like kubelet or raylet"""
     super().__init__()
     self.op = op
     self.op_name = op_name

@@ -105,8 +105,8 @@ class Operator():
       # to convert operator is 
       job: Operator = MyOperator(...)
 
-      # deploy this as a batch process
-      job.deploy()
+      # deploy this as a batch process or API endpoint
+      job.deploy() # WIP
     """
     self._operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
     self._op_trace = []

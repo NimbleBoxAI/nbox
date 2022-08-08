@@ -1,3 +1,8 @@
+"""
+All the operators that are using the demos are provided here. Highly recommend someome to go through
+this when learning how to code your own ``Operator``.
+"""
+
 from nbox import Operator, logger
 from nbox.lib.shell import ShellCommand, GitClone
 

@@ -2,6 +2,11 @@
 # from nbox.framework.on_functions import PureFunctionParser
 # read as "from nbox's framework on Functions import the pure-function Parser"
 
+"""
+This contains the code for our public static code parsers. We will be moving them internally as we expand our
+scope. Till then here's all the code we have written till now. Keep a lookout for ``Timeless`` from NimbleBox.
+"""
+
 import ast
 import base64
 import inspect
@@ -18,6 +23,7 @@ from ..hyperloop.dag_pb2 import DAG, Flowchart, Node, Code, Edge, RunStatus
 # the next set of functions are meant as support methods to create nbox_strings IR.
 
 class NboxStrings:
+  """Class to generate all the strings, for our representation."""
   OP_TO_STRING = {
     "function": "FUNCTION: {name} ( {inputs} ) => [ {outputs} ]",
     "define": "DEFINE: {name} ( {inputs} )",
@@ -29,6 +35,7 @@ class NboxStrings:
     pass
 
   def function(self, name, inputs, outputs):
+    """Render code for any function."""
     return self.OP_TO_STRING["function"].format(
       name=name,
       inputs=", ".join([f"{x['kwarg']}={x['value']}" for x in inputs]),
@@ -36,18 +43,21 @@ class NboxStrings:
     )
 
   def define(self, name, inputs):
+    """Render code for any definition."""
     return self.OP_TO_STRING["define"].format(
       name=name,
       inputs=", ".join([f"{x['kwarg']}={x['value']}" for x in inputs])
     )
 
   def for_loop(self, iter, target):
+    """Render code for any for loop."""
     return self.OP_TO_STRING["for"].format(
       iter=iter,
       target=", ".join(target)
     )
 
   def return_statement(self, value):
+    """Render code for any return statement."""
     return self.OP_TO_STRING["return"].format(
       value=value
     )
@@ -55,6 +65,7 @@ class NboxStrings:
 nbxl = NboxStrings()
 
 def write_program(nodes):
+  """Render code for any program."""
   for i, n in enumerate(nodes):
     logger.debug(f"{i:03d}|{n.get('nbox_string', n.get('info').get('nbox_string'))}")
 
@@ -62,6 +73,7 @@ def write_program(nodes):
 # ==================
 
 def get_code_portion(cl, lineno, col_offset, end_lineno, end_col_offset, b64 = True, **_):
+  """Returns code piece for any section given all the lines it contains"""
   sl, so, el, eo = lineno, col_offset, end_lineno, end_col_offset
   if sl == el:
     return cl[sl-1][so:eo]
@@ -79,7 +91,8 @@ def get_code_portion(cl, lineno, col_offset, end_lineno, end_col_offset, b64 = T
     return base64.b64encode(code.encode()).decode()
   return code
 
-def parse_args(node):
+def parse_args(node: ast.arguments):
+  """Takes an ``ast.arguments`` list and reutrns kwarg/value pair from it."""
   inputs = []
   for a in node.args:
     a = a.arg if isinstance(a, ast.arg) else a
@@ -105,6 +118,7 @@ def parse_args(node):
   return inputs
 
 def get_name(node):
+  """Given a node, try to extract it's name."""
   if isinstance(node, ast.Name):
     return node.id
   elif isinstance(node, ast.Constant):
@@ -115,6 +129,7 @@ def get_name(node):
     return get_name(node.func)
 
 def parse_kwargs(node, lines):
+  """Given a node, try to extract it's kwargs."""
   if isinstance(node, ast.Name):
     return node.id
   elif isinstance(node, ast.Constant):
@@ -142,6 +157,7 @@ def parse_kwargs(node, lines):
     return get_code_portion(lines, **node.func.__dict__)
 
 def node_assign_or_expr(node, lines, node_proto: Node) -> Union[Node, None]:
+  """Return ``nbox.hyperloop`` Node for assign or expressions"""
   # print(get_code_portion(lines, b64 = False, **node.__dict__))
   value = node.value
   try:
@@ -187,6 +203,7 @@ def node_assign_or_expr(node, lines, node_proto: Node) -> Union[Node, None]:
   return node_proto
 
 def node_if_expr(node: ast.IfExp, lines: list, node_proto: Node) -> Node:
+  """Return ``nbox.hyperloop`` Node for if conditional"""
   def get_conditions(node, lines, conds = []):
     if not hasattr(node, "test"):
       else_cond = list(filter(lambda x: x["condition"] == "else", conds))
@@ -269,6 +286,7 @@ def node_if_expr(node: ast.IfExp, lines: list, node_proto: Node) -> Node:
   return node_proto
 
 def node_for_expr(node: ast.For, lines: list, node_proto: Node) -> Node:
+  """Return ``nbox.hyperloop`` Node for as for loop."""
   iter_str = get_code_portion(lines, **node.iter.__dict__)
   if isinstance(node.target, ast.Tuple):
     targets = [x.id for x in node.target.elts]
@@ -296,6 +314,7 @@ def node_for_expr(node: ast.For, lines: list, node_proto: Node) -> Node:
   return node_proto
 
 def node_return(node: ast.Return, lines, node_proto: Node) -> Node:
+  """Return ``nbox.hyperloop`` Node for a return method."""
   if isinstance(node.value, ast.Tuple):
     returns = [x.id for x in node.value.elts]
   else:
@@ -318,6 +337,7 @@ def node_return(node: ast.Return, lines, node_proto: Node) -> Node:
   return node_proto
 
 def def_func_or_class(node, lines, node_proto: Node) -> Node:
+  """Return ``nbox.hyperloop`` Node for any function or class definition."""
   node_proto.MergeFrom(Node(
     name = f"symbol-{node.name}",
     type = Node.NodeType.OP, # TODO: @yashbonde expand node types to include class/func definitions
@@ -336,6 +356,7 @@ def def_func_or_class(node, lines, node_proto: Node) -> Node:
   return node_proto
 
 def async_def_func_or_class(node, lines, node_proto: Node) -> Node:
+  """Return ``nbox.hyperloop`` Node for any asyn function."""
   print(node.__dict__)
   node_proto.MergeFrom(Node(
     name = f"symbol-{node.name}",
@@ -381,6 +402,7 @@ type_wise_logic = {
 
 
 def code_node(execution_index, expr, code_lines) -> Node:
+  """Return default ``nbox.hyperloop`` Node."""
   # code pieces that are not yet supported should still see the code
   return Node(
     id = str(uuid4()),
@@ -405,8 +427,7 @@ def code_node(execution_index, expr, code_lines) -> Node:
 
 
 def get_nbx_flow(forward) -> DAG:
-  """Get NBX flowchart. Read python grammar here:
-  https://docs.python.org/3/reference/grammar.html
+  """Get NBX flowchart. Read python grammar `here <https://docs.python.org/3/reference/grammar.html>`_
 
   Args:
       forward (callable): the function whose flowchart is to be generated

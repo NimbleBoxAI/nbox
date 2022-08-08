@@ -5,11 +5,8 @@ How do create a new job? Go to your terminal
 
 .. code-block:: bash
 
-  python3 -m nbox jobs new --help
+  nbx jobs new moonshot
 
-  # signature
-  
-  nbox jobs new PROJECT_NAME --workspace_id=WORKSPACE_ID
 
 So if I am putting my job in production I will call the command above. ``nbox`` will ask you a couple of questions to reduce your efforts and making it more interactive.
 Finally, it will create a folder ``PROJECT_NAME`` with following files in it:
@@ -17,8 +14,7 @@ Finally, it will create a folder ``PROJECT_NAME`` with following files in it:
 .. code-block::
   
   ./
-  ├── README.md
-  ├── exe.py
+  ├── .nboxignore
   ├── nbx_user.py
   └── requirements.txt
 
@@ -26,21 +22,34 @@ You can add all your dependencies in the ``requirements.txt`` file which will be
 
 .. code-block:: python
 
-  def get_op() -> Operator:
-  """Function to initialising your job, it might require passing a bunch of arguments.
-  Use this function to get the operator by manually defining things here"""
-  # from nbox.nbxlib.ops import Magic
-  # return Magic()
+  def get_op(serving: bool = False) -> Operator:
+    if serving:
+      # initialise your Operator for NBX-Serving here
+      operator = None
 
-  # >>> YOUR CODE HERE <<< #
-  return
+      # confused? uncomment lines below
+      # from nbox.lib.demo import MagicServing
+      # operator = MagicServing()
+    else:
+      # initialise your Operator for NBX-Job here
+      operator = None
 
-If you are unsure, you can just uncomment the first two lines and return the initialised ``Magic`` operator. Go to the folder and run the following commands to deploy:
+      # confused? uncomment lines below
+      from nbox.lib.demo import Magic
+      operator = Magic()
+
+    return operator
+
+
+If you are unsure, you can just uncomment the two lines and return the initialised ``Magic`` operator. Go to the folder and run the following commands to deploy:
 
 .. code-block:: bash
 
-  cd PROJECT_NAME/      # go the folder
-  python3 exe.py deploy # put your job on production.
+  nbx jobs upload moonshot --id_or_name "moonshot" --workspace_id "your-workspace-id"
+
+
+The logs will contain all the instructions for ``trigger``-ing the job. With the above code you have only uploaded the code, to run the job
+you will need to trigger it. This can be done from the dashboard or from the code as given in the logs.
 
 
 Creating Custom Jobs
@@ -67,18 +76,7 @@ the ``__init__`` function and ``forward`` function, just like how you do in case
 
   job = SomeTask()
 
-
-FAQs
+More
 ----
 
-For FAQs regarding the platform click `here <https://docs.v2.nimblebox.ai/developer-tools/jobs/get-started>`_.
-
-**How to create a new job?**
-
-``python3 -m nbox jobs new --help``
-
-**How do I transfer file to an object store like S3?**
-
-Currently, you can write your own operator or reuse the existing ``boto3`` code that you have. You don't have to learn the intricacies
-of our system, you write code the way you like it.
-
+That's it when you want to run a batch process. Till then you can read `FAQs <jobsdeploy.faq.html>`_.

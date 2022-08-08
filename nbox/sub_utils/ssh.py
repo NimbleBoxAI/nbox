@@ -1,14 +1,20 @@
 """
 Creates a socket tunnel between users localhost to server called RSockServer (Reverse Socket Server) .
-Usage:
-  client-tunnel.py <client_port>:<instance_name>:<instance_port> <auth>
-Takes in the following arguments:
-  - client_port: The port that the user can connect to.
-  - instance_name: The name of the instance that the user wants to connect to.
-  - instance_port: The port that the instance is listening on.
-  - auth: The authentication token that the user has to provide to connect to the RSockServer.
-  
+
+Usage
+-----
+
+.. code-block:: bash
+
+  nbx tunnel 8000 --i "nbox-dev"
 """
+
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:3: ERROR: Unexpected indentation.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:4: WARNING: Block quote ends without a blank line; unexpected unindent.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:6: ERROR: Unexpected indentation.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:19: WARNING: Bullet list ends without a blank line; unexpected unindent.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:20: WARNING: Enumerated list ends without a blank line; unexpected unindent.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:21: WARNING: Enumerated list ends without a blank line; unexpected unindent.
 
 import os
 import sys
@@ -25,40 +31,39 @@ from nbox.auth import secret
 from nbox.instance import Instance
 
 class RSockClient:
-  """
-  This is a RSockClient. It handels the client socket where client is the user application trying to connect to "client_port"
-  Connects to RSockServer listening on localhost:886.
-  RSockServer recieves instructions as a string and sends back a response.
-  RSockServer requires following steps to setup
-  First,
-    Authentication:
-      - Authentication happens by sending
-        `"AUTH~{AUTH_TOKEN}"`
-      - AUTH_TOKEN is not defined and is default to 'password'
-    Seting config:
-      - you can set config by sending
-        `"SET_CONFIG~{instance}~{instance_port}"`
-      - "instance" - Currently is the internal ip of the instance.
-      - "instance_port" - What port users wants to connect to.
-    Connect:
-      - This Starts the main loop which
-        1. Listen on client_port
-        2. On connection, 
-      2. On connection, 
-        2. On connection, 
-          a. Send AUTH
-          b. If AUTH is successful, send SET_CONFIG
-          c. If SET_CONFIG is successful, send CONNECT
-          d. If CONNECT is successful, start io_copy
-    IO_COPY:
-      - This is the main loop that handles the data transfer between client and server. This is done by creating a new thread for each connection.
-      - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
-      - When a connection is closed, the loop is stopped.
-  """
+  # This is a RSockClient. It handels the client socket where client is the user application trying to connect to "client_port"
+  # Connects to RSockServer listening on localhost:886.
+  # RSockServer recieves instructions as a string and sends back a response.
+  # RSockServer requires following steps to setup
+  # First,
+  #   Authentication:
+  #     - Authentication happens by sending
+  #       `"AUTH~{AUTH_TOKEN}"`
+  #     - AUTH_TOKEN is not defined and is default to 'password'
+  #   Seting config:
+  #     - you can set config by sending
+  #       `"SET_CONFIG~{instance}~{instance_port}"`
+  #     - "instance" - Currently is the internal ip of the instance.
+  #     - "instance_port" - What port users wants to connect to.
+  #   Connect:
+  #     - This Starts the main loop which
+  #       1. Listen on client_port
+  #       2. On connection, 
+  #     2. On connection, 
+  #       2. On connection, 
+  #         a. Send AUTH
+  #         b. If AUTH is successful, send SET_CONFIG
+  #         c. If SET_CONFIG is successful, send CONNECT
+  #         d. If CONNECT is successful, start io_copy
+  #   IO_COPY:
+  #     - This is the main loop that handles the data transfer between client and server. This is done by creating a new thread for each connection.
+  #     - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
+  #     - When a connection is closed, the loop is stopped.
 
   def __init__(self, connection_id, client_socket, user, subdomain, instance_port, file_logger, auth, secure=False):
     """
-    Initializes the client.
+    Initializes a reverse sockets client.
+
     Args:
       client_socket: The socket that the client is connected to.
       instance: The instance that the client wants to connect to.

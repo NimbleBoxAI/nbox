@@ -1,7 +1,4 @@
 """
-NBX
-===
-
 All the Operators that NimbleBox uses are defined in this module.
 """
 

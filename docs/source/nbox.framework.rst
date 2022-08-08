@@ -12,6 +12,5 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   nbox.framework.ml
-   nbox.framework.on_ml
    nbox.framework.on_operators
+   nbox.framework.on_functions

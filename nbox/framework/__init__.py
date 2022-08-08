@@ -32,25 +32,4 @@ If you are interested, you can read the source code directly from Github.
 
 # if you like what you see and want to work on more things like this, reach out research@nimblebox.ai
 
-from .on_ml import  *
 from .on_operators import *
-from .model_spec_pb2 import *
-
-try:
-  from .ml import *
-except ImportError:
-  from .autogen import compile
-  compile()
-  from .ml import *
-
-
-def get_model_functions(py_model):
-  """Try to infer the functions from the model"""
-  try:
-    __import__(Framework_torch._load_framework)
-    if Framework_torch._conditional(py_model):
-      methods = Framework_torch._METHODS
-      return methods
-  except ImportError:
-    pass
-  return {}

@@ -1,5 +1,5 @@
 """
-``nbox.Job`` is a wrapper to the APIs that's it.
+``nbox.Job`` and ``nbox.Serve`` are wrappers to the NBX-Jobs and NBX-Deploy APIs and contains staticmethods for convinience from the CLI.
 
 Notes
 -----

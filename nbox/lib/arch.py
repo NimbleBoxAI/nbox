@@ -1,7 +1,4 @@
 """
-Architecture
-============
-
 Here are some operators that can be used to create different architectural formats.
 """
 

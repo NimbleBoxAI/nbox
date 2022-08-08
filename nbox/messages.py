@@ -64,9 +64,6 @@ def rpc(stub: callable, message, err_msg: str, raise_on_error: bool = True):
   else:
     return resp
   if raise_on_error:
-    # raise RpcError("NBX-RPC error, see above for details")
-    # logger.error("NBX-RPC error, see above for details")
-    # ssy
     log_and_exit("NBX-RPC error, see above for details")
 
 def streaming_rpc(stub: callable, message, err_msg: str, raise_on_error: bool = True):

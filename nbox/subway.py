@@ -28,7 +28,7 @@ import threading
 from requests import Session
 from functools import lru_cache
 
-from nbox.utils import logger
+from nbox.utils import logger, log_and_exit
 
 TIMEOUT_CALLS = 60
 
@@ -211,8 +211,13 @@ class Sub30:
     try:
       r.raise_for_status()
     except Exception as e:
-      logger.error(r.content.decode())
-      raise e
+      logger.error("Could not complete request, here's some info:")
+      logger.error("  Status Code: " + str(r.status_code))
+      # raise e
+      cont = r.content.decode()
+      if cont.startswith("<html>"):
+        cont = ":: HTML page ::"
+      log_and_exit("  " + cont)
 
     out = r.json()
     try:

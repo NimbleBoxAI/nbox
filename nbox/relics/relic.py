@@ -1,9 +1,5 @@
 """
-Relic (alpha)
-=============
-
-NimbleBox' object store that can connect to your backend of choice (AWS S3, etc.) to provide
-persistant storage beyond instances.
+NimbleBox' object store that can connect to your backend of choice (AWS S3, etc.) to provide persistant storage beyond instances.
 """
 
 import re
@@ -29,6 +25,7 @@ class RelicTypes(Enum):
 class Relic():
   _mode = RelicTypes.UNSET
   def __init__(self, id_or_url, workspace_id = "personal", **kwargs):
+    """Connect to your Relic of choice."""
     # go over the bunch of cases that id_or_url can be and set the mode
     if id_or_url.startswith('http'):
       out = re.findall(r".ai\/(\w+)\/relics\/(.*)$", id_or_url)
