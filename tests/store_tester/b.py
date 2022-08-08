@@ -1,13 +1,13 @@
 import os
 os.environ["NBOX_LOG_LEVEL"] = "warning"
 
-from nbox.relics import Relics
+from nbox.relics import Relic
 from nbox import Operator
 
 class StoreWriter(Operator):
   def __init__(self):
     super().__init__()
-    self.relic = Relics("local:/Users/yashbonde/.nbx/relics")
+    self.relic = Relic("local:/Users/yashbonde/.nbx/relics")
     
   def forward(self):
     print("writing ...")
@@ -17,7 +17,7 @@ class StoreWriter(Operator):
 class StoreReader(Operator):
   def __init__(self):
     super().__init__()
-    self.relic = Relics("local:/Users/yashbonde/.nbx/relics")
+    self.relic = Relic("local:/Users/yashbonde/.nbx/relics")
     
   def forward(self):
     print("reading ...")

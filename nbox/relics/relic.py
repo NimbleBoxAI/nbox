@@ -1,5 +1,14 @@
+"""
+Relic (alpha)
+=============
+
+NimbleBox' object store that can connect to your backend of choice (AWS S3, etc.) to provide
+persistant storage beyond instances.
+"""
+
 import re
 from enum import Enum
+from time import sleep
 
 from nbox.init import nbox_ws_v1
 from nbox.relics.local import LocalStore
@@ -14,9 +23,10 @@ class RelicTypes(Enum):
   AWS_S3 = 3 # AWS S3
   GCP_BUCKET = 4 # Google Cloud Storage
   AZURE_BLOB = 5 # Azure Blob Storage
+  LOCAL_REDIS = 6 # store and retrieve data from local redis
 
 
-class Relics():
+class Relic():
   _mode = RelicTypes.UNSET
   def __init__(self, id_or_url, workspace_id = "personal", **kwargs):
     # go over the bunch of cases that id_or_url can be and set the mode
@@ -29,7 +39,10 @@ class Relics():
       self.url = id_or_url
 
     elif id_or_url.startswith('local:'):
-      self.store = LocalStore(id_or_url[6:], **kwargs)
+      cache_dir = id_or_url[6:]
+      if cache_dir == "":
+        cache_dir = None
+      self.store = LocalStore(cache_dir, **kwargs)
       self._mode = RelicTypes.LOCAL # change the mode to local
 
     elif re.findall(r"^\w{8}$", id_or_url):
@@ -61,10 +74,26 @@ class Relics():
     """download and store the file to local_path"""
     pass
 
+  def put(self, obj, key, ow):
+    """put the object to NBX"""
+    self.store.put(obj, key, ow)
+
+  def get(self, key):
+    """get the file from NBX"""
+    out = self.store.get(key)
+    while out == None:
+      sleep(1)
+      out = self.store.get(key)
+    return out
+
+  def has(self, key):
+    """check if the file exists in NBX"""
+    return self.store.get(key) != None
+
   def upload(self, local_path, key = None):
     """upload the file to NBX"""
     pass
 
   def delete(self, key):
     """delete the file from NBX"""
-    pass
+    self.store.delete(key)

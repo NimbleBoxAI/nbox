@@ -43,8 +43,10 @@ import traceback
 import randomname
 from uuid import uuid4
 from functools import partial
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pythonjsonlogger import jsonlogger
+from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
 class env:
@@ -67,6 +69,7 @@ class env:
   NBOX_HOME_DIR = lambda : os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
+  NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
 
 logger = None
 
@@ -98,6 +101,29 @@ def get_logger():
   return logger
 
 logger = get_logger() # package wide logger
+
+
+@contextmanager
+def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
+  from nbox.version import __version__
+  logger.warning("Deprecation Warning")
+  logger.warning(f"  current: {__version__}")
+  logger.warning(f"  removed: {remove}")
+  logger.warning(f"      msg: {msg}")
+  if replace_by:
+    logger.warning(f"  replace: {replace_by}")
+  if help:
+    logger.warning(f"  help: {help}")
+
+
+def load_module_from_path(fn_name, file_path):
+  spec = spec_from_file_location(fn_name, file_path)
+  foo = module_from_spec(spec)
+  mod_name = get_random_name()
+  sys.modules[mod_name] = foo
+  spec.loader.exec_module(foo)
+  fn = getattr(foo, fn_name)
+  return fn
 
 
 class FileLogger:

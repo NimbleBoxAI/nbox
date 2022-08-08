@@ -60,9 +60,14 @@ if env.NBOX_NO_LOAD_GRPC():
   nbox_grpc_stub = None
 else:
   nbox_grpc_stub: WSJobServiceStub  = get_stub()
-nbox_session = requests.Session()
-nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
-nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
+
+if env.NBOX_NO_LOAD_WS():
+  nbox_session = None
+  nbox_ws_v1 = None
+else:
+  nbox_session = requests.Session()
+  nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
+  nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
 
 # TODO: @yashbonde: raise deprecation warning for version
 # raise_old_version_warning(V._major, V._minor, V._patch)

@@ -31,7 +31,7 @@ from google.protobuf import field_mask_pb2
 from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.json_format import MessageToDict, MessageToJson, ParseDict
 
-from nbox.utils import logger
+from nbox.utils import logger, log_and_exit
 
 _SENTINEL = object()
 _WRAPPER_TYPES = (
@@ -64,7 +64,10 @@ def rpc(stub: callable, message, err_msg: str, raise_on_error: bool = True):
   else:
     return resp
   if raise_on_error:
-    raise RpcError("NBX-RPC error, see above for details")
+    # raise RpcError("NBX-RPC error, see above for details")
+    # logger.error("NBX-RPC error, see above for details")
+    # ssy
+    log_and_exit("NBX-RPC error, see above for details")
 
 def streaming_rpc(stub: callable, message, err_msg: str, raise_on_error: bool = True):
   """convienience function for streaming from a gRPC stub"""

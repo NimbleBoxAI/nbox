@@ -335,6 +335,10 @@ class Job:
       self.refresh()
       self.get_runs() # load the runs as well
 
+  @property
+  def exists(self):
+    return self.id is not None
+
   def change_schedule(self, new_schedule: 'Schedule' = None):
     """Change schedule this job"""
     logger.debug(f"Updating job '{self.job_proto.id}'")
@@ -479,8 +483,8 @@ class Schedule:
     Args:
         hour (int): Hour of the day, if only this value is passed it will run every ``hour``
         minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
-        days (list, optional): List of days (first three chars) of the week, if not passed it will run every day.
-        months (list, optional): List of months (first three chars) of the year, if not passed it will run every month.
+        days (str/list, optional): List of days (first three chars) of the week, if not passed it will run every day.
+        months (str/list, optional): List of months (first three chars) of the year, if not passed it will run every month.
         starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
         ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
     """
@@ -508,6 +512,11 @@ class Schedule:
 
     _days = {k:str(i) for i,k in enumerate(["sun","mon","tue","wed","thu","fri","sat"])}
     _months = {k:str(i+1) for i,k in enumerate(["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"])}
+
+    if isinstance(days, str):
+      days = [days]
+    if isinstance(months, str):
+      months = [months]
 
     diff = set(days) - set(_days.keys())
     if len(diff):

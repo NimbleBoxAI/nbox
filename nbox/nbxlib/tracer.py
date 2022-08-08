@@ -61,7 +61,7 @@ class Tracer:
 
   def __call__(self, node: Node, verbose: bool = True):
     if verbose:
-      logger.debug()
+      logger.debug(node)
     if not self.network_tracer:
       return
     self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this
