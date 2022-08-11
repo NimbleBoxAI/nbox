@@ -63,8 +63,12 @@ from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 
 
 def run():
+  _tracer = Tracer()
+  from nbox.auth import secret
+  secret.put("username", _tracer.job_proto.auth_info.username)
+
   op: Operator = get_op(cloud = True, serving = False)
-  op.propagate(_tracer = Tracer())
+  op.propagate(_tracer = _tracer)
   if hasattr(op._tracer, "job_proto"):
     op.thaw(op._tracer.job_proto)
 

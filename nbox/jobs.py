@@ -84,7 +84,11 @@ def new(folder_name):
   # create the necessary files that can be used
   os.chdir(folder_name)
   with open(".nboxignore", "w") as f:
-    f.write("__pycache__/")
+    f.write('''
+# This is where you list the files that you don't want to upload with your code
+
+__pycache__/
+    ''')
   
   with open("requirements.txt", "w") as f:
     f.write(f"""# This is where you list the third-party dependencies of your pipeline
@@ -95,6 +99,7 @@ def new(folder_name):
 # torch
 
 nbox[serving]=={__version__} # do not change this
+dainik # this is NBX-LMAO client
 """)
 
 

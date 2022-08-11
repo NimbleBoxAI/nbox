@@ -27,6 +27,7 @@ import string
 import threading
 from requests import Session
 from functools import lru_cache
+from json import dumps as json_dumps
 
 from nbox.utils import logger, log_and_exit
 
@@ -213,6 +214,10 @@ class Sub30:
     except Exception as e:
       logger.error("Could not complete request, here's some info:")
       logger.error("  Status Code: " + str(r.status_code))
+      if json:
+        logger.error("       Json: " + json_dumps(json, indent=2))
+      if params:
+        logger.error("     Params: " + json_dumps(params, indent=2))
       # raise e
       cont = r.content.decode()
       if cont.startswith("<html>"):

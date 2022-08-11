@@ -18,7 +18,7 @@ from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 from nbox.messages import rpc, get_current_timestamp, read_file_to_binary, read_file_to_string
 
 class Tracer:
-  def __init__(self, heartbeat_every: int = 60):
+  def __init__(self, start_heartbeat: bool = True, heartbeat_every: int = 60):
     self.heartbeat_every = heartbeat_every
     run_data = secret.get("run") # user should never have "run" on their local
     if run_data == None:
@@ -32,9 +32,9 @@ class Tracer:
       raise RuntimeError(f"NBOX_JOB_FOLDER {init_folder} does not exist")
 
     # get this data from the local secrets file
-    self.job_id = run_data["job_id"]
-    self.token = run_data["token"]
-    
+    self.job_id = run_data.get("job_id", None)
+    self.token = run_data.get("token", None)
+
     # grandfather old messages (<v0.9.14rc13)
     fp_bin = U.join(init_folder, "job_proto.msg")
     fp_str = U.join(init_folder, "job_proto.pbtxt")
@@ -56,8 +56,9 @@ class Tracer:
     self.job_proto.status = Job.Status.ACTIVE # automatically first run will
 
     # start heartbeat in a different thread
-    self.thread = threading.Thread(target=self.hearbeat_thread_worker)
-    self.thread.start()
+    if start_heartbeat:
+      self.thread = threading.Thread(target=self.hearbeat_thread_worker)
+      self.thread.start()
 
   def __call__(self, node: Node, verbose: bool = True):
     if verbose:

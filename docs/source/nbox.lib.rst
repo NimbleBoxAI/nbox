@@ -19,3 +19,4 @@ Submodules
    nbox.lib.dist
    nbox.lib.nbx_instances
    nbox.lib.shell
+   nbox.lib.notebook

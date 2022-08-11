@@ -63,17 +63,6 @@ class PythonScript(Operator):
   def forward(self):
     return self.com()
 
-
-class PythonNotebook(StepOp):
-  def __init__(self, fpath):
-    """Run any file in python as an operator"""
-    super().__init__()
-    self.fp = fpath
-    self.add_step(ShellCommand(
-      f"jupyter nbconvert --to notebook --execute {fpath}"
-    ))
-
-
 class NBToScript(Operator):
   def __init__(self, notebook_path: str, py_file: str) -> None:
     super().__init__()
