@@ -24,7 +24,8 @@ from nbox.lib.shell import ShellCommand
 @lru_cache(maxsize=1)
 def get_py_builtin_all():
   # a cheap 99% solution that works for 99% of people
-  with open("./builtin", "r") as f:
+  builtin_path = U.join(U.folder(__file__), "assets/builtin")
+  with open(builtin_path, "r") as f:
     items = set(f.read().splitlines())
   return items
 
@@ -68,6 +69,7 @@ class ImportNodeVisitor(ast.NodeVisitor):
 
   def visit_ImportFrom(self, node: ast.ImportFrom):
     self.import_modules.add(node.module)
+
 
 def process_codeblocks(cells) -> str:
   """This function is responsible for unpacking the code blocks and creating the python file from it."""
