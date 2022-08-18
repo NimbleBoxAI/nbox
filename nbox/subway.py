@@ -29,7 +29,7 @@ from requests import Session
 from functools import lru_cache
 from json import dumps as json_dumps
 
-from nbox.utils import logger, log_and_exit
+from nbox.utils import logger
 
 TIMEOUT_CALLS = 60
 
@@ -140,6 +140,10 @@ class Sub30:
   def _stop(self):
     self.thread_kill_event.set()
 
+  def _copy_session(self):
+    from copy import deepcopy
+    return deepcopy(self._session)
+
   def __repr__(self):
     return f"<Sub30 ({self._url})>"
 
@@ -222,7 +226,8 @@ class Sub30:
       cont = r.content.decode()
       if cont.startswith("<html>"):
         cont = ":: HTML page ::"
-      log_and_exit("  " + cont)
+      logger.error("  " + cont)
+      raise
 
     out = r.json()
     try:

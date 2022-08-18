@@ -40,26 +40,29 @@ from functools import lru_cache
 os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
 
 from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
-import nbox.utils as U
-
-@lru_cache(1)
-def get_op(cloud = False, serving: bool = False):
-  op = get_op_user(serving)
-  if cloud:
-    if hasattr(op, "remote_init"):
-      op.remote_init() # >= v0.9.14rc27
-    else:
-      with U.deprecation_warning("You are using old version, upgrade to latest nbox", "0.9.20", help = "pip install nbox --upgrade"):
-        op.__remote_init__()
-  return op
-
-
+from nbox import logger
 import nbox.utils as U
 from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.job_pb2 import Job
 from nbox import Operator, nbox_grpc_stub
 from nbox.messages import rpc, get_current_timestamp
 from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+
+def _exit_program():
+  os._exit(0)
+
+
+@lru_cache(1)
+def get_op(cloud = False, serving: bool = False):
+  op = get_op_user(serving)
+  if cloud:
+    try:
+      op.remote_init() # >= v0.9.14rc27
+    except Exception as e:
+      U.log_traceback()
+      logger.error("Failed to initialise remote operator!")
+      _exit_program()
+  return op
 
 
 def run():
@@ -72,21 +75,21 @@ def run():
   if hasattr(op._tracer, "job_proto"):
     op.thaw(op._tracer.job_proto)
 
+  status = Job.Status.ERROR
   try:
     op()
     status = Job.Status.COMPLETED
   except Exception as e:
     U.log_traceback()
-    status = Job.Status.ERROR
   finally:
     if hasattr(op._tracer, "job_proto"):
       op._tracer.job_proto.status = status
       rpc(
         nbox_grpc_stub.UpdateRun, UpdateRunRequest(
-          token = op._tracer.token, job=op._tracer.job_proto, updated_at=get_current_timestamp()
+          token = op._tracer.run_id, job=op._tracer.job_proto, updated_at=get_current_timestamp()
         ), "Failed to end job!"
       )
-    os._exit(0)
+    _exit_program()
 
   # why use os._exit over sys.exit:
   # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0

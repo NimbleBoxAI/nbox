@@ -124,7 +124,7 @@ def process_codeblocks(cells) -> str:
       logger.error(" reason: this is supported by jupyter notebook but not python")
       logger.error("    fix: subprocess.call(shelex.split(<com>))")
       logger.error(f"    >>> {line}")
-      U.log_and_exit("Unsupported error! Please fix the above error and try again")
+      raise
     else:
       raise e
   import_modules = nv.import_modules

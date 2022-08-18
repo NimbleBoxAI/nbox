@@ -5,5 +5,4 @@ This can support local file storage along with AWS S3, GCP Bucket, Azure Blob St
 
 from nbox.relics.base import BaseStore
 from nbox.relics.local import LocalStore
-from nbox.relics.aws import S3
-from nbox.relics.relic import Relic, RelicTypes
+from nbox.relics.nbx import NBXRelicStore

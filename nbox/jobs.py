@@ -431,11 +431,17 @@ class Job:
     logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()
 
-  def get_runs(self, sort = "s_no", reverse = False):
+  def get_runs(self, old: bool = True, page = -1, sort = "s_no", limit = 10):
     self.run_stub = nbox_ws_v1.workspace.u(self.workspace_id).job.u(self.id).runs
-    self.runs = self.run_stub()["runs_list"]
-    sorted_runs = sorted(self.runs, key = lambda x: x[sort], reverse = reverse)
-    return sorted_runs
+    self.runs = self.run_stub(limit = limit, page = page)["runs_list"]
+    sorted_runs = sorted(self.runs, key = lambda x: x[sort])
+    for run in sorted_runs:
+      yield run
+    if old:
+      return
+    y = input(f">> Print {limit} more runs? (y/n): ")
+    if y == "y":
+      yield from self.get_runs(page = page + 1, sort = sort, limit = limit)
 
   def display_runs(self, sort: str = "created_at", n: int = -1):
     runs = self.get_runs(sort, sort == "created_at") # time should be reverse

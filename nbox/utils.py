@@ -143,10 +143,10 @@ class FileLogger:
     self.f.flush()
 
 
-def log_and_exit(msg, *args, **kwargs):
-  # convinience function to avoid tracebacks
-  logger.error(msg, *args, **kwargs)
-  sys.exit(1)
+# def log_and_exit(msg, *args, **kwargs):
+#   # convinience function to avoid tracebacks
+#   logger.error(msg, *args, **kwargs)
+#   sys.exit(1)
 
 # lazy_loading/
 
@@ -194,14 +194,14 @@ def isthere(*packages, soft = True):
 
 # path/
 
-def get_files_in_folder(folder, ext = ["*"]):
+def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True):
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os
   all_paths = []
   _all = "*" in ext # wildcard means everything so speed up
 
-  folder_abs = os.path.abspath(folder)
+  folder_abs = os.path.abspath(folder) if abs_path else folder
   for root,_,files in os.walk(folder_abs):
     if _all:
       all_paths.extend([join(root, f) for f in files])
