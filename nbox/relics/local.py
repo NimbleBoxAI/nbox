@@ -6,7 +6,7 @@ from typing import Any, Union
 from nbox.utils import logger, FileLogger, env
 from nbox.relics.base import BaseStore
 
-class LocalStore(BaseStore):
+class RelicLocal(BaseStore):
   """
   Cache structure is like this:
 
@@ -94,3 +94,12 @@ class LocalStore(BaseStore):
       del self._objects[fp]
       self._logs.warning(f"DELETE {key}")
       self._write_state()
+
+  def has(self, key: str) -> None:
+    self._read_state()
+
+    fp = f"{self.cache_dir}/{self._clean_key(key)}"
+    item_path = self._objects.get(fp, None)
+    if item_path is not None and os.path.exists(item_path):
+      return True
+    return False

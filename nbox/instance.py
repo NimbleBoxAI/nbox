@@ -2,6 +2,29 @@
 NBX-Build Instances are APIs to your machines. These APIs can be used to change state of the machine (start, stop,
 etc.), can be used to transfer files to and from the machine (using ``Instance.mv`` commands), calling any shell
 command using ``Instance.remote``.
+
+CLI Commands
+------------
+
+Build comes built in with several functions to move and list files from the instance. All you need to know is that
+cloud files have prefix ``nbx://`` which is where your projects are. Here's a quick list:
+
+.. code-block:: bash
+
+  # move files
+  nbx build -i 'instance_name' --workspace_id 'workspace_id' \
+    mv ./local_file nbx://cloud_file
+
+  # or move folders
+  nbx build -i 'instance_name' --workspace_id 'workspace_id' \
+    mv ./local_folder nbx://in_this/folder/
+
+
+You might be required to agree to the SSH connection being setup. If you want to avoid that set ``NBOX_SSH_NO_HOST_CHECKING=1``.
+All these APIs are also available in python.
+
+Documentation
+-------------
 """
 
 import io

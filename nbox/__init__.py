@@ -10,7 +10,6 @@ from nbox.model import Model
 from nbox.load import load, PRETRAINED_MODELS
 from nbox.instance import Instance
 from nbox.auth import AWSClient, GCPClient, OCIClient, DOClient, AzureClient
-
-# from nbox.relics import Relic
+from nbox.relics import RelicsNBX
 
 from nbox.version import __version__

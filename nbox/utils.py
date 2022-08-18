@@ -259,10 +259,10 @@ def hash_(item, fn="md5"):
 
 
 def log_traceback():
-  f = io.StringIO("")
-  traceback.print_exception(*sys.exc_info(), file = f)
-  f.seek(0)
-  for _l in f.readlines():
+  # f = io.StringIO("")
+  # traceback.print_exception(*sys.exc_info(), file = f)
+  f = traceback.format_exc()
+  for _l in f.splitlines():
     logger.error(_l.rstrip())
 
 # /misc

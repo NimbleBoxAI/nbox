@@ -10,7 +10,7 @@ from time import sleep
 
 from threading import Thread
 
-from nbox.relics import Relic
+from nbox.relics.local import RelicLocal
 from nbox import Operator, logger
 from nbox.operator import Resource
 from nbox.utils import log_traceback
@@ -28,7 +28,7 @@ class RootRunner(Operator):
     self.verbose = verbose
     self._unittest = _unittest
 
-    self.relic = Relic("local:")
+    self.relic = RelicLocal()
     self.cache_status = {}
 
   def start_status(self):
@@ -76,7 +76,7 @@ class RootRunner(Operator):
 
 
 class AgentOpRootStub(Operator):
-  def __init__(self, op: Operator, op_name:str , res: Resource, relic: Relic("local:")):
+  def __init__(self, op: Operator, op_name:str , res: Resource, relic):
     """This is the root stub for the remote job. In the current implementation it will spin up a new process
     and manage the connections and things for it.
     
@@ -111,7 +111,7 @@ class AgentOpRootStub(Operator):
     with open(fpath, "w") as f:
       f.write(f'''# Auto generated
 from nbox import operator
-from nbox.relics import Relic
+from nbox.relics import RelicLocal
 from nbox.utils import load_module_from_path
 
 @operator()
@@ -126,7 +126,7 @@ def run():
   output_key = "{output_key}"
   
   # define relic and get things
-  relic = Relic("local:")
+  relic = RelicLocal()
   args, kwargs = relic.get(input_key)
   
   out = op(*args, **kwargs)
@@ -147,11 +147,15 @@ if __name__ == "__main__":
 
     # run the file as a subprocess: pseudo parallel
     try:
-      subprocess.run(["python3", fpath], universal_newlines=True)
+      out = subprocess.run(["python3", fpath], universal_newlines=True)
+      if out.returncode != 0:
+        raise Exception(f"Process returned non zero code: {out.returncode}")
     except KeyboardInterrupt:
       logger.info("KeyboardInterrupt, closing connections")
     except Exception as e:
+      logger.error(f"Error in process: '{self.op_name}', check above for details")
       log_traceback()
+      raise e
 
     # get the results from the object store
     out = self.relic.get(output_key)

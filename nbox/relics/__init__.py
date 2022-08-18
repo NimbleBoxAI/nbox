@@ -4,5 +4,5 @@ This can support local file storage along with AWS S3, GCP Bucket, Azure Blob St
 """
 
 from nbox.relics.base import BaseStore
-from nbox.relics.local import LocalStore
-from nbox.relics.nbx import NBXRelicStore
+from nbox.relics.local import RelicLocal
+from nbox.relics.nbx import RelicsNBX
