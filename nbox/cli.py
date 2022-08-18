@@ -13,6 +13,19 @@ convinience we recommend adding an alias for ``nbx`` as follows:
   echo "\\nalias nbx='python3 -m nbox'\\n" >> ~/.bashrc
   source ~/.bashrc
 
+
+SSH into Instances
+------------------
+
+You can SSH into your instance with the ``nbx tunnel`` command. This command will create a tunnel
+to your instance and start an SSH session.
+
+.. code-block:: bash
+
+  nbx tunnel 8000 -i "instance-name"
+
+Documentation
+-------------
 """
 
 import os

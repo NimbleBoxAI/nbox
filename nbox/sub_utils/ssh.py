@@ -360,7 +360,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
   """the nbox way to SSH into your instance.
 
   Usage:
-    tunn.py 8000 -i "nbox-dev"
+    nbx tunnel 8000 -i "nbox-dev"
 
   Args:
     port: Local port for terminal

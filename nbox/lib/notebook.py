@@ -24,7 +24,7 @@ from nbox.lib.shell import ShellCommand
 @lru_cache(maxsize=1)
 def get_py_builtin_all():
   # a cheap 99% solution that works for 99% of people
-  builtin_path = U.join(U.folder(__file__), "assets/builtin")
+  builtin_path = U.join(U.folder(U.folder(__file__)), "assets/builtin")
   with open(builtin_path, "r") as f:
     items = set(f.read().splitlines())
   return items
