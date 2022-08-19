@@ -39,6 +39,7 @@ from nbox.init import nbox_ws_v1
 from nbox.auth import init_secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
+from nbox.relics import RelicsNBX
 from nbox.version import __version__ as V
 
 logger = U.get_logger()
@@ -84,6 +85,7 @@ def main():
     "jobs"    : Job,
     "login"   : login,
     "open"    : open_home,
+    "relics"  : RelicsNBX,
     "serve"   : Serve,
     "tunnel"  : tunnel,
     "version" : version,

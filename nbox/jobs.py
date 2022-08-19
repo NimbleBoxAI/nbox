@@ -121,7 +121,8 @@ def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_
     id_or_name (str): Job ID or name
     workspace_id (str, optional): Workspace ID, `None` for personal workspace. Defaults to None.
   """
-  sys.path.append(init_folder)
+  if init_folder not in sys.path:
+    sys.path.append(init_folder)
   from nbx_user import get_op, get_resource, get_schedule
 
   from nbox import Operator

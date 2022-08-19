@@ -9,7 +9,9 @@ import subprocess
 from time import sleep
 
 from threading import Thread
+from typing import Union
 
+from nbox import RelicsNBX
 from nbox.relics.local import RelicLocal
 from nbox import Operator, logger
 from nbox.operator import Resource
@@ -20,15 +22,28 @@ PROC_FOLDER = "./nbx_autogen_proc"
 
 # Manager
 class RootRunner(Operator):
-  def __init__(self, op: Operator, dist = False, verbose: str = False, *, _unittest: bool = False):
-    """This is the Operator which runs on the main Job pod and stores all the values"""
+  def __init__(
+    self,
+    op: Operator,
+    dist = False,
+    relic_type = "nbx",
+    verbose: str = False,
+    *,
+    _unittest: bool = False
+  ):
+    """This is the Operator which runs on the main Job pod and stores all the values. Think of this like the
+    Master node in a distributed system, which contains all the information on the processing."""
     super().__init__()
     self.op = op
     self.dist = dist
     self.verbose = verbose
     self._unittest = _unittest
 
-    self.relic = RelicLocal()
+    _relic_cls = {"local": RelicLocal, "nbx": RelicsNBX}.get(relic_type, None)
+    if _relic_cls is None:
+      raise ValueError(f"Cannot find relic type: '{relic_type}'")
+
+    self.relic = _relic_cls(relic_name = "hustle_bustle", workspace_id = "wnja9glc", create = True)
     self.cache_status = {}
 
   def start_status(self):
@@ -55,15 +70,17 @@ class RootRunner(Operator):
         # replace the Opeartors in the graph with AgentsStubs
         op = getattr(self.op, op_name)
         agent_op = AgentOpRootStub(op, op_name, res, self.relic)
+        setattr(self.op, op_name, agent_op)
         self.op_agents[op_name] = agent_op
         self.keys.add(op_name + "_input")
         self.keys.add(op_name + "_output")
-        setattr(self.op, op_name, self.op_agents[op_name])
 
   def clear_relic(self):
     for op_name in self.op_agents:
-      self.relic.delete(op_name + "_input")
-      self.relic.delete(op_name + "_output")
+      for _x in ["_input", "_output"]:
+        key = op_name + _x
+        if self.relic.has(key):
+          self.relic.rm(key)
 
   def forward(self, *args, **kwargs):
     if self.dist:
@@ -76,7 +93,7 @@ class RootRunner(Operator):
 
 
 class AgentOpRootStub(Operator):
-  def __init__(self, op: Operator, op_name:str , res: Resource, relic):
+  def __init__(self, op: Operator, op_name:str , res: Resource, relic: Union[RelicLocal, RelicsNBX]):
     """This is the root stub for the remote job. In the current implementation it will spin up a new process
     and manage the connections and things for it.
     
@@ -100,7 +117,8 @@ class AgentOpRootStub(Operator):
 
     # print(self.relic._objects)
     input_key, output_key = self.get_keys()
-    self.relic.delete(output_key)
+    if self.relic.has(output_key):
+      self.relic.rm(output_key)
     logger.info(f"{input_key} / {output_key}")
 
     if not os.path.exists(PROC_FOLDER):
@@ -110,8 +128,12 @@ class AgentOpRootStub(Operator):
     logger.info(f"Creating file: {fpath}")
     with open(fpath, "w") as f:
       f.write(f'''# Auto generated
+import os
+
+os.environ["NBOX_LOG_LEVEL"] = "debug"
+
 from nbox import operator
-from nbox.relics import RelicLocal
+from nbox.relics import RelicLocal, RelicsNBX
 from nbox.utils import load_module_from_path
 
 @operator()
@@ -126,15 +148,15 @@ def run():
   output_key = "{output_key}"
   
   # define relic and get things
-  relic = RelicLocal()
-  args, kwargs = relic.get(input_key)
+  relic = RelicsNBX(relic_name = "hustle_bustle", workspace_id = "wnja9glc", create = True)
+  args, kwargs = relic.get_object(input_key)
   
   out = op(*args, **kwargs)
   if out == None:
     out = "NBX_NULL"
 
   # print("Putting", output_key, out)
-  relic.put(output_key, out, ow = True)
+  relic.put_object(output_key, out)
 
 if __name__ == "__main__":
   # if required user can update the status of the operator
@@ -143,7 +165,7 @@ if __name__ == "__main__":
 ''')
 
     # put the data in the object store
-    self.relic.put(input_key, (list(args), kwargs), ow = True)
+    self.relic.put_object(input_key, (list(args), kwargs))
 
     # run the file as a subprocess: pseudo parallel
     try:
@@ -158,9 +180,9 @@ if __name__ == "__main__":
       raise e
 
     # get the results from the object store
-    out = self.relic.get(output_key)
+    out = self.relic.get_object(output_key)
     while out == None:
       sleep(1)
-      out = self.relic.get(output_key)
+      out = self.relic.get_object(output_key)
     return out
 

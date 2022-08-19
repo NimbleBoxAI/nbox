@@ -2,9 +2,12 @@
 This is the code for NBX-Relics which is a simple file system for your organisation.
 """
 import os
-from typing import List
+import dill
 import requests
+import tabulate
+from typing import List
 from copy import deepcopy
+from functools import lru_cache
 
 from nbox.auth import secret
 from nbox.init import nbox_ws_v1
@@ -14,7 +17,8 @@ from nbox.sublime.relics_rpc_client import (
   RelicFile,
   Relic as RelicProto,
   CreateRelicRequest,
-  ListRelicFilesRequest
+  ListRelicFilesRequest,
+  ListRelicsRequest
 )
 
 def get_relic_file(fpath: str, username: str, workspace_id: str):
@@ -35,17 +39,34 @@ def get_relic_file(fpath: str, username: str, workspace_id: str):
     workspace_id = workspace_id,
   )
 
+
+@lru_cache()
+def _get_stub():
+  # url = "http://0.0.0.0:8081/relics"
+  url = "https://app.c.nimblebox.ai/relics"
+  logger.debug("Connecting to RelicStore at: " + url)
+  stub = RelicStore_Stub(url, deepcopy(nbox_ws_v1._session))
+  return stub
+
+
+def print_relics(workspace_id: str):
+  stub = _get_stub()
+  req = ListRelicsRequest(workspace_id = workspace_id,)
+  out = stub.list_relics(req)
+  headers = ["relic_name",]
+  rows = [[r.name,] for r in out.relics]
+  for l in tabulate.tabulate(rows, headers).splitlines():
+    logger.info(l)
+
+
 class RelicsNBX():
-  def __init__(self, workspace_id: str, relic_name: str, create: bool = False):
+  list_relics = staticmethod(print_relics)
+
+  def __init__(self, relic_name: str, workspace_id: str, create: bool = False):
     self.workspace_id = workspace_id
     self.relic_name = relic_name
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
-
-    # url = "http://0.0.0.0:8081/relics"
-    url = "https://app.c.nimblebox.ai/relics"
-    logger.debug("Connecting to RelicStore at: " + url)
-    self.stub = RelicStore_Stub(url, deepcopy(nbox_ws_v1._session))
-
+    self.stub = _get_stub()
     _relic = self.stub.get_relic_details(RelicProto(workspace_id=workspace_id, name=relic_name,))
     if  not _relic and create:
       # this means that a new one will have to be created
@@ -65,6 +86,8 @@ class RelicsNBX():
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Uploading {local_path} to {relic_file.name}")
     out = self.stub.create_file(_RelicFile = relic_file,)
+    if not out.url:
+      raise Exception("Could not get link")
     
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
@@ -80,6 +103,8 @@ class RelicsNBX():
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Downloading {local_path} from S3 ...")
     out = self.stub.download_file(_RelicFile = relic_file,)
+    if not out.url:
+      raise Exception("Could not get link, are you sure this file exists?")
     
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
@@ -95,29 +120,11 @@ class RelicsNBX():
           f.write(chunk)
           total_size += len(chunk)
     logger.info("Download status: OK")
-    logger.info(f"    filepath: {local_path}")
-    logger.info(f"  total_size: {total_size//1024} KB")
+    logger.info(f"      filepath: {local_path}")
+    logger.info(f"    total_size: {total_size//1024} KB")
 
-  def delete(self):
-    """Deletes your relic"""
-    if self.relic is None:
-      raise ValueError("Relic does not exist, nothing to delete")
-    logger.warning(f"Deleting relic {self.relic_name}")
-    self.stub.delete_relic(self.relic)
-
-  def list(self, path: str = "") -> List[RelicFile]:
-    """List all the files in the relic"""
-    if self.relic is None:
-      raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Listing files in relic {self.relic_name}")
-    out = self.stub.list_relic_files(RelicFile(
-      workspace_id = self.workspace_id,
-      relic_name = self.relic_name,
-      name = path
-    ))
-    return out.files
-
-  """At it's core the Relic is supposed to be a file system and not a client. Thus you cannot download something
+  """
+  At it's core the Relic is supposed to be a file system and not a client. Thus you cannot download something
   from a relic, but rather you tell the path you want to read and it will return the file. This is because of the
   fact that this is nothing but a glorified key value store.
 
@@ -140,8 +147,9 @@ class RelicsNBX():
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
     logger.info(f"Getting file: {local_path}")
-    relic_file = get_relic_file(local_path, self.username, self.workspace_id)
+    relic_file = RelicFile(name = local_path.strip("./"),)
     relic_file.relic_name = self.relic_name
+    relic_file.workspace_id = self.workspace_id
     self._download_relic_file(local_path, relic_file)
 
   def rm(self, local_path: str):
@@ -170,3 +178,45 @@ class RelicsNBX():
       if f.name.strip("/") == local_path.strip("/"):
         return True
     return False
+
+  """
+  There are other convinience methods provided to keep consistency between the different types of relics. Note
+  that we do no have a baseclass right now because I am note sure what are all the possible features we can have
+  in common with all.
+  """
+
+  def put_object(self, key: str, py_object):
+    """wrapper function for putting a python object"""
+    with open(key, "wb") as f:
+      dill.dump(py_object, f)
+    self.put(key)
+
+  def get_object(self, key: str):
+    """wrapper function for getting a python object"""
+    self.get(key)
+    with open(key, "rb") as f:
+      out = dill.load(f)
+    return out
+
+  """
+  Some APIs are more on the level of the relic itself.
+  """
+
+  def delete(self):
+    """Deletes your relic"""
+    if self.relic is None:
+      raise ValueError("Relic does not exist, nothing to delete")
+    logger.warning(f"Deleting relic {self.relic_name}")
+    self.stub.delete_relic(self.relic)
+
+  def list_files(self, path: str = "") -> List[RelicFile]:
+    """List all the files in the relic at path"""
+    if self.relic is None:
+      raise ValueError("Relic does not exist, pass create=True")
+    logger.info(f"Listing files in relic {self.relic_name}")
+    out = self.stub.list_relic_files(RelicFile(
+      workspace_id = self.workspace_id,
+      relic_name = self.relic_name,
+      name = path
+    ))
+    return out.files
