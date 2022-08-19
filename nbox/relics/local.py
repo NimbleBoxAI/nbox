@@ -8,8 +8,9 @@ from hashlib import sha256
 from typing import Any, Union, List
 
 from nbox.utils import logger, FileLogger, env
+from nbox.relics.base import BaseStore
 
-class RelicLocal():
+class RelicLocal(BaseStore):
   """
   The Relic is a part of a filesystem, however `RelicLocal` is an exception since the data that it recieves might
   optionally be a python object in which case it needs to store that.
@@ -23,19 +24,15 @@ class RelicLocal():
       fdedc958b417adf63278938efa53c3b381f576446aede80bbc8f2c05320fcb4b
       1459d663d14b7b7ad82ebe5c98c8a0397b21d4e2b9f4711562746a5cb48f86c4
       ...
-
-    relics/
-      {relic_name}/
   """
   def __init__(self, relic_name: str, workspace_id: str, create: bool = False):
     self.relic_name = relic_name
+    self.workspace_id = workspace_id
     self.cache_dir = os.path.join(env.NBOX_HOME_DIR(), "relics")
     logger.info(f"Connecting object store: {self.cache_dir}")
     self._objects = {} # <key: item_path>
     self._objects_bin_path = f"{self.cache_dir}/_objects.bin"
     self._file_logger_path = f"{self.cache_dir}/activity.log"
-
-    # format = "pickle/pyarrow/tfrecords" in _put means have to write in the _get
 
     # Create the cache directory if it doesn't exist
     if not os.path.exists(self.cache_dir):
@@ -78,7 +75,7 @@ class RelicLocal():
     self._read_state()
     object_key, _ = self.get_id(key)
     self._objects[object_key] = key # reference to existing object
-    self._logs.info(f"PUT {key}")
+    self._logs.info(f"[{self.workspace_id}/{self.relic_name}] PUT {key}")
     self._write_state()
 
   def get(self, key: str) -> None:
@@ -86,7 +83,7 @@ class RelicLocal():
     object_key, _ = self.get_id(key) # internal path
     item_path = self._objects.get(object_key, None)
     if item_path is not None and os.path.exists(item_path):
-      self._logs.info(f"GET {key}")
+      self._logs.info(f"[{self.workspace_id}/{self.relic_name}] GET {key}")
     elif (item_path is not None) and (not os.path.exists(item_path)):
       raise Exception("Trying to get missing file")
     else:
@@ -99,7 +96,7 @@ class RelicLocal():
     if item_path is not None and os.path.exists(item_path):
       os.remove(item_path)
       del self._objects[object_key]
-      self._logs.warning(f"DELETE {key}")
+      self._logs.warning(f"[{self.workspace_id}/{self.relic_name}] DEL {key}")
       self._write_state()
     elif (item_path is not None) and (not os.path.exists(item_path)):
       raise Exception("Trying to get missing file")
@@ -125,7 +122,7 @@ class RelicLocal():
     with open(item_path, "wb") as f:
       dill.dump(value, f)
     self._objects[object_key] = item_path # the path is the actual place to store
-    self._logs.info(f"PUTO {key}")
+    self._logs.info(f"[{self.workspace_id}/{self.relic_name}] PUTO {key}")
     self._write_state()
 
   def get_object(self, key: str) -> bytes:
@@ -133,7 +130,7 @@ class RelicLocal():
     object_key, _ = self.get_id(key) # internal path
     item_path = self._objects.get(object_key, None)
     if item_path is not None and os.path.exists(item_path):
-      self._logs.info(f"GETO {key}")
+      self._logs.info(f"[{self.workspace_id}/{self.relic_name}] GETO {key}")
       with open(item_path, "rb") as f:
         out = dill.load(f)
       return out
@@ -149,7 +146,7 @@ class RelicLocal():
   def delete(self):
     """Deletes your relic, which in this case means it removes all the entries at that prefix"""
     self._read_state()
-    self._logs.warning(f"DELR {self.relic_name}")
+    self._logs.warning(f"[{self.workspace_id}/{self.relic_name}] DELR {self.relic_name}")
     object_key, _ = self.get_id() # internal path to relic
     object_relic_key = "/".join(object_key.split("/")[:-1])
     done = False

@@ -1,5 +1,3 @@
-import dill
-
 from abc import abstractmethod
 
 class BaseStore(object):
@@ -17,4 +15,20 @@ class BaseStore(object):
 
   @abstractmethod
   def has(self, local_path: str) -> None:
+    pass
+
+  @abstractmethod
+  def put_object(self, local_path: str) -> None:
+    pass
+
+  @abstractmethod
+  def get_object(self, local_path: str) -> None:
+    pass
+
+  @abstractmethod
+  def delete(self, local_path: str) -> None:
+    pass
+
+  @abstractmethod
+  def list_files(self, local_path: str) -> None:
     pass

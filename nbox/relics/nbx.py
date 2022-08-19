@@ -20,6 +20,7 @@ from nbox.sublime.relics_rpc_client import (
   ListRelicFilesRequest,
   ListRelicsRequest
 )
+from nbox.relics.base import BaseStore
 
 def get_relic_file(fpath: str, username: str, workspace_id: str):
   assert os.path.exists(fpath), f"File {fpath} does not exist"
@@ -59,7 +60,7 @@ def print_relics(workspace_id: str):
     logger.info(l)
 
 
-class RelicsNBX():
+class RelicsNBX(BaseStore):
   list_relics = staticmethod(print_relics)
 
   def __init__(self, relic_name: str, workspace_id: str, create: bool = False):
