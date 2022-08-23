@@ -8,7 +8,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 `nbox` provides first class support API for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
 
-# 🤷Why nimblebox
+# 🤷Why NimbleBox
 
 - Write and execute code in Python
 - Document your code that supports mathematical equations
