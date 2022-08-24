@@ -13,11 +13,10 @@ This file loads first and is responsible for setting up all the global networkin
 import grpc
 import requests
 
-from .auth import secret
-from .utils import logger
-from .subway import Sub30
-from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
-from . import version as V
+from nbox.auth import secret
+from nbox.utils import logger
+from nbox.subway import Sub30
+from nbox.hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
 
 def get_stub() -> WSJobServiceStub:
   """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``
@@ -29,8 +28,8 @@ def get_stub() -> WSJobServiceStub:
   channel = grpc.secure_channel(secret.get("nbx_url").replace("https://", "dns:/")+":443", creds)
   stub = WSJobServiceStub(channel)
   future = grpc.channel_ready_future(channel)
-  future.add_done_callback(lambda _: logger.info(f"NBX gRPC server is ready"))
-  logger.info(f"Connected using stub: {stub.__class__.__name__}")
+  future.add_done_callback(lambda _: logger.debug(f"NBX gRPC server is ready"))
+  logger.debug(f"Connected using stub: {stub.__class__.__name__}")
   return stub
 
 def create_webserver_subway(version: str = "v1", session: requests.Session = None) -> Sub30:
@@ -52,14 +51,14 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
     logger.error(e)
     return None
   out = Sub30(_version_specific_url, r.json(), session)
-  logger.info(f"Connected to webserver at {out}")
+  logger.debug(f"Connected to webserver at {out}")
   return out
 
 
 # common networking items that will be used everywhere
+nbox_grpc_stub: WSJobServiceStub  = get_stub()
 nbox_session = requests.Session()
 nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
-nbox_grpc_stub: WSJobServiceStub  = get_stub()
 nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
 
 # TODO: @yashbonde: raise deprecation warning for version

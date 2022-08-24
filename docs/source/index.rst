@@ -127,7 +127,7 @@ Index
    :caption: Tutorials
 
    quick.0
-   quick.jobs
+   quick.job
    nbox.cli
    nbox.nbxlib.ops
 

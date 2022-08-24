@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="nbox",
-    version="0.9.10",
+    version="0.9.15",
     author="NimbleBox.ai",
     author_email="research@nimblebox.ai",
     description="Make inference chill again!",
@@ -17,7 +17,7 @@ setuptools.setup(
     },
     classifiers=[
         "Programming Language :: Python :: 3",
-        "License :: OSI Approved :: BSD 3-Clause",
+        "License :: OSI Approved :: ApacheV2",
         "Operating System :: OS Independent",
     ],
     package_dir={"nbox": "nbox"},

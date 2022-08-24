@@ -1,0 +1,142 @@
+# DO NOT TOUCH
+# ============
+# created time: {{ created_time }}
+# nbox version: {{ nbox_version }}
+# Auto generated code by 'nbox deploy/serve upload' command
+
+import io
+import os
+import sys
+import fire
+import inspect
+import traceback
+from time import sleep
+from threading import Thread
+from functools import lru_cache
+
+# the trick to importing nbox is to ensure proper loading order and setting
+# of correct env vars, the first import is made in the user stub
+os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
+
+from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
+
+@lru_cache(1)
+def get_op(cloud = False, serving: bool = False):
+  op = get_op_user(serving)
+  if cloud:
+    if hasattr(op, "remote_init"):
+      op.remote_init() # >= v0.9.14rc27
+    else:
+      op.__remote_init__()
+  return op
+
+
+import nbox.utils as U
+from nbox.nbxlib.tracer import Tracer
+from nbox.hyperloop.job_pb2 import Job
+from nbox import Operator, nbox_grpc_stub
+from nbox.messages import rpc, get_current_timestamp
+from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+
+
+def run():
+  op: Operator = get_op(cloud = True, serving = False)
+  op.propagate(_tracer = Tracer())
+  if hasattr(op._tracer, "job_proto"):
+    op.thaw(op._tracer.job_proto)
+
+  try:
+    op()
+    status = Job.Status.COMPLETED
+  except Exception as e:
+    U.log_traceback()
+    status = Job.Status.ERROR
+  finally:
+    if hasattr(op._tracer, "job_proto"):
+      op._tracer.job_proto.status = status
+      rpc(
+        nbox_grpc_stub.UpdateRun, UpdateRunRequest(
+          token = op._tracer.token, job=op._tracer.job_proto, updated_at=get_current_timestamp()
+        ), "Failed to end job!"
+      )
+    os._exit(0)
+
+  # why use os._exit over sys.exit:
+  # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
+  # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
+  # tl;dr: os._exit kills without cleanup and so it's okay on the Pod
+
+
+def get_fastapi_fwd():
+  from pydantic import create_model
+
+  # first time loading the operator, will automatically create a cache miss and then all the rest will
+  # be cache hits
+  op = get_op(cloud = True, serving = True)
+  
+  # we use inspect signature instead of writing our own ast thing
+  signature = inspect.signature(op.forward)
+  data_dict = {}
+  for param in signature.parameters.values():
+    default = param.default
+    if default == inspect._empty:
+      default = None
+    data_dict[param.name] = (param.annotation, default)
+
+  # if your function takes in inputs then it is expected to be sent as query params, so create a pydantic
+  # model and FastAPI will take care of the rest
+  base_model = create_model(f"{op.__class__.__qualname__}_Request", **data_dict)
+
+  # pretty simple forward function, note that it gets operator using get_op which will be a cache hit
+  async def forward(req: base_model):
+    data = req.dict()
+    op = get_op(cloud = True, serving = True)
+    return op(**data)
+
+  return forward
+
+
+def serve(
+  host: str = "0.0.0.0",
+  port: int = 8000,
+  debug: bool = False,
+):
+  from uvicorn import run
+  from fastapi import FastAPI
+  from fastapi.responses import JSONResponse
+
+  app = FastAPI()
+
+  # define ping endpoint
+  async def ping_fn():
+    return {"message": "pong"}
+  app.add_api_route("/", ping_fn, methods=["GET"], response_class=JSONResponse)
+
+  # define metadata endpoint
+  async def metadata():
+    return {"metadata": {"name": "{{ model_name }}"}}
+  app.add_api_route("/metadata", metadata, methods=["GET"], response_class=JSONResponse)
+
+  # define forward method
+  _forward = get_fastapi_fwd()
+  app.add_api_route("/forward", _forward, methods=["POST"], response_class=JSONResponse)
+
+  if debug:
+    # this is for debugging purposes, it will print the cache status every second
+    def print_cache_status():
+      while True:
+        print(get_op.cache_info())
+        sleep(1)
+
+    # daemon thread means if main thread dies, these also eventually die
+    t = Thread(target = print_cache_status, daemon = True)
+    t.start()
+
+  run(app, host = host, port = port,)
+
+
+if __name__ == "__main__":
+  fire.Fire({
+    "run": run,
+    "serve": serve
+  })
