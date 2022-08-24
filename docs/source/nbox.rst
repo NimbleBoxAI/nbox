@@ -29,6 +29,7 @@ Submodules
    nbox.init
    nbox.instance
    nbox.jobs
+   nbox.relics
    nbox.messages
    nbox.network
    nbox.operator
