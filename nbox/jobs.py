@@ -103,6 +103,9 @@ nbox[serving]=={__version__} # do not change this
 dainik # this is NBX-LMAO client
 """)
 
+  from nbox import Operator
+  from nbox.network import deploy_job, deploy_serving
+  operator: Operator = get_op(method == "serving")
 
   assets = U.join(U.folder(__file__), "assets")
   path = U.join(assets, "user.jinja")
@@ -202,6 +205,8 @@ def print_serving_list(workspace_id: str = None, sort: str = "created_on"):
   for l in tabulate.tabulate(all_depls, headers).splitlines():
     logger.info(l)
 
+  with open("requirements.txt", "w") as f:
+    f.write(f"nbox=={__version__}")
 
 def serving_forward(id_or_name: str, token: str, workspace_id: str = None, **kwargs):
   if workspace_id is None:

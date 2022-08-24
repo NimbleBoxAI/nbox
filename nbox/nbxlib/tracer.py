@@ -5,6 +5,9 @@ import os
 from time import sleep
 
 import threading
+from time import sleep
+
+import threading
 
 from nbox.jobs import Job
 
@@ -77,7 +80,7 @@ class Tracer:
 
   def __call__(self, node: Node, verbose: bool = True):
     if verbose:
-      logger.debug(node)
+      logger.debug()
     if not self.network_tracer:
       return
     self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this

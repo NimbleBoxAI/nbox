@@ -37,6 +37,9 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
   OpenAPI spec plublished by NBX Webserver. It loads the JSON object in ``Sub30``
   which allows accesing REST APIs with python "." (dot) notation. If you find yourself
   using this function, you might want to reconsider your design.
+
+  Returns:
+    Sub30: A Subway object for the NBX Webserver.
   """
   _version_specific_url = secret.get("nbx_url") + f"/api/{version}"
   session = session if session != None else nbox_session # select correct session

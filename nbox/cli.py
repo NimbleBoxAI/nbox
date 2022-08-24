@@ -36,6 +36,9 @@ from json import dumps
 import nbox.utils as U
 from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
+import nbox.utils as U
+from nbox.jobs import Job, Serve
+from nbox.init import nbox_ws_v1
 from nbox.auth import init_secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel

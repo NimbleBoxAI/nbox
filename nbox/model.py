@@ -8,12 +8,12 @@ This will combine all the NimbleBox modules into a single callable.
 class Model:
   def __init__(
     self,
-    # model: Any,
-    # method: str = None,
-    # pre: callable = None,
-    # post: callable = None,
-    # model_spec: ModelSpec = None,
-    # verbose: bool = False
+    # # model: Any,
+    # # method: str = None,
+    # # pre: callable = None,
+    # # post: callable = None,
+    # # model_spec: ModelSpec = None,
+    # # verbose: bool = False
   ):
     """Top of the stack Model class."""
     raise NotImplementedError("WIP check back later.")
