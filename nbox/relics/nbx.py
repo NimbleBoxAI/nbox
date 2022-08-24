@@ -23,8 +23,8 @@ from nbox.sublime.relics_rpc_client import (
 from nbox.relics.base import BaseStore
 
 def get_relic_file(fpath: str, username: str, workspace_id: str):
-  assert os.path.exists(fpath), f"File {fpath} does not exist"
-  assert os.path.isfile(fpath), f"File {fpath} is not a file"
+  # assert os.path.exists(fpath), f"File {fpath} does not exist"
+  # assert os.path.isfile(fpath), f"File {fpath} is not a file"
 
   # clean up fpath, remove any trailing slashes
   # trim any . or / from prefix and suffix
@@ -43,10 +43,10 @@ def get_relic_file(fpath: str, username: str, workspace_id: str):
 
 @lru_cache()
 def _get_stub():
-  # url = "http://0.0.0.0:8081/relics"
-  url = "https://app.c.nimblebox.ai/relics"
+  url = "https://app.nimblebox.ai/relics"
   logger.debug("Connecting to RelicStore at: " + url)
-  stub = RelicStore_Stub(url, deepcopy(nbox_ws_v1._session))
+  session = deepcopy(nbox_ws_v1._session)
+  stub = RelicStore_Stub(url, session)
   return stub
 
 
@@ -93,9 +93,15 @@ class RelicsNBX(BaseStore):
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
     logger.debug(f"URL: {out.url}")
-    with open(local_path, "rb") as f:
-      r = requests.put(out.url, data = f)
+    r = requests.post(
+      url = out.url,
+      data = out.body,
+      files={
+        "file": (out.body["key"], open(local_path, "rb"))
+      }
+    )
     logger.debug(f"Upload status: {r.status_code}")
+    r.raise_for_status()
 
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
     if self.relic is None:
@@ -221,3 +227,9 @@ class RelicsNBX(BaseStore):
       name = path
     ))
     return out.files
+
+  def start_fs():
+    # /my_relic/.....
+    pass
+
+# nbx jobs ... trigger --mount="dataset:/my-dataset/email/,model_master:/model"

@@ -18,7 +18,7 @@ class BaseStore(object):
     pass
 
   @abstractmethod
-  def put_object(self, local_path: str) -> None:
+  def put_object(self, local_path: str, py_object) -> None:
     pass
 
   @abstractmethod
@@ -31,4 +31,12 @@ class BaseStore(object):
 
   @abstractmethod
   def list_files(self, local_path: str) -> None:
+    pass
+
+  @abstractmethod
+  def upload_to(self, local_path: str, remote_path: str) -> None:
+    pass
+
+  @abstractmethod
+  def download_from(self, local_path: str, remote_path: str) -> None:
     pass

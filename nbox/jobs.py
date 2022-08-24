@@ -95,8 +95,9 @@ __pycache__/
 
 # Examples:
 # pandas
-# seaborn
-# torch
+
+# always be on lookout for optimisations, ex:
+# save 85% download if using CPU torch add `-f https://download.pytorch.org/whl/torch_stable.html`
 
 nbox[serving]=={__version__} # do not change this
 dainik # this is NBX-LMAO client

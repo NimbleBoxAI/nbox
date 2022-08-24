@@ -12,29 +12,6 @@ from typing import Any
 from threading import Thread
 from functools import lru_cache
 
-# Override
-
-# def run_dist():
-#   # we can import nbox here because it will be initialised by now
-#   from nbox import Operator
-#   from nbox.lib.dist import RootRunner
-
-#   op: Operator = get_op(cloud = True, serving = False)
-
-#   with open("./nbx_mode") as f:
-#     mode = f.read().split("=")[1].strip()
-#   if mode == "root":
-#     # do something here like 
-#     RootRunner(
-#       op,
-#       dist = True,
-#     )
-#   elif mode == "agent":
-#     # initialise the agent here, the RootRunner will take care of managing this stub
-#     pass
-
-# 
-
 # the trick to importing nbox is to ensure proper loading order and setting
 # of correct env vars, the first import is made in the user stub
 os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
@@ -54,7 +31,7 @@ def _exit_program():
 
 @lru_cache(1)
 def get_op(cloud = False, serving: bool = False):
-  op = get_op_user(serving)
+  op: Operator = get_op_user(serving)
   if cloud:
     try:
       op.remote_init() # >= v0.9.14rc27
@@ -169,10 +146,7 @@ def serve(
 
 
 if __name__ == "__main__":
-  # if os.path.exists("./nbxfile"):
-  #   run = run_dist
-
   fire.Fire({
-    "run": run,
-    "serve": serve
+    "run": run,     # NBX-Jobs
+    "serve": serve, # NBX-Deploy
   })
