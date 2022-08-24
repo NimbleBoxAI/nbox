@@ -1,5 +1,4 @@
 """
-# `/lib`
-
-This is the main library for nbox Operators.
+Building components from scratch can be hard so we provide a basic library of ``Operator`` here.
+Our aim is to consistently update and upgrade the functionality of all the components.
 """

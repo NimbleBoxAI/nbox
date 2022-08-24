@@ -1,3 +1,7 @@
+"""
+All the Operators that NimbleBox uses are defined in this module.
+"""
+
 import os
 import zipfile
 from datetime import datetime, timezone

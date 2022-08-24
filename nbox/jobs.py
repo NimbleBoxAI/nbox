@@ -1,5 +1,5 @@
 """
-``nbox.Job`` is a wrapper to the APIs that's it.
+``nbox.Job`` and ``nbox.Serve`` are wrappers to the NBX-Jobs and NBX-Deploy APIs and contains staticmethods for convinience from the CLI.
 
 Notes
 -----
@@ -84,10 +84,28 @@ def new(folder_name):
   # create the necessary files that can be used
   os.chdir(folder_name)
   with open(".nboxignore", "w") as f:
-    f.write("__pycache__/")
+    f.write('''
+# This is where you list the files that you don't want to upload with your code
+
+__pycache__/
+    ''')
   
   with open("requirements.txt", "w") as f:
-    f.write(f"nbox[serving]=={__version__} # do not change this")
+    f.write(f"""# This is where you list the third-party dependencies of your pipeline
+
+# Examples:
+# pandas
+
+# always be on lookout for optimisations, ex:
+# save 85% download if using CPU torch add `-f https://download.pytorch.org/whl/torch_stable.html`
+
+nbox[serving]=={__version__} # do not change this
+dainik # this is NBX-LMAO client
+""")
+
+  from nbox import Operator
+  from nbox.network import deploy_job, deploy_serving
+  operator: Operator = get_op(method == "serving")
 
   assets = U.join(U.folder(__file__), "assets")
   path = U.join(assets, "user.jinja")
@@ -107,7 +125,8 @@ def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_
     id_or_name (str): Job ID or name
     workspace_id (str, optional): Workspace ID, `None` for personal workspace. Defaults to None.
   """
-  sys.path.append(init_folder)
+  if init_folder not in sys.path:
+    sys.path.append(init_folder)
   from nbx_user import get_op, get_resource, get_schedule
 
   from nbox import Operator
@@ -186,6 +205,8 @@ def print_serving_list(workspace_id: str = None, sort: str = "created_on"):
   for l in tabulate.tabulate(all_depls, headers).splitlines():
     logger.info(l)
 
+  with open("requirements.txt", "w") as f:
+    f.write(f"nbox=={__version__}")
 
 def serving_forward(id_or_name: str, token: str, workspace_id: str = None, **kwargs):
   if workspace_id is None:
@@ -326,6 +347,10 @@ class Job:
       self.refresh()
       self.get_runs() # load the runs as well
 
+  @property
+  def exists(self):
+    return self.id is not None
+
   def change_schedule(self, new_schedule: 'Schedule' = None):
     """Change schedule this job"""
     logger.debug(f"Updating job '{self.job_proto.id}'")
@@ -413,11 +438,17 @@ class Job:
     logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()
 
-  def get_runs(self, sort = "s_no", reverse = False):
+  def get_runs(self, old: bool = True, page = -1, sort = "s_no", limit = 10):
     self.run_stub = nbox_ws_v1.workspace.u(self.workspace_id).job.u(self.id).runs
-    self.runs = self.run_stub()["runs_list"]
-    sorted_runs = sorted(self.runs, key = lambda x: x[sort], reverse = reverse)
-    return sorted_runs
+    self.runs = self.run_stub(limit = limit, page = page)["runs_list"]
+    sorted_runs = sorted(self.runs, key = lambda x: x[sort])
+    for run in sorted_runs:
+      yield run
+    if old:
+      return
+    y = input(f">> Print {limit} more runs? (y/n): ")
+    if y == "y":
+      yield from self.get_runs(page = page + 1, sort = sort, limit = limit)
 
   def display_runs(self, sort: str = "created_at", n: int = -1):
     runs = self.get_runs(sort, sort == "created_at") # time should be reverse
@@ -470,8 +501,8 @@ class Schedule:
     Args:
         hour (int): Hour of the day, if only this value is passed it will run every ``hour``
         minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
-        days (list, optional): List of days (first three chars) of the week, if not passed it will run every day.
-        months (list, optional): List of months (first three chars) of the year, if not passed it will run every month.
+        days (str/list, optional): List of days (first three chars) of the week, if not passed it will run every day.
+        months (str/list, optional): List of months (first three chars) of the year, if not passed it will run every month.
         starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
         ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
     """
@@ -499,6 +530,11 @@ class Schedule:
 
     _days = {k:str(i) for i,k in enumerate(["sun","mon","tue","wed","thu","fri","sat"])}
     _months = {k:str(i+1) for i,k in enumerate(["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"])}
+
+    if isinstance(days, str):
+      days = [days]
+    if isinstance(months, str):
+      months = [months]
 
     diff = set(days) - set(_days.keys())
     if len(diff):

@@ -1,7 +1,30 @@
 """
-NBX-Build Instances are APIs to your machines. These APIs can be used to change state of
-the machine (start, stop, etc.), can be used to transfer files to and from the machine
-and to an extent running and managing programs (WIP).
+NBX-Build Instances are APIs to your machines. These APIs can be used to change state of the machine (start, stop,
+etc.), can be used to transfer files to and from the machine (using ``Instance.mv`` commands), calling any shell
+command using ``Instance.remote``.
+
+CLI Commands
+------------
+
+Build comes built in with several functions to move and list files from the instance. All you need to know is that
+cloud files have prefix ``nbx://`` which is where your projects are. Here's a quick list:
+
+.. code-block:: bash
+
+  # move files
+  nbx build -i 'instance_name' --workspace_id 'workspace_id' \
+    mv ./local_file nbx://cloud_file
+
+  # or move folders
+  nbx build -i 'instance_name' --workspace_id 'workspace_id' \
+    mv ./local_folder nbx://in_this/folder/
+
+
+You might be required to agree to the SSH connection being setup. If you want to avoid that set ``NBOX_SSH_NO_HOST_CHECKING=1``.
+All these APIs are also available in python.
+
+Documentation
+-------------
 """
 
 import io
@@ -212,14 +235,15 @@ class Instance():
   def _open(self):
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
-    logger.debug(f"Opening instance {self.project_name} ({self.project_id})")
-    launch_data = self.stub_ws_instance.launch(_method = "post")
-    base_domain = launch_data['base_domain']
-    self.open_data = {
-      "url": f"{base_domain}",
-      "token": self.stub_ws_instance._session.cookies.get_dict()[f"instance_token_{base_domain}"]
-    }
-    self.__opened = True
+    if not self.__opened:
+      logger.debug(f"Opening instance {self.project_name} ({self.project_id})")
+      launch_data = self.stub_ws_instance.launch(_method = "post")
+      base_domain = launch_data['base_domain']
+      self.open_data = {
+        "url": f"{base_domain}",
+        "token": self.stub_ws_instance._session.cookies.get_dict()[f"instance_token_{base_domain}"]
+      }
+      self.__opened = True
 
   def start(
     self,
@@ -313,7 +337,7 @@ class Instance():
     from nbox.sub_utils.ssh import FileLogger, ConnectionManager
 
     # create logging for RSock
-    folder = U.join(U.ENVVARS.NBOX_HOME_DIR, "tunnel_logs")
+    folder = U.join(U.env.NBOX_HOME_DIR(), "tunnel_logs")
     os.makedirs(folder, exist_ok=True)
     filepath = U.join(folder, f"tunnel_{self.project_id}.log") # consistency with IDs instead of names
     file_logger = FileLogger(filepath)
@@ -378,7 +402,7 @@ class Instance():
     # RPC
     logger.info(f"Looking at path: {path}")
     comm = "ssh"
-    if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+    if U.env.NBOX_SSH_NO_HOST_CHECKING(False):
       comm += " -o StrictHostKeychecking=no"
     comm += f" -p {port} ubuntu@localhost 'ls -l {path}'"
     result = self.__run_command(comm, port, return_output=True)
@@ -431,7 +455,7 @@ class Instance():
     if src_is_dir:
       logger.debug(f"Source is a directory")
       comm += " -r" # recursive
-    if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+    if U.env.NBOX_SSH_NO_HOST_CHECKING(False):
       logger.debug("Host checking is disabled")
       comm += " -o StrictHostKeychecking=no"
     comm += f" -P {port}"
@@ -455,7 +479,7 @@ class Instance():
     # RPC
     logger.info(f"Removing file: {file}")
     comm = "ssh"
-    if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+    if U.env.NBOX_SSH_NO_HOST_CHECKING(False):
       comm += " -o StrictHostKeychecking=no"
     comm += f" -p {port} ubuntu@localhost 'rm {file}'"
     result = self.__run_command(comm, port)
@@ -471,7 +495,7 @@ class Instance():
     # RPC
     logger.info(f"Running command: {x}")
     comm = "ssh"
-    if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+    if U.env.NBOX_SSH_NO_HOST_CHECKING(False):
       comm += " -o StrictHostKeychecking=no"
     comm += f" -p {port} ubuntu@localhost '{x}'"
     result = self.__run_command(comm, port)

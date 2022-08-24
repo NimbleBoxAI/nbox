@@ -1,3 +1,7 @@
+"""
+All the operators related to AWS are here.
+"""
+
 from nbox import Operator
 
 class S3Operator(Operator):

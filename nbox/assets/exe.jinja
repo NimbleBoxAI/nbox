@@ -4,13 +4,11 @@
 # nbox version: {{ nbox_version }}
 # Auto generated code by 'nbox deploy/serve upload' command
 
-import io
 import os
-import sys
 import fire
 import inspect
-import traceback
 from time import sleep
+from typing import Any
 from threading import Thread
 from functools import lru_cache
 
@@ -19,18 +17,7 @@ from functools import lru_cache
 os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
 
 from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
-
-@lru_cache(1)
-def get_op(cloud = False, serving: bool = False):
-  op = get_op_user(serving)
-  if cloud:
-    if hasattr(op, "remote_init"):
-      op.remote_init() # >= v0.9.14rc27
-    else:
-      op.__remote_init__()
-  return op
-
-
+from nbox import logger
 import nbox.utils as U
 from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.job_pb2 import Job
@@ -38,28 +25,48 @@ from nbox import Operator, nbox_grpc_stub
 from nbox.messages import rpc, get_current_timestamp
 from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 
+def _exit_program():
+  os._exit(0)
+
+
+@lru_cache(1)
+def get_op(cloud = False, serving: bool = False):
+  op: Operator = get_op_user(serving)
+  if cloud:
+    try:
+      op.remote_init() # >= v0.9.14rc27
+    except Exception as e:
+      U.log_traceback()
+      logger.error("Failed to initialise remote operator!")
+      _exit_program()
+  return op
+
 
 def run():
+  _tracer = Tracer()
+  from nbox.auth import secret
+  secret.put("username", _tracer.job_proto.auth_info.username)
+
   op: Operator = get_op(cloud = True, serving = False)
-  op.propagate(_tracer = Tracer())
+  op.propagate(_tracer = _tracer)
   if hasattr(op._tracer, "job_proto"):
     op.thaw(op._tracer.job_proto)
 
+  status = Job.Status.ERROR
   try:
     op()
     status = Job.Status.COMPLETED
   except Exception as e:
     U.log_traceback()
-    status = Job.Status.ERROR
   finally:
     if hasattr(op._tracer, "job_proto"):
       op._tracer.job_proto.status = status
       rpc(
         nbox_grpc_stub.UpdateRun, UpdateRunRequest(
-          token = op._tracer.token, job=op._tracer.job_proto, updated_at=get_current_timestamp()
+          token = op._tracer.run_id, job=op._tracer.job_proto, updated_at=get_current_timestamp()
         ), "Failed to end job!"
       )
-    os._exit(0)
+    _exit_program()
 
   # why use os._exit over sys.exit:
   # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
@@ -79,9 +86,12 @@ def get_fastapi_fwd():
   data_dict = {}
   for param in signature.parameters.values():
     default = param.default
+    annot = param.annotation
     if default == inspect._empty:
       default = None
-    data_dict[param.name] = (param.annotation, default)
+    if param.annotation == inspect._empty:
+      annot = Any
+    data_dict[param.name] = (annot, default)
 
   # if your function takes in inputs then it is expected to be sent as query params, so create a pydantic
   # model and FastAPI will take care of the rest
@@ -137,6 +147,6 @@ def serve(
 
 if __name__ == "__main__":
   fire.Fire({
-    "run": run,
-    "serve": serve
+    "run": run,     # NBX-Jobs
+    "serve": serve, # NBX-Deploy
   })

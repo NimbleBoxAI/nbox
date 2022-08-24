@@ -70,6 +70,11 @@ class Operator():
   _inputs = []
   _raise_on_io = True
 
+  # this is a map from operator to resource, by deafult the values will be None,
+  # unless explicitly modified by `chief.machine.Machine`
+  _current_resource = None
+  _op_to_resource_map = {}
+
   def __init__(self) -> None:
     """Create an operator, which abstracts your code into sharable, bulding blocks which
     can then deployed on either NBX-Jobs or NBX-Deploy.
@@ -100,8 +105,8 @@ class Operator():
       # to convert operator is 
       job: Operator = MyOperator(...)
 
-      # deploy this as a batch process
-      job.deploy()
+      # deploy this as a batch process or API endpoint
+      job.deploy() # WIP
     """
     self._operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
     self._op_trace = []
@@ -130,7 +135,8 @@ class Operator():
   from_prefect_task = classmethod(PrefectMixin.from_prefect_task)
   from_prefect_flow = classmethod(PrefectMixin.from_prefect_flow)
 
-  def from_job(self, job_id_or_name, workspace_id: str = None):
+  @classmethod
+  def from_job(cls, job_id_or_name, workspace_id: str = None):
     raise NotImplementedError(...)
 
   @classmethod
@@ -214,6 +220,16 @@ class Operator():
     _op.forward = forward
     return _op
 
+  @classmethod
+  def fn(cls):
+    """Wraps the function as an Operator, so you can use all the same methods as Operator"""
+    op = cls()
+    def wrap(fn):
+      op.forward = fn # override the forward function
+      op.__doc__ = fn.__doc__ # override the docstring
+      op.__class__.__name__ = "fn_" + fn.__name__ # override the name
+      return op
+    return wrap
 
   # /mixin
 
@@ -258,7 +274,12 @@ class Operator():
 
   def __setattr__(self, key, value: 'Operator'):
     obj = getattr(self, key, None)
-    if key != "forward" and obj is not None and callable(obj):
+    if (
+      key != "forward" and
+      obj is not None and
+      callable(obj) and
+      not isinstance(value, Operator)
+    ):
       raise AttributeError(f"cannot assign {key} as it is already a method")
     if isinstance(value, Operator):
       if not "_operators" in self.__dict__:
@@ -266,6 +287,9 @@ class Operator():
       if key in self.__dict__ and key not in self._operators:
         raise KeyError(f"attribute '{key}' already exists")
       self._operators[key] = value
+
+      # map the operator to the current resource
+      self._op_to_resource_map[key] = self._current_resource
     self.__dict__[key] = value
 
   def propagate(self, **kwargs):
@@ -418,8 +442,28 @@ class Operator():
     dag.flowchart.CopyFrom(Flowchart(nodes = _nodes, edges = _edges))
     return dag
 
-  def deploy(self, resource: Resource = None, *, _unittest = False):
+  def deploy(self, deployment_type = "job", resource: Resource = None, *, _unittest = False):
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint"""
     raise NotImplementedError("Under construction 🏗")
 
   # /nbx
+
+operator = Operator.fn
+
+class Machine():
+  def __init__(self, parent_op: Operator, resource: Resource):
+    """Simple class to scope the operations to a specific resource"""
+    self.parent_op = parent_op
+    self.resource = resource
+
+    # these are all the ops that are to be run on this machine as a group
+    self.ops_list = []
+
+  def add_child(self, op: Operator):
+    self.ops_list.append(op)
+
+  def __enter__(self):
+    self.parent_op._current_resource = self.resource
+
+  def __exit__(self, *args):
+    self.parent_op._current_resource = None

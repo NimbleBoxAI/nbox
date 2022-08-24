@@ -15,11 +15,16 @@ import requests
 import webbrowser
 from getpass import getpass
 
-from nbox.utils import join, isthere, logger, ENVVARS
+import nbox.utils as U
+from nbox.utils import join, isthere, logger
 
 # ------ AWS Auth ------ #
 
 class AWSClient:
+  """AWS Authentication class
+  
+  EXPERIMENTAL: This is not yet ready for use.
+  """
   @isthere("boto3", "botocore", soft = False)
   def __init__(self, aws_access_key_id: str, aws_secret_access_key: str, region_name: str):
     """Template for creating your own AWS authentication class.
@@ -58,6 +63,10 @@ class AWSClient:
 # ------ GCP Auth ------ #
 
 class GCPClient:
+  """GCP Authentication class
+  
+  EXPERIMENTAL: This is not yet ready for use.
+  """
   @isthere("google-cloud-sdk", "google-cloud-storage", soft = False)
   def __init__(self, project_id: str, credentials_file):
     """Template for creating your own authentication class.
@@ -96,6 +105,10 @@ class GCPClient:
 # ------ Azure Auth ------ #
 
 class AzureClient:
+  """Azure Authentication class
+  
+  EXPERIMENTAL: This is not yet ready for use.
+  """
   @isthere("azure-storage-blob", soft = False)
   def __init__(self):
     """
@@ -123,6 +136,10 @@ class AzureClient:
 # ------ OCI Auth ------ #
 
 class OCIClient:
+  """Oracle Cloud Infrastructure Authentication class
+  
+  EXPERIMENTAL: This is not yet ready for use.
+  """
   @isthere("oci", "oci-py", soft = False)
   def __init__(self, config_file):
     """
@@ -160,6 +177,10 @@ class OCIClient:
 # ------ Digital Ocean Auth ------ #
 
 class DOClient:
+  """Digital Ocean Authentication class
+  
+  EXPERIMENTAL: This is not yet ready for use.
+  """
   @isthere("doctl", soft = False)
   def __init__(self, config_file):
     """
@@ -188,16 +209,16 @@ class DOClient:
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
-    """We try to find the values secrets file in the ``~/.nbx/secrets.json``, if not
-    found, we ask the user for the email and direct them to browser.
     """
-    os.makedirs(ENVVARS.NBOX_HOME_DIR, exist_ok=True)
-    fp = join(ENVVARS.NBOX_HOME_DIR, "secrets.json")
+    Single source for all the secrets file. Can persist across multiple processes.
+    """
+    os.makedirs(U.env.NBOX_HOME_DIR(), exist_ok=True)
+    self.fp = join(U.env.NBOX_HOME_DIR(), "secrets.json")
 
-    access_token = ENVVARS.NBOX_USER_TOKEN("")
+    access_token = U.env.NBOX_USER_TOKEN("")
 
     # if this is the first time starting this then get things from the nbx-hq
-    if not os.path.exists(fp):
+    if not os.path.exists(self.fp):
       if not access_token:
         logger.info(f"Ensure that you put the email ID you have signed up with!")
         _secrets_url = f"{nbx_url}/secrets"
@@ -223,11 +244,11 @@ class NBXClient:
         "nbx_url": nbx_url,
         "username": username
       }
-      with open(fp, "w") as f:
+      with open(self.fp, "w") as f:
         f.write(repr(self))
       logger.info("Successfully created secrets!")
     else:
-      with open(fp, "r") as f:
+      with open(self.fp, "r") as f:
         self.secrets = json.load(f)
       logger.debug("Successfully loaded secrets!")
 
@@ -235,18 +256,20 @@ class NBXClient:
     return json.dumps(self.secrets, indent=2)
 
   def get(self, item, default=None):
+    # with open(self.fp, "r") as f:
+    #   self.secrets = json.load(f)
     return self.secrets.get(item, default)
 
   def put(self, item, value, persist: bool = False):
     self.secrets[item] = value
     if persist:
-      with open(join(ENVVARS.NBOX_HOME_DIR, "secrets.json"), "w") as f:
+      with open(self.fp, "w") as f:
         f.write(repr(self))
 
 
 def init_secret():
   # add any logic here for creating secrets
-  if not ENVVARS.NBOX_NO_AUTH(False):
+  if not U.env.NBOX_NO_AUTH(False):
     return NBXClient()
   return None
 
