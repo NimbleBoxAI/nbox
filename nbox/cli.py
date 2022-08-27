@@ -1,42 +1,31 @@
 """
-This is CLI for ``nbox``, it is meant to be as simple to use as possible.
+This is CLI for ``nbox``, it is meant to be as simple to use as possible. We using ``python-fire`` for building
+our CLI, which means you can access underlying system with same commands as you use with python. For maximum
+convinience we recommend adding an alias for ``nbx`` as follows:
 
-..code-block::
+.. code-block:: bash
+  
+  [zshrc]
+  echo "\\nalias nbx='python3 -m nbox'\\n" >> ~/.zshrc
+  source ~/.zshrc
 
-  nbx
-  ├── tunnel
-  ├── open
-  ├── compile
-  ├── get
-  ├── jobs
-  │   [staticmethods]
-  │   ├── new
-  │   ├── status
-  │   [initialisation]
-  │       ├── id
-  │       └── workspace_id
-  │   ├── change_schedule
-  │   ├──logs
-  │   ├──delete
-  │   ├──refresh
-  │   ├──trigger
-  │   ├──pause
-  │   └──resume
-  └── build (Instance)
-      [staticmethods]
-      ├── new
-      ├── status
-      [initialisation]
-          ├── i
-          ├── workspace_id
-          └── cs_endpoint
-      ├── refresh
-      ├── start
-      ├── stop
-      ├── delete
-      ├── run_py
-      └── __call__
+  [bashrc]
+  echo "\\nalias nbx='python3 -m nbox'\\n" >> ~/.bashrc
+  source ~/.bashrc
 
+
+SSH into Instances
+------------------
+
+You can SSH into your instance with the ``nbx tunnel`` command. This command will create a tunnel
+to your instance and start an SSH session.
+
+.. code-block:: bash
+
+  nbx tunnel 8000 -i "instance-name"
+
+Documentation
+-------------
 """
 
 import os
@@ -47,10 +36,13 @@ from json import dumps
 import nbox.utils as U
 from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
+import nbox.utils as U
+from nbox.jobs import Job, Serve
+from nbox.init import nbox_ws_v1
 from nbox.auth import init_secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
-from nbox.framework.autogen import compile
+from nbox.relics import RelicsNBX
 from nbox.version import __version__ as V
 
 logger = U.get_logger()
@@ -79,7 +71,8 @@ def get(api_end: str, **kwargs):
   sys.stdout.flush()
 
 def login():
-  fp = U.join(U.ENVVARS.NBOX_HOME_DIR, "secrets.json")
+  """Re authenticate ``nbox``. NOTE: Will remove all added keys to ``secrets``"""
+  fp = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
   os.remove(fp)
   init_secret()
 
@@ -91,11 +84,11 @@ def version():
 def main():
   fire.Fire({
     "build"   : Instance,
-    "compile" : compile,
     "get"     : get,
     "jobs"    : Job,
     "login"   : login,
     "open"    : open_home,
+    "relics"  : RelicsNBX,
     "serve"   : Serve,
     "tunnel"  : tunnel,
     "version" : version,

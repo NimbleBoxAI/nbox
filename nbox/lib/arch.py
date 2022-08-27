@@ -1,3 +1,7 @@
+"""
+Here are some operators that can be used to create different architectural formats.
+"""
+
 from typing import Dict, List
 from nbox import Operator
 
@@ -30,7 +34,7 @@ class StepOp(Operator):
 
 class Sequential():
   def __init__(self, *ops):
-    """Package a list of operators into a sequential pipeline"""
+    """Package a list of operators into a sequential pipeline."""
     super().__init__()
     for op in ops:
       assert isinstance(op, Operator), "Operator must be of type Operator"

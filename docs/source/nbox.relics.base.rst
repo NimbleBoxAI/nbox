@@ -1,7 +1,7 @@
-nbox.framework.ml
+Relics Base Class
 =================
 
-.. automodule:: nbox.framework.ml
+.. automodule:: nbox.relics.base
    :members:
    :undoc-members:
    :show-inheritance:

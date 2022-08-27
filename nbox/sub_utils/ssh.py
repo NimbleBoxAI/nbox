@@ -1,14 +1,20 @@
 """
 Creates a socket tunnel between users localhost to server called RSockServer (Reverse Socket Server) .
-Usage:
-  client-tunnel.py <client_port>:<instance_name>:<instance_port> <auth>
-Takes in the following arguments:
-  - client_port: The port that the user can connect to.
-  - instance_name: The name of the instance that the user wants to connect to.
-  - instance_port: The port that the instance is listening on.
-  - auth: The authentication token that the user has to provide to connect to the RSockServer.
-  
+
+Usage
+-----
+
+.. code-block:: bash
+
+  nbx tunnel 8000 --i "nbox-dev"
 """
+
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:3: ERROR: Unexpected indentation.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:4: WARNING: Block quote ends without a blank line; unexpected unindent.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:6: ERROR: Unexpected indentation.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:19: WARNING: Bullet list ends without a blank line; unexpected unindent.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:20: WARNING: Enumerated list ends without a blank line; unexpected unindent.
+# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:21: WARNING: Enumerated list ends without a blank line; unexpected unindent.
 
 import os
 import sys
@@ -19,66 +25,45 @@ import threading
 import subprocess
 from time import sleep
 from typing import List
-from functools import partial
-from datetime import datetime, timezone
-
-from nbox.utils import logger as nbx_logger
+from nbox.utils import logger as nbx_logger, FileLogger
 from nbox import utils as U
 from nbox.auth import secret
 from nbox.instance import Instance
 
-
-class FileLogger:
-  def __init__(self, filepath):
-    self.filepath = filepath
-    self.f = open(filepath, "a")
-
-    self.debug = partial(self.log, level="debug",)
-    self.info = partial(self.log, level="info",)
-    self.warning = partial(self.log, level="warning",)
-    self.error = partial(self.log, level="error",)
-    self.critical = partial(self.log, level="critical",)
-
-  def log(self, message, level):
-    self.f.write(f"[{datetime.now(timezone.utc).isoformat()}] {level}: {message}\n")
-    self.f.flush()
-
-
 class RSockClient:
-  """
-  This is a RSockClient. It handels the client socket where client is the user application trying to connect to "client_port"
-  Connects to RSockServer listening on localhost:886.
-  RSockServer recieves instructions as a string and sends back a response.
-  RSockServer requires following steps to setup
-  First,
-    Authentication:
-      - Authentication happens by sending
-        `"AUTH~{AUTH_TOKEN}"`
-      - AUTH_TOKEN is not defined and is default to 'password'
-    Seting config:
-      - you can set config by sending
-        `"SET_CONFIG~{instance}~{instance_port}"`
-      - "instance" - Currently is the internal ip of the instance.
-      - "instance_port" - What port users wants to connect to.
-    Connect:
-      - This Starts the main loop which
-        1. Listen on client_port
-        2. On connection, 
-      2. On connection, 
-        2. On connection, 
-          a. Send AUTH
-          b. If AUTH is successful, send SET_CONFIG
-          c. If SET_CONFIG is successful, send CONNECT
-          d. If CONNECT is successful, start io_copy
-    IO_COPY:
-      - This is the main loop that handles the data transfer between client and server. This is done by creating a new thread for each connection.
-      - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
-      - When a connection is closed, the loop is stopped.
-  """
+  # This is a RSockClient. It handels the client socket where client is the user application trying to connect to "client_port"
+  # Connects to RSockServer listening on localhost:886.
+  # RSockServer recieves instructions as a string and sends back a response.
+  # RSockServer requires following steps to setup
+  # First,
+  #   Authentication:
+  #     - Authentication happens by sending
+  #       `"AUTH~{AUTH_TOKEN}"`
+  #     - AUTH_TOKEN is not defined and is default to 'password'
+  #   Seting config:
+  #     - you can set config by sending
+  #       `"SET_CONFIG~{instance}~{instance_port}"`
+  #     - "instance" - Currently is the internal ip of the instance.
+  #     - "instance_port" - What port users wants to connect to.
+  #   Connect:
+  #     - This Starts the main loop which
+  #       1. Listen on client_port
+  #       2. On connection, 
+  #     2. On connection, 
+  #       2. On connection, 
+  #         a. Send AUTH
+  #         b. If AUTH is successful, send SET_CONFIG
+  #         c. If SET_CONFIG is successful, send CONNECT
+  #         d. If CONNECT is successful, start io_copy
+  #   IO_COPY:
+  #     - This is the main loop that handles the data transfer between client and server. This is done by creating a new thread for each connection.
+  #     - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
+  #     - When a connection is closed, the loop is stopped.
 
   def __init__(self, connection_id, client_socket, user, subdomain, instance_port, file_logger, auth, secure=False):
     """
-    Initializes the client.
+    Initializes a reverse sockets client.
+
     Args:
       client_socket: The socket that the client is connected to.
       instance: The instance that the client wants to connect to.
@@ -349,7 +334,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   instance._unopened_error()
 
   # create logging for RSock
-  folder = U.join(U.ENVVARS.NBOX_HOME_DIR, "tunnel_logs")
+  folder = U.join(U.env.NBOX_HOME_DIR(), "tunnel_logs")
   os.makedirs(folder, exist_ok=True)
   filepath = U.join(folder, f"tunnel_{instance.project_id}.log") # consistency with IDs instead of names
   file_logger = FileLogger(filepath)
@@ -375,7 +360,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
   """the nbox way to SSH into your instance.
 
   Usage:
-    tunn.py 8000 -i "nbox-dev"
+    nbx tunnel 8000 -i "nbox-dev"
 
   Args:
     port: Local port for terminal
@@ -393,7 +378,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     # https://stackoverflow.com/questions/3172470/actual-meaning-of-shell-true-in-subprocess
     nbx_logger.info(f"Starting SSH ... for graceful exit press Ctrl+D then Ctrl+C")
     comm = "ssh"
-    if U.ENVVARS.NBOX_SSH_NO_HOST_CHECKING(False):
+    if U.env.NBOX_SSH_NO_HOST_CHECKING(False):
       comm += " -o StrictHostKeychecking=no"
     comm += f" -p {port} ubuntu@localhost"
     nbx_logger.debug(f"Running command: {comm}")

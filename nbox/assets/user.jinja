@@ -15,13 +15,17 @@ def get_op(serving: bool = False) -> Operator:
   if serving:
     # initialise your Operator for NBX-Serving here
     operator = None
+
+    # confused? uncomment lines below
+    # from nbox.lib.demo import MagicServing
+    # operator = MagicServing()
   else:
     # initialise your Operator for NBX-Job here
     operator = None
 
-  # confused? uncomment lines below
-  # from nbox.nbxlib.ops import Magic
-  # operator = Magic()
+    # confused? uncomment lines below
+    # from nbox.lib.demo import Magic
+    # operator = Magic()
 
   return operator
 

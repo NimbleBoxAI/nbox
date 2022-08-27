@@ -42,10 +42,14 @@ import tempfile
 import traceback
 import randomname
 from uuid import uuid4
+from functools import partial
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from pythonjsonlogger import jsonlogger
+from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 
-class ENVVARS:
+class env:
   """
   Single namespace for all environment variables.
   
@@ -62,8 +66,10 @@ class ENVVARS:
   NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
   NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
   NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
-  NBOX_HOME_DIR = os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
+  NBOX_HOME_DIR = lambda : os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
+  NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
+  NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
 
 logger = None
 
@@ -74,10 +80,10 @@ def get_logger():
     return logger
 
   logger = logging.getLogger("utils")
-  lvl = ENVVARS.NBOX_LOG_LEVEL("info").upper()
+  lvl = env.NBOX_LOG_LEVEL("info").upper()
   logger.setLevel(getattr(logging, lvl))
 
-  if ENVVARS.NBOX_JSON_LOG(False):
+  if env.NBOX_JSON_LOG(False):
     logHandler = logging.StreamHandler()
     logHandler.setFormatter(jsonlogger.JsonFormatter(
       '%(timestamp)s %(levelname)s %(message)s ',
@@ -96,10 +102,51 @@ def get_logger():
 
 logger = get_logger() # package wide logger
 
-def log_and_exit(msg, *args, **kwargs):
-  # convinience function to avoid tracebacks
-  logger.error(msg, *args, **kwargs)
-  sys.exit(1)
+
+@contextmanager
+def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
+  from nbox.version import __version__
+  logger.warning("Deprecation Warning")
+  logger.warning(f"  current: {__version__}")
+  logger.warning(f"  removed: {remove}")
+  logger.warning(f"      msg: {msg}")
+  if replace_by:
+    logger.warning(f"  replace: {replace_by}")
+  if help:
+    logger.warning(f"  help: {help}")
+
+
+def load_module_from_path(fn_name, file_path):
+  spec = spec_from_file_location(fn_name, file_path)
+  foo = module_from_spec(spec)
+  mod_name = get_random_name()
+  sys.modules[mod_name] = foo
+  spec.loader.exec_module(foo)
+  fn = getattr(foo, fn_name)
+  return fn
+
+
+class FileLogger:
+  """Flush logs to a file, useful when we don't want to mess with current logging"""
+  def __init__(self, filepath):
+    self.filepath = filepath
+    self.f = open(filepath, "a+")
+
+    self.debug = partial(self.log, level="debug",)
+    self.info = partial(self.log, level="info",)
+    self.warning = partial(self.log, level="warning",)
+    self.error = partial(self.log, level="error",)
+    self.critical = partial(self.log, level="critical",)
+
+  def log(self, message, level):
+    self.f.write(f"[{datetime.now(timezone.utc).isoformat()}] {level}: {message}\n")
+    self.f.flush()
+
+
+# def log_and_exit(msg, *args, **kwargs):
+#   # convinience function to avoid tracebacks
+#   logger.error(msg, *args, **kwargs)
+#   sys.exit(1)
 
 # lazy_loading/
 
@@ -147,14 +194,14 @@ def isthere(*packages, soft = True):
 
 # path/
 
-def get_files_in_folder(folder, ext = ["*"]):
+def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True):
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os
   all_paths = []
   _all = "*" in ext # wildcard means everything so speed up
 
-  folder_abs = os.path.abspath(folder)
+  folder_abs = os.path.abspath(folder) if abs_path else folder
   for root,_,files in os.walk(folder_abs):
     if _all:
       all_paths.extend([join(root, f) for f in files])
@@ -212,10 +259,10 @@ def hash_(item, fn="md5"):
 
 
 def log_traceback():
-  f = io.StringIO("")
-  traceback.print_exception(*sys.exc_info(), file = f)
-  f.seek(0)
-  for _l in f.readlines():
+  # f = io.StringIO("")
+  # traceback.print_exception(*sys.exc_info(), file = f)
+  f = traceback.format_exc()
+  for _l in f.splitlines():
     logger.error(_l.rstrip())
 
 # /misc

@@ -27,6 +27,7 @@ import string
 import threading
 from requests import Session
 from functools import lru_cache
+from json import dumps as json_dumps
 
 from nbox.utils import logger
 
@@ -139,6 +140,10 @@ class Sub30:
   def _stop(self):
     self.thread_kill_event.set()
 
+  def _copy_session(self):
+    from copy import deepcopy
+    return deepcopy(self._session)
+
   def __repr__(self):
     return f"<Sub30 ({self._url})>"
 
@@ -210,8 +215,18 @@ class Sub30:
     try:
       r.raise_for_status()
     except Exception as e:
-      logger.error(r.content.decode())
-      raise e
+      logger.error("Could not complete request, here's some info:")
+      logger.error("  Status Code: " + str(r.status_code))
+      if json:
+        logger.error("       Json: " + json_dumps(json, indent=2))
+      if params:
+        logger.error("     Params: " + json_dumps(params, indent=2))
+      # raise e
+      cont = r.content.decode()
+      if cont.startswith("<html>"):
+        cont = ":: HTML page ::"
+      logger.error("  " + cont)
+      raise
 
     out = r.json()
     try:
