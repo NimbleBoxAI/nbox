@@ -125,7 +125,7 @@ Index
    jobsdeploy.serving
    nbox.cli
    nbox.lib
-   nbox.relics
+   nbox.observability
 
 .. toctree::
    :maxdepth: 2
@@ -134,6 +134,8 @@ Index
    nbox.operator
    nbox.jobs
    nbox.instance
+   nbox.relics
+   nbox.lmao
 
 
 .. toctree::

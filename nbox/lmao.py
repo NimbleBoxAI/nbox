@@ -19,7 +19,7 @@ from nbox.relics import RelicsNBX
 from nbox.sublime.lmao_client import (
   LMAO_Stub, Record, File, FileList, AgentDetails, RunLog, Run, InitRunRequest, ListProjectsRequest, RelicFile
 )
-from nbox.observbility.system import SystemMetricsLogger
+from nbox.observability.system import SystemMetricsLogger
 
 DEBUG_LOG_EVERY = 100
 INFO_LOG_EVERY = 100
