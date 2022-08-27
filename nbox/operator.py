@@ -105,8 +105,8 @@ class Operator():
       # to convert operator is 
       job: Operator = MyOperator(...)
 
-      # deploy this as a batch process or API endpoint
-      job.deploy() # WIP
+      # deploy this as a batch process or API endpoint or API endpoint
+      job.deploy() # WIP # WIP
     """
     self._operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
     self._op_trace = []
@@ -472,8 +472,3 @@ class Machine():
 
   def __exit__(self, *args):
     self.parent_op._current_resource = None
-
-
-class remote:
-  def __enter__(self):
-    pass
