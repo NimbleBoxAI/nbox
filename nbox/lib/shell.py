@@ -7,8 +7,6 @@ This module contains the Operators that can be used to interact with the shell.
 
 from nbox import Operator
 
-from nbox.lib.arch import StepOp
-
 class ShellCommand(Operator):
   def __init__(self, *commands):
     """Run multiple shell commands, uses ``shelex`` to prevent injection"""

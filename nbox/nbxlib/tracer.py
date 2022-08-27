@@ -78,14 +78,13 @@ class Tracer:
   def __repr__(self) -> str:
     return f"Tracer() for job {self.job_id}"
 
-  def __call__(self, node: Node, verbose: bool = True):
-    if verbose:
-      logger.debug()
+  def __call__(self, node: Node, verbose: bool = False):
     if not self.network_tracer:
       return
     self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this
     updated_at = node.run_status.start if node.run_status.end != None else node.run_status.end
-    logger.info(f"[NodeID: {node.id}] UpdateTime: {updated_at.ToDatetime()}")
+    if verbose:
+      logger.info(f"[NodeID: {node.id}] UpdateTime: {updated_at.ToDatetime()}")
     rpc(
       nbox_grpc_stub.UpdateRun,
       UpdateRunRequest(token = self.run_id, job = self.job_proto, updated_at = updated_at),

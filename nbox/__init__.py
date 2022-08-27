@@ -11,5 +11,6 @@ from nbox.load import load, PRETRAINED_MODELS
 from nbox.instance import Instance
 from nbox.auth import AWSClient, GCPClient, OCIClient, DOClient, AzureClient
 from nbox.relics import RelicsNBX
+from nbox.lmao import Lmao
 
 from nbox.version import __version__

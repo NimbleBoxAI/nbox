@@ -34,6 +34,7 @@ This has a couple of cool things:
 import os
 import io
 import sys
+from typing import List
 import dill
 import logging
 import hashlib
@@ -60,6 +61,10 @@ class env:
   #. ``NBOX_SSH_NO_HOST_CHECKING``: If set, ``ssh`` will not check for host key
   #. ``NBOX_HOME_DIR``: By default ~/.nbx folder
   #. ``NBOX_USER_TOKEN``: User token for NimbleBox.ai from <app.nimblebox.ai/secrets>_
+  #. ``NBOX_NO_LOAD_GRPC``: If set, will not load grpc stub
+  #. ``NBOX_NO_LOAD_WS``: If set, will not load webserver subway
+  #. ``NBOX_LMAO_DISABLE_RELICS``: If set, Monitoring data will be stored on the cloud Relic
+  #. ``NBOX_LMAO_DISABLE_SYSTEM_METRICS``: If set, system metrics will not logged in monitoring
   """
   NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
   NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
@@ -70,6 +75,8 @@ class env:
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
   NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
+  NBOX_LMAO_DISABLE_RELICS = lambda: os.getenv("NBOX_LMAO_DISABLE_RELICS", False)
+  NBOX_LMAO_DISABLE_SYSTEM_METRICS = lambda: os.getenv("NBOX_LMAO_DISABLE_SYSTEM_METRICS", False)
 
 logger = None
 
@@ -194,7 +201,7 @@ def isthere(*packages, soft = True):
 
 # path/
 
-def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True):
+def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True) -> List[str]:
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os

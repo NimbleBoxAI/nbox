@@ -5,13 +5,14 @@ import os
 import dill
 import requests
 import tabulate
+from hashlib import md5
 from typing import List
 from copy import deepcopy
 from functools import lru_cache
 
 from nbox.auth import secret
 from nbox.init import nbox_ws_v1
-from nbox.utils import logger
+from nbox.utils import logger, env
 from nbox.sublime.relics_rpc_client import (
   RelicStore_Stub,
   RelicFile,
@@ -29,15 +30,21 @@ def get_relic_file(fpath: str, username: str, workspace_id: str):
   # clean up fpath, remove any trailing slashes
   # trim any . or / from prefix and suffix
   fpath_cleaned = fpath.strip("./")
-  file_stat = os.stat(fpath)
+
+  extra = {}
+  if os.path.exists(fpath):
+    file_stat = os.stat(fpath)
+    extra = {
+      "created_on": int(file_stat.st_mtime),    # int
+      "last_modified": int(file_stat.st_mtime), # int
+      "size": max(1, file_stat.st_size),        # bytes
+    }
   return RelicFile(
     name = fpath_cleaned,
-    created_on = int(file_stat.st_mtime),    # int
-    last_modified = int(file_stat.st_mtime), # int
-    size = max(1, file_stat.st_size),        # bytes
     username = username,
     type = RelicFile.RelicType.FILE,
     workspace_id = workspace_id,
+    **extra
   )
 
 
@@ -149,12 +156,30 @@ class RelicsNBX(BaseStore):
     relic_file.relic_name = self.relic_name
     self._upload_relic_file(local_path, relic_file)
 
+  def put_to(self, local_path: str, remote_path: str) -> None:
+    if self.relic is None:
+      raise ValueError("Relic does not exist, pass create=True")
+    logger.info(f"Putting file: {local_path} to {remote_path}")
+    relic_file = get_relic_file(local_path, self.username, self.workspace_id)
+    relic_file.relic_name = self.relic_name
+    relic_file.name = remote_path # override the name
+    self._upload_relic_file(local_path, relic_file)
+
   def get(self, local_path: str):
     """Get the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
     logger.info(f"Getting file: {local_path}")
     relic_file = RelicFile(name = local_path.strip("./"),)
+    relic_file.relic_name = self.relic_name
+    relic_file.workspace_id = self.workspace_id
+    self._download_relic_file(local_path, relic_file)
+
+  def get_from(self, local_path: str, remote_path: str) -> None:
+    if self.relic is None:
+      raise ValueError("Relic does not exist, pass create=True")
+    logger.info(f"Getting file: {local_path} from {remote_path}")
+    relic_file = RelicFile(name = remote_path.strip("./"),)
     relic_file.relic_name = self.relic_name
     relic_file.workspace_id = self.workspace_id
     self._download_relic_file(local_path, relic_file)
@@ -194,14 +219,23 @@ class RelicsNBX(BaseStore):
 
   def put_object(self, key: str, py_object):
     """wrapper function for putting a python object"""
-    with open(key, "wb") as f:
+    # we will cache the object in the local file system
+    cache_dir = os.path.join(env.NBOX_HOME_DIR(), ".cache")
+    if not os.path.exists(cache_dir):
+      os.makedirs(cache_dir)
+    _key = os.path.join(cache_dir, md5(key.encode()).hexdigest())
+    with open(_key, "wb") as f:
       dill.dump(py_object, f)
-    self.put(key)
+    self.put_to(_key, key)
 
   def get_object(self, key: str):
     """wrapper function for getting a python object"""
-    self.get(key)
-    with open(key, "rb") as f:
+    cache_dir = os.path.join(env.NBOX_HOME_DIR(), ".cache")
+    if not os.path.exists(cache_dir):
+      os.makedirs(cache_dir)
+    _key = os.path.join(cache_dir, md5(key.encode()).hexdigest())
+    self.get_from(_key, key)
+    with open(_key, "rb") as f:
       out = dill.load(f)
     return out
 

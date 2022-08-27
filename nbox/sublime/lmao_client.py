@@ -1,6 +1,5 @@
 # Auto generated file. DO NOT EDIT.
 
-import os
 import requests
 from functools import partial
 
