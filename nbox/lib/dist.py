@@ -5,7 +5,6 @@ process managements. The code here is tested along with ``nbox.Relic`` to perfor
 
 import os
 import inspect
-from re import L
 import subprocess
 from time import sleep
 
@@ -187,25 +186,3 @@ if __name__ == "__main__":
       out = self.relic.get_object(output_key)
     return out
 
-
-class Remote(Operator):
-  def __init__(self, op: Operator) -> None:
-    """``Remote`` is used to run any ``Operator`` remotely and return back the results. At it's core it is going to pack the users
-    code as a job folder and upload it as a zip file to the NBX-Jobs service. When the service is triggered it streams all the results
-    back to the local machine without any other item in the middle.
-    """
-    super().__init__()
-    self._op = op
-
-  def __enter__(self):
-    pass
-
-  def __exit__(self, exc_type, exc_val, exc_tb):
-    pass
-
-  def forward(self):
-    pass
-
-
-def create_remote(*fns):
-  return (Remote(fn) for fn in fns)

@@ -45,22 +45,55 @@ certainly if we come up with that high abstraction we will refactor this:
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # modifications: research@nimblebox.ai 2022
 
+import os
 import inspect
+from time import sleep
 import requests
-from typing import Dict, Iterable, List
+from enum import Enum
+from typing import Dict, Iterable, List, Union
 from collections import OrderedDict
+from subprocess import Popen
 
-from nbox.utils import logger
+from nbox.utils import logger, env
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
 from nbox.sub_utils.latency import log_latency
-from nbox.messages import get_current_timestamp
 from nbox.framework.on_functions import get_nbx_flow
 from nbox.framework import AirflowMixin, PrefectMixin
 from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
-from nbox.network import deploy_job, deploy_serving, _get_deployment_data
-from nbox.jobs import Schedule
+from nbox.network import deploy_job, deploy_serving, _get_deployment_data, _get_job_data
+from nbox.jobs import Schedule, new as new_folder, Job, Serve
+from nbox.messages import get_current_timestamp, write_binary_to_file
+from nbox.relics import RelicsNBX
+
+
+class OperatorType(Enum):
+  """This Enum does not concern the user, however I am describing it so people can get a feel of the breadth
+  of what nbox can do. The purpose of ``Operator`` is to build an abstract representation of any possible compute
+  and execute them in any fashion needed to improve the overall performance of any distributed software system.
+  Here are the different types of operators:
+
+  #. ``UNSET``: this is the default mode and is like using vanilla python without any nbox features.
+  #. ``JOB``: In this case the process is run as a batch process and the I/O of values is done using Relics
+  #. ``SERVING``: In this case the process is run as an API proces
+  #. ``WRAP``: When we wrap a function as an ``Operator``
+  """
+  UNSET = "unset" # default
+  JOB = "from_job"
+  SERVING = "from_serving"
+  WRAP = "function_wrap"
+
+
+DEFAULT_RESOURCE = Resource(
+  cpu = "100m",         # 100mCPU
+  memory = "200Mi",     # MiB
+  disk_size = "1Gi",    # GiB
+  gpu = "none",         # keep "none" for no GPU
+  gpu_count = "0",      # keep "0" when no GPU
+  timeout = 120_000,    # 2 minutes between attempts
+  max_retries = 3,      # third times the charm :P
+)
 
 
 class Operator():
@@ -69,6 +102,7 @@ class Operator():
   source_edges: List[Node] = None
   _inputs = []
   _raise_on_io = True
+  _op_type = OperatorType.UNSET
 
   # this is a map from operator to resource, by deafult the values will be None,
   # unless explicitly modified by `chief.machine.Machine`
@@ -135,19 +169,82 @@ class Operator():
   from_prefect_task = classmethod(PrefectMixin.from_prefect_task)
   from_prefect_flow = classmethod(PrefectMixin.from_prefect_flow)
 
-  @classmethod
-  def from_job(cls, job_id_or_name, workspace_id: str = None):
-    # implement this when we have the client-server that allows us to get the metadata for the job
-    raise NotImplementedError()
+  # Operators are very versatile and can be created in many different ways, heres a list of those:
+  # 1. from an existing job, where calling it triggers a new run and args are passed through relics
+  # 2. from an existing serving, where calling it equates to an HTTP API call
+  # 3. from a function, where we decorate an existing function and convert it to an operator
 
   @classmethod
-  def from_serving(cls, deployment_id_or_name, token: str, workspace_id: str = None):
+  def from_job(cls, job_id_or_name, workspace_id: str):
+    """latch an existing job so that it can be called as an operator."""
+    # implement this when we have the client-server that allows us to get the metadata for the job
+    if not workspace_id:
+      raise DeprecationWarning("Personal workspace does not support serving")
+    job_id, job_name = _get_job_data(job_id_or_name, workspace_id)
+    if job_id is None:
+      raise ValueError(f"No serving found with name {job_name}")
+
+    logger.debug(f"Latching to job '{job_name}' ({job_id})")
+    
+    def forward(*args, **kwargs):
+      """This is the forward method for a NBX-Job. All the parameters will be passed through Relics."""
+      logger.debug(f"Running job '{job_name}' ({job_id})")
+      job = Job(job_id, workspace_id)
+      relic = RelicsNBX("dot_deploy_cache", workspace_id, create = True)
+      
+      # determining the put location is very tricky because there is no way to create a sync between the
+      # key put here and what the run will pull. This can lead to many weird race conditions. So for now
+      # I am going to rely on the fact that we cannot have two parallel active runs. Thus at any given
+      # moment there can be only one file at /{job_id}/args_kwargs.pkl
+      relic.put_object(f"{job_id}/args_kwargs", (args, kwargs))
+
+      # and then we will trigger the job and wait for the run to complete
+      job.trigger()
+      latest_run = job.last_n_runs(1)
+      logger.debug(f"New run ID: {latest_run['id']}")
+      max_retries = latest_run['resource']['max_retries']
+
+      max_polls = 600  # about 10 mins
+      poll_count = 0
+      while latest_run["retry_count"] <= max_retries:
+        # create a polling loop
+        logger.debug(f"[{poll_count:04d}/{max_polls:04d}] [{latest_run['retry_count']}/{max_retries}] {latest_run['status']}")
+        if poll_count > max_polls:
+          raise TimeoutError(f"Run {latest_run['id']} timed out after {max_polls} polls")
+        if latest_run["status"] == "COMPLETED":
+          break
+        elif latest_run["retry_count"] == max_retries and latest_run["status"] == "ERROR":
+          raise RuntimeError(f"Run {latest_run['id']} failed after {max_retries} retries")
+        latest_run = job.last_n_runs(1)
+        poll_count += 1
+        sleep(1)
+
+      if latest_run["status"] == "ERROR":
+        raise Exception(f"Run failed after {max_retries} retries")
+
+      # assuming everything went well we should have a file at /{job_id}/return
+      obj = relic.get_object(f"{job_id}/return")
+      return obj
+    
+    # create the class and override some values to make more sense
+    _op = cls()
+    _op.__qualname__ = "job_" + job_id
+    _op._raise_on_io = False
+    _op.forward = forward
+    _op._op_type = OperatorType.JOB
+
+    return _op
+
+  @classmethod
+  def from_serving(cls, deployment_id_or_name, token: str, workspace_id: str):
     """Latch to an existing serving operator
 
     Args:
-      deployment_id_or_name (str):
+      deployment_id_or_name (str): The id or name of the deployment
+      token (str): The token to access the deployment, get it from settings
+      workspace_id (str, optional): The workspace id. Defaults to None.
     """
-    if workspace_id is None:
+    if not workspace_id:
       raise DeprecationWarning("Personal workspace does not support serving")
     serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id)
     if serving_id is None:
@@ -216,9 +313,10 @@ class Operator():
 
     # create the class and override some values to make more sense
     _op = cls()
-    _op.__class__.__name__ = key[:-8] + "_Serving"
+    _op.__qualname__ = "serving_" + key[:-8]
     _op._raise_on_io = False
     _op.forward = forward
+    _op._op_type = OperatorType.SERVING
     return _op
 
   @classmethod
@@ -228,7 +326,11 @@ class Operator():
     def wrap(fn):
       op.forward = fn # override the forward function
       op.__doc__ = fn.__doc__ # override the docstring
-      op.__class__.__name__ = "fn_" + fn.__name__ # override the name
+      op.__qualname__ = "fn_" + fn.__name__ # override the name
+
+      # this is necessary for getting the remote operations running
+      op.__file__ = inspect.getfile(fn) # override the file
+      op._op_type = OperatorType.WRAP
       return op
     return wrap
 
@@ -262,7 +364,7 @@ class Operator():
       child_lines.append('(' + key + '): ' + mod_str)
     lines = extra_lines + child_lines
 
-    main_str = self.__class__.__name__ + '('
+    main_str = self.__qualname__ + '('
     if lines:
       # simple one-liner info, which most builtin Modules will use
       if len(extra_lines) == 1 and not child_lines:
@@ -443,11 +545,86 @@ class Operator():
     dag.flowchart.CopyFrom(Flowchart(nodes = _nodes, edges = _edges))
     return dag
 
-  def deploy(self, deployment_type = "job", resource: Resource = None, *, _unittest = False):
-    """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint"""
-    raise NotImplementedError("Under construction 🏗")
+  def deploy(
+    self,
+    workspace_id: str,
+    id_or_name:str = None,
+    deployment_type = "job",
+    resource: Resource = None,
+    *,
+    _unittest = False
+  ) -> 'Operator':
+    """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint, returns the relevant
+    ``.from_job()`` or ``.from_serving`` Operator. This uploads the entire folder where the caller file is located.
+    In which case having a ``.nboxignore`` and ``requirements.txt`` will also be moved over.
+    
+    Args:
+      workspace_id (str): The workspace id to deploy to.
+      id_or_name (str, optional): The id or name of the deployment. Defaults to None.
+      deployment_type (str, optional): The type of deployment. Defaults to "job".
+      resource (Resource, optional): The resource to deploy to. Defaults to None.
+    """
+    if self._op_type == OperatorType.UNSET:
+      fp = inspect.getfile(self.__class__)
+      name = self.__qualname__
+    elif self._op_type in [OperatorType.JOB, OperatorType.SERVING]:
+      raise ValueError("Cannot deploy an operator that is already deployed")
+    elif self._op_type == OperatorType.WRAP:
+      fp = self.__file__
+      name = self.__qualname__[3:] # to account for "fn_"
 
-  # def remote()
+    logger.info(f"Deploying '{name}' from '{fp}'")
+    logger.info(f"Deployment Type: {deployment_type}")
+
+    # so basically till now all we know is that `from fp import name` and `name()`. This process can now
+    # be used to create a custom `nbx_user.py` file from which `exe.py` can import the three functions
+    # and use them the conventional way.
+
+    # create a temporary directory to store all the files
+    nbx_folder = os.path.join(env.NBOX_HOME_DIR(), ".auto_dep", name)
+    new_folder(nbx_folder)
+
+    # just create a resource.pb, if it's empty protobuf will work it out
+    rsp = os.path.join(nbx_folder, "resource.pb")
+    write_binary_to_file(resource or DEFAULT_RESOURCE, file = rsp)
+
+    # copy over all the files and wait for it, else the changes below won't be reflected
+    folder, file = os.path.split(fp)
+    print(folder, file)
+    Popen(f'cp -r {folder}/ {nbx_folder}/', shell = True).wait()
+
+    # in a way nbx_user.py and the three functions could simply be a router and the real functions can be
+    # imported from the orginal file.
+    with open(os.path.join(nbx_folder, "nbx_user.py"), "w") as f:
+      f.write(f'''# Autogenerated for .deploy() call
+from nbox.messages import read_file_to_binary
+from nbox.hyperloop.job_pb2 import Resource
+
+from {file.split('.')[0]} import {name}
+
+def get_op(*a):
+  out = {name}{'() # initialise the operator' if self._op_type == OperatorType.UNSET else f' # no need to initiliaze since is wrapped'}
+  return out
+
+get_resource = lambda: read_file_to_binary('{rsp}', message = Resource())
+get_schedule = lambda: None
+''')
+
+    if _unittest:
+      return
+
+    # now we have created the entire folder and we can run it
+    fn = Job.upload if deployment_type == "job" else Serve.upload
+    out: Union[Job, Serve] = fn(
+      init_folder = nbx_folder,
+      id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
+      workspace_id = workspace_id,
+    )
+
+    return self.from_job(
+      job_id_or_name = out.id,
+      workspace_id = workspace_id,
+    )
 
   def parallel(self):
     pass

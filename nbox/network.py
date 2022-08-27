@@ -25,7 +25,7 @@ from nbox.hyperloop.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub
 from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from nbox.messages import rpc, write_string_to_file, get_current_timestamp
-from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo
+from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo, Serve, Job
 from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 
 
@@ -111,6 +111,8 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_
   logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'w' -d " + "'{}'")
   logger.info(f"   [page] - {_webpage}")
 
+  return Serve(serving_id, workspace_id)
+
 
 #######################################################################################################################
 """
@@ -181,7 +183,7 @@ def deploy_job(
 
   # zip the entire init folder to zip
   zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id)
-  _upload_job_zip(zip_path, job_proto)
+  return _upload_job_zip(zip_path, job_proto)
 
 def _upload_job_zip(zip_path: str, job_proto: JobProto):
   # determine if it's a new Job based on GetJob API
@@ -248,7 +250,6 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
-  from nbox.jobs import Job
   return Job(job_proto.id, job_proto.auth_info.workspace_id)
 
 

@@ -84,8 +84,7 @@ def new(folder_name):
   # create the necessary files that can be used
   os.chdir(folder_name)
   with open(".nboxignore", "w") as f:
-    f.write('''
-# This is where you list the files that you don't want to upload with your code
+    f.write('''# This is where you list the files that you don't want to upload with your code
 
 __pycache__/
     ''')
@@ -100,7 +99,6 @@ __pycache__/
 # save 85% download if using CPU torch add `-f https://download.pytorch.org/whl/torch_stable.html`
 
 nbox[serving]=={__version__} # do not change this
-dainik # this is NBX-LMAO client
 """)
 
   assets = U.join(U.folder(__file__), "assets")
@@ -434,9 +432,14 @@ class Job:
     logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()
 
-  def get_runs(self, old: bool = True, page = -1, sort = "s_no", limit = 10):
+  def _get_runs(self, page = -1, limit = 10):
     self.run_stub = nbox_ws_v1.workspace.u(self.workspace_id).job.u(self.id).runs
-    self.runs = self.run_stub(limit = limit, page = page)["runs_list"]
+    runs = self.run_stub(limit = limit, page = page)["runs_list"]
+    return runs
+
+  def get_runs(self, old: bool = True, page = -1, sort = "s_no", limit = 10):
+    runs = self._get_runs(page, limit)
+    self.runs.extend(runs)
     sorted_runs = sorted(self.runs, key = lambda x: x[sort])
     for run in sorted_runs:
       yield run
@@ -458,6 +461,12 @@ class Job:
       data.append((run["s_no"], run["created_at"], run["run_id"], run["status"]))
     for l in tabulate.tabulate(data, headers).splitlines():
       logger.info(l)
+
+  def last_n_runs(self, n: int = 10):
+    out = self._get_runs()[:n]
+    if n == 1:
+      out = out[0]
+    return out
 
 class Schedule:
   def __init__(

@@ -15,6 +15,7 @@ from functools import lru_cache
 # the trick to importing nbox is to ensure proper loading order and setting
 # of correct env vars, the first import is made in the user stub
 os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
+os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 
 from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
 from nbox import logger
@@ -24,6 +25,7 @@ from nbox.hyperloop.job_pb2 import Job
 from nbox import Operator, nbox_grpc_stub
 from nbox.messages import rpc, get_current_timestamp
 from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from nbox.relics import RelicsNBX
 
 def _exit_program():
   os._exit(0)
@@ -34,7 +36,7 @@ def get_op(cloud = False, serving: bool = False):
   op: Operator = get_op_user(serving)
   if cloud:
     try:
-      op.remote_init() # >= v0.9.14rc27
+      op.remote_init()
     except Exception as e:
       U.log_traceback()
       logger.error("Failed to initialise remote operator!")
@@ -54,11 +56,21 @@ def run():
 
   status = Job.Status.ERROR
   try:
-    op()
+    # now for some jobs there might be a relic Object so we can check if that exists, it will always
+    # be present in the dot_deploy_cache folder and will be in the {job_id} folder
+    relic = RelicsNBX("dot_deploy_cache", _tracer.job_proto.auth_info.workspace_id, create = True)
+    _in = f"{_tracer.job_id}/args_kwargs"
+    if relic.has(_in):
+      (args, kwargs) = relic.get_object(_in)
+    else:
+      args, kwargs = (), {}
+    out = op(*args, **kwargs)
+    relic.put_object(f"{_tracer.job_id}/return", out)
     status = Job.Status.COMPLETED
   except Exception as e:
     U.log_traceback()
   finally:
+    logger.info(f"Job {_tracer.job_id} completed with status {status}")
     if hasattr(op._tracer, "job_proto"):
       op._tracer.job_proto.status = status
       rpc(
