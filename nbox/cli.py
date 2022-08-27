@@ -81,6 +81,16 @@ def version():
   logger.info(f"    nbox version: {V}")
 
 
+def why():
+  print("\nWhy we build NimbleBox?\n")
+  print("  * Artificial intelligence will be the most important technology of the 21st century.")
+  print("  * Every single piece of software ever written will need to be upgraded.")
+  print("  * Energy spent per code token will increase exponentially to handle the bandwidth of AI.")
+  print("  * AI is still software and software engineering is hard.")
+  print("  * Nimblebox is a general purpose tool to build and manage such operations.")
+  print("\nIf you like what we are building, come work with us.\n\nWith Love,\nNimbleBox.ai\n")
+
+
 def main():
   fire.Fire({
     "build"   : Instance,
@@ -92,6 +102,7 @@ def main():
     "serve"   : Serve,
     "tunnel"  : tunnel,
     "version" : version,
+    "why"     : why,
   })
 
 if __name__ == "__main__":

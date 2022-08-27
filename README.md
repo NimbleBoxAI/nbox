@@ -30,7 +30,6 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 ![Jobs Landing Page](https://user-images.githubusercontent.com/89596037/181774553-99120354-72f5-4064-9216-4f8a5aa050be.gif)
 
 
-
 ### 🚀 Intuitive Dashboard
 ![Deploy Landing Page](https://user-images.githubusercontent.com/89596037/181775468-cc342a30-d87e-4576-8bdd-8ffdd75ff759.gif)
 
@@ -75,43 +74,41 @@ nbox
    ├── __call__    # Run any command on the instance
    └── mv (WIP)    # Move files to and from NBX-Build
 ```
-### Deploy your machine learning or statistical models:
+
+## NBX-Jobs and NBX-Deploy
+
+Create a simple folder:
+
+```
+nbx jobs new moonshot
+```
+
+### Run any Batch Process
+
+Add the following code to `foobar.py`:
 
 ```python
-from nbox import Model
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from nbox import operator, Operator
+from nbox.lib.shell import ShellCommand
 
-# define your pre and post processing functions
-def pre(x: Dict):
-  return AutoTokenizer(**x)
+# define your function and wrap it as an operator
+@operator()
+def foo(x: Dict):
+  return "bar"
 
-# load your classifier with functions
-model = AutoModelForSequenceClassification.from_pretrained("distill-bert")
-classifier = Model(model, pre = pre)
-
-# call your model
-classifier(f"Is this a good picture?")
-
-# get full control on exporting it
-spec = classifier.torch_to_onnx(
-  TorchToOnnx(...)
-)
-
-# confident? deploy it your cloud
-url, key = classifier.deploy(
-  spec, deployment_id_or_name = "classification"
-)
-
-# use it anywhere
-pred = requests.post(
-  url,
-  json = {
-    "text": f"Is this a good picture?"
-  },
-  header = {"Authorization": f"Bearer {key}"}
-).json()
+# or use OOPs like torch, etc.
+class MyJob(Operator):
+  def __init__(self):
+    super().__init__()
+    self.foo = foo
+    self.shell = ShellCommand("echo 'hello {text}'")
+  
+  def forward(self):
+    text = self.foo()
+    self.shell(text = text)
 ```
-# 🛟 How to get help?
+
+# How to get help?
 
 Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our community or engineering team will respond!
 
