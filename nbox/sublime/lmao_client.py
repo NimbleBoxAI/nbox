@@ -1,15 +1,14 @@
 # Auto generated file. DO NOT EDIT.
 
-import os
 import requests
 from functools import partial
 
-from nbox.sublime.proto.relics_pb2 import *
-from nbox.sublime.proto.common_pb2 import *
-from nbox.sublime.proto.lmao_pb2 import *
+from dainik.proto.relics_pb2 import *
+from dainik.proto.common_pb2 import *
+from dainik.proto.lmao_pb2 import *
 
-from nbox.sublime._yql.rest_pb2 import Echo
-from nbox.sublime._yql.common import *
+from dainik.yql.rest_pb2 import Echo
+from dainik.yql.common import *
 
 # ------ Stub ------ #
 

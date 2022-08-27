@@ -149,12 +149,30 @@ class RelicsNBX(BaseStore):
     relic_file.relic_name = self.relic_name
     self._upload_relic_file(local_path, relic_file)
 
+  def put_to(self, local_path: str, remote_path: str) -> None:
+    if self.relic is None:
+      raise ValueError("Relic does not exist, pass create=True")
+    logger.info(f"Putting file: {local_path} to {remote_path}")
+    relic_file = get_relic_file(local_path, self.username, self.workspace_id)
+    relic_file.relic_name = self.relic_name
+    relic_file.name = remote_path # override the name
+    self._upload_relic_file(local_path, relic_file)
+
   def get(self, local_path: str):
     """Get the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
     logger.info(f"Getting file: {local_path}")
     relic_file = RelicFile(name = local_path.strip("./"),)
+    relic_file.relic_name = self.relic_name
+    relic_file.workspace_id = self.workspace_id
+    self._download_relic_file(local_path, relic_file)
+
+  def get_from(self, local_path: str, remote_path: str) -> None:
+    if self.relic is None:
+      raise ValueError("Relic does not exist, pass create=True")
+    logger.info(f"Getting file: {local_path} from {remote_path}")
+    relic_file = RelicFile(name = remote_path.strip("./"),)
     relic_file.relic_name = self.relic_name
     relic_file.workspace_id = self.workspace_id
     self._download_relic_file(local_path, relic_file)

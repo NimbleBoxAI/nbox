@@ -137,7 +137,8 @@ class Operator():
 
   @classmethod
   def from_job(cls, job_id_or_name, workspace_id: str = None):
-    raise NotImplementedError(...)
+    # implement this when we have the client-server that allows us to get the metadata for the job
+    raise NotImplementedError()
 
   @classmethod
   def from_serving(cls, deployment_id_or_name, token: str, workspace_id: str = None):
@@ -446,6 +447,10 @@ class Operator():
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint"""
     raise NotImplementedError("Under construction 🏗")
 
+  # def remote()
+
+  def parallel(self):
+    pass
   # /nbx
 
 operator = Operator.fn
@@ -467,3 +472,8 @@ class Machine():
 
   def __exit__(self, *args):
     self.parent_op._current_resource = None
+
+
+class remote:
+  def __enter__(self):
+    pass

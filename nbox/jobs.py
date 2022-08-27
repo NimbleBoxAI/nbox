@@ -17,8 +17,8 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
-from nbox.utils import logger
 from nbox.auth import secret
+from nbox.utils import logger
 from nbox.version import __version__
 from nbox.messages import rpc, streaming_rpc
 from nbox.hyperloop.nbox_ws_pb2 import JobInfo
@@ -103,10 +103,6 @@ nbox[serving]=={__version__} # do not change this
 dainik # this is NBX-LMAO client
 """)
 
-  from nbox import Operator
-  from nbox.network import deploy_job, deploy_serving
-  operator: Operator = get_op(method == "serving")
-
   assets = U.join(U.folder(__file__), "assets")
   path = U.join(assets, "user.jinja")
   with open(path, "r") as f, open("nbx_user.py", "w") as f2:
@@ -117,7 +113,7 @@ dainik # this is NBX-LMAO client
 
   logger.info(f"Created folder: {folder_name}")
 
-def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_id: str = None):
+def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_id: str = None, **kwargs):
   """Upload the code for a job to the NBX-Jobs if not present, it will create a new Job.
 
   Args:

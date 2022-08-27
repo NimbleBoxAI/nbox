@@ -160,22 +160,38 @@ class Instance():
   ################################################################################
 
   @classmethod
-  def new(cls, project_name: str, workspace_id: str = None, storage_limit: int = 25, project_type = "blank") -> 'Instance':
+  def new(
+    cls,
+    project_name: str,
+    workspace_id: str = None,
+    storage_limit: int = 25,
+    project_type: str = "blank",
+    github_branch: str = "",
+    github_link: str = "",
+    template_id: int = 0,
+    clone_id: int = 0,
+  ) -> 'Instance':
+    """Create a new NBX-Build instance."""
     if workspace_id == None:
       stub_all_projects = nbox_ws_v1.user.projects
     else:
       stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
-    out = stub_all_projects(
-      _method = "post",
-      project_name = project_name,
-      storage_limit = storage_limit,
-      project_type = project_type,
-      github_branch = "",
-      github_link = "",
-      template_id = 0,
-      clone_id = 0
-  )
 
+    kwargs_dict = {
+      "project_name": project_name,
+      "storage_limit": storage_limit,
+      "project_type": project_type,
+    }
+    if github_branch:
+      kwargs_dict["github_branch"] = github_branch
+    if github_link:
+      kwargs_dict["github_link"] = github_link
+    if template_id:
+      kwargs_dict["template_id"] = template_id
+    if clone_id:
+      kwargs_dict["clone_id"] = clone_id
+
+    out = stub_all_projects(_method = "post", **kwargs_dict)
     return out
 
   ################################################################################
@@ -518,5 +534,5 @@ class Instance():
     any IDE with checker is dead easy, however the performace guarantee is premium given high
     costs. Thus the logic to parsing these will have to be written as a seperate module.
     """
-    raise NotImplementedError("Core talking method, not implemented yet")
     # self._unopened_error()
+    raise NotImplementedError("Core talking method, not implemented yet")
