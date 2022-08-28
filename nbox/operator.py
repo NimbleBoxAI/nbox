@@ -18,7 +18,57 @@ exactly same, for others here's a quick recap:
   job = MyOperator(1, "hello") # define once
   res = job(2)                 # use like python, screw DAGs
 
-If you want to use deploy `nbox.Jobs <nbox.jobs.html>`_ is a better documentation.
+We always wanted to ensure that there is least developer resistance in the way of using ``Operator``
+so there is a convinient ``operator`` decorator that can wrap any function or class and extend all
+the powerful methods available in the ``Operator`` object, like ``.deploy()``. By default every
+wrapped function is run as a Job.
+
+.. code-block:: python
+
+  @operator()
+  def foo(i: float = 4):
+    return i * i
+
+  # to deploy the operator 
+  if __name__ == "__main__":
+    # pass deployment_type = "serving" to make an API
+    foo_remote = foo.deploy('workspace-id')
+    assert foo_remote() == foo()
+    assert foo_remote(10) == foo(10)
+
+And you can make simple stateful object like classes using ``@operator`` decorator by making it
+an API endpoint.
+
+.. code-block:: python
+
+  @operator()
+  class Bar:
+    def __init__(self, x: int = 1):
+      self.x = x
+
+    def inc(self):
+      self.x += 1
+
+    def getvalue(self):
+      return self.x
+
+    def __getattr__(self, k: str):
+      # simple echo to demonstrate that underlying python object methods can
+      # also be accessed over the internet
+      return str
+
+  if __name__ == "__main__":
+    bar_remote = Bar.deploy('workspace-id')
+    
+    # increment the numbers
+    bar.inc(); bar_remote.inc()
+
+    # directly access the values, no need for futures
+    assert bar.x == bar_remote.x
+
+    print(bar.jj_guverner, bar_remote.jj_guverner)
+
+If you want to use the APIs for deployed jobs and servings `nbox.Jobs <nbox.jobs.html>`_ is a better documentation.
 
 
 Engineering
@@ -40,20 +90,37 @@ certainly if we come up with that high abstraction we will refactor this:
 #. deploy, ...: All the services in NBX-Jobs.
 #. get_nbx_flow: which is the static code analysis system to understand true user intent and\
     if possible (and permission of the user) optimise the logic.
+
+
+Tips
+----
+
+``Operators`` are built to be the abstract equivalent of any computation so code can be easily
+run in distributed fashion.
+
+#. Use Operator directly as a function as much as possible, it's the simplest way to use it.
+#. ``@operator`` decorator on your function and it will be run as a job by default, you want that.
+#. ``@operator`` decorator on your class and it will be run as a serving by default, you want that.
+
+Documentation
+-------------
 """
 # Some parts of the code are based on the pytorch nn.Module class
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # modifications: research@nimblebox.ai 2022
 
+from functools import partial
+import json
 import os
 import inspect
 from time import sleep
 import requests
 from enum import Enum
-from typing import Dict, Iterable, List, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union
 from collections import OrderedDict
 from subprocess import Popen
 
+import nbox.utils as U
 from nbox.utils import logger, env
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
@@ -66,6 +133,7 @@ from nbox.network import deploy_job, deploy_serving, _get_deployment_data, _get_
 from nbox.jobs import Schedule, new as new_folder, Job, Serve
 from nbox.messages import get_current_timestamp, write_binary_to_file
 from nbox.relics import RelicsNBX
+from nbox.init import nbox_ws_v1
 
 
 class OperatorType(Enum):
@@ -77,12 +145,17 @@ class OperatorType(Enum):
   #. ``UNSET``: this is the default mode and is like using vanilla python without any nbox features.
   #. ``JOB``: In this case the process is run as a batch process and the I/O of values is done using Relics
   #. ``SERVING``: In this case the process is run as an API proces
-  #. ``WRAP``: When we wrap a function as an ``Operator``
+  #. ``WRAP_FN``: When we wrap a function as an ``Operator``, by default deployed as a job
+  #. ``WRAP_CLS``: When we wrap a class as an ``Operator``, by default deployed as a serving
   """
   UNSET = "unset" # default
-  JOB = "from_job"
-  SERVING = "from_serving"
-  WRAP = "function_wrap"
+  JOB = "job"
+  SERVING = "serving"
+  WRAP_FN = "fn_wrap"
+  WRAP_CLS = "cls_wrap"
+
+  def _valid_deployment_types():
+    return (OperatorType.JOB.value, OperatorType.SERVING.value)
 
 
 DEFAULT_RESOURCE = Resource(
@@ -95,14 +168,15 @@ DEFAULT_RESOURCE = Resource(
   max_retries = 3,      # third times the charm :P
 )
 
+def generic_method(fn, base_url, session, *args, **kwargs):
+  r = session.post(f"{base_url}/forward/{fn}")
+
 
 class Operator():
-  _version: int = 1 # always try to keep this an i32
   node = Node()
   source_edges: List[Node] = None
-  _inputs = []
-  _raise_on_io = True
   _op_type = OperatorType.UNSET
+  _op_wrap = None
 
   # this is a map from operator to resource, by deafult the values will be None,
   # unless explicitly modified by `chief.machine.Machine`
@@ -157,6 +231,43 @@ class Operator():
     self.__remote_init__()
     for _, op in self._operators.items():
       op.remote_init()
+
+  def __repr__(self):
+    # from torch.nn.Module
+    def _addindent(s_, numSpaces):
+      s = s_.split('\n')
+      # don't do anything for single-line stuff
+      if len(s) == 1:
+        return s_
+      first = s.pop(0)
+      s = [(numSpaces * ' ') + line for line in s]
+      s = '\n'.join(s)
+      s = first + '\n' + s
+      return s
+
+    # We treat the extra repr like the sub-module, one item per line
+    extra_lines = []
+    extra_repr = ""
+    # empty string will be split into list ['']
+    if extra_repr:
+      extra_lines = extra_repr.split('\n')
+    child_lines = []
+    for key, module in self._operators.items():
+      mod_str = repr(module)
+      mod_str = _addindent(mod_str, 2)
+      child_lines.append('(' + key + '): ' + mod_str)
+    lines = extra_lines + child_lines
+
+    main_str = self.__qualname__ + '('
+    if lines:
+      # simple one-liner info, which most builtin Modules will use
+      if len(extra_lines) == 1 and not child_lines:
+        main_str += extra_lines[0]
+      else:
+        main_str += '\n  ' + '\n  '.join(lines) + '\n'
+
+    main_str += ')'
+    return main_str
 
   # mixin/
 
@@ -229,7 +340,6 @@ class Operator():
     # create the class and override some values to make more sense
     _op = cls()
     _op.__qualname__ = "job_" + job_id
-    _op._raise_on_io = False
     _op.forward = forward
     _op._op_type = OperatorType.JOB
 
@@ -263,58 +373,97 @@ class Operator():
     r = session.get(url)
     data = r.json()
 
-    # get the arguments
-    data = data["components"]["schemas"]
-    key = list(filter(lambda x: x.endswith("_Request"), data))[0]
-    comp = data[key]
-    args = comp["properties"]
-    args_dict = {k: v.get("default", REQ) for k, v in args.items()}
+    # create a function to input spec mapper and so the generic forward method can be 
+    fn_spec = {}
+    for p, v in data["paths"].items():
+      if p.startswith("/method_"):
+        fn_name = p[8:]
+        v = v["post"]
+        # op_id = v["operationId"]
+        ref_path = v["requestBody"]["content"]["application/json"]["schema"]["$ref"].split("/")[1:]
+        out = data
+        for p in ref_path:
+          out = out[p]
+        args = out["properties"]
+        fn_spec[fn_name] = args
+      elif p == "/forward":
+        fn_name = "forward"
+        v = v["post"]
+        # op_id = v["operationId"]
+        ref_path = v["requestBody"]["content"]["application/json"]["schema"]["$ref"].split("/")[1:]
+        out = data
+        for p in ref_path:
+          out = out[p]
+        args = out["properties"]
+        fn_spec[fn_name] = args
 
     # define the forward function for this serving operator, the objective is that this will be able to handle
     # args, kwargs just like how it works on the local machine
-    def forward(*args, **kwargs):
-      # check in the kwargs if we have any arguments to pass
-      _data = {} # create the final dicst 
-      for i, (k, v) in enumerate(args_dict.items()):
-        if len(args) == i:
-          break
-        _data[k] = args[i]
-      for k, v in kwargs.items():
-        _data[k] = v
+    def forward(method, *args, **kwargs):
+      if method in fn_spec:
+        # this is a simple method call
+        if method == "forward":
+          url = f"https://api.nimblebox.ai/{serving_id}/forward"
+        elif method in fn_spec:
+          url = f"https://api.nimblebox.ai/{serving_id}/method_{method}"
 
-      # client-side check for unknown vars
-      unknown_args = set()
-      for k, v in _data.items():
-        if k not in args_dict:
-          unknown_args.add(k)
-      if len(unknown_args):
-        raise ValueError(f"Unknown arguments: {unknown_args}")
+        # check in the kwargs if we have any arguments to pass
+        args_dict = {k: v.get("default", REQ) for k, v in fn_spec[method].items()}
+        _data = {} # the json that will be sent over
+        for i, (k, v) in enumerate(args_dict.items()):
+          if len(args) == i:
+            break
+          _data[k] = args[i]
+        for k, v in kwargs.items():
+          _data[k] = v
 
-      missing_args = set()
-      for k, v in args_dict.items():
-        if k not in _data and v == REQ:
-          missing_args.add(k)
-      if len(missing_args):
-        raise ValueError(f"Missing required arguments: {missing_args}")
+        # client-side check for unknown vars
+        unknown_args = set()
+        for k, v in _data.items():
+          if k not in args_dict:
+            unknown_args.add(k)
+        if len(unknown_args):
+          raise ValueError(f"Unknown arguments: {unknown_args}")
+
+        missing_args = set()
+        for k, v in args_dict.items():
+          if k not in _data and v == REQ:
+            missing_args.add(k)
+        if len(missing_args):
+          raise ValueError(f"Missing required arguments: {missing_args}")
+      else:
+        # let's see if we can do something about this information from the server
+        url = f"https://api.nimblebox.ai/{serving_id}/nbx_py_rpc"
+        _data = {
+          "rpc_name": method,
+          "key": U.py_to_bs64(args[0]),
+        }
+        if len(args) > 1:
+          _data["value"] = U.py_to_bs64(args[1])
 
       # make a POST call to /forward and return the json
-      url = f"https://api.nimblebox.ai/{serving_id}/forward"
-      logger.debug(f"Hitting URL: {url}")
-      logger.debug(f"Data: {kwargs}")
+      # logger.debug(f"Hitting URL: {url}")
+      # logger.debug(f"Data: {_data}")
       r = session.post(url, json = _data)
       if r.status_code != 200:
         raise Exception(r.text)
       try:
         data = r.json()
       except:
-        data = {}
-        print(r.text)
-      return data
+        logger.error(r.text)
+        return None
+
+      # convert to usable values
+      if not data["success"]:
+        raise Exception(data["message"])
+      value = U.py_from_bs64(data["value"])
+      return value
+      
 
     # create the class and override some values to make more sense
     _op = cls()
-    _op.__qualname__ = "serving_" + key[:-8]
-    _op._raise_on_io = False
+    _op.propagate(_nbx_serving_fn_spec = fn_spec)
+    _op.__qualname__ = "serving_" + serving_id
     _op.forward = forward
     _op._op_type = OperatorType.SERVING
     return _op
@@ -322,71 +471,64 @@ class Operator():
   @classmethod
   def fn(cls):
     """Wraps the function as an Operator, so you can use all the same methods as Operator"""
-    op = cls()
     def wrap(fn):
-      op.forward = fn # override the forward function
-      op.__doc__ = fn.__doc__ # override the docstring
-      op.__qualname__ = "fn_" + fn.__name__ # override the name
-
-      # this is necessary for getting the remote operations running
-      op.__file__ = inspect.getfile(fn) # override the file
-      op._op_type = OperatorType.WRAP
-      return op
+      if type(fn) == type(wrap): # lol the quick hack
+        # this is a wrapped function to be run as a job
+        op = cls()
+        op = op._fn(fn)
+        return op
+      elif type(fn) == type(Operator):
+        # this is a little bit tricky since the initialisation of the object has be be done
+        # by the user later and thus we wrap another function which actually initialises the
+        # object
+        def cls_init(*args, **kwargs):
+          op = cls()
+          op = op._cls(fn, *args, **kwargs)
+          return op
+        return cls_init
     return wrap
+
+  def _cls(self, fn, *args, **kwargs):
+    """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a class as an operator"""
+    obj = fn(*args, **kwargs)
+    # override the file this is necessary for getting the remote operations running
+    self.__file__ = inspect.getfile(fn)
+    self.__doc__ = obj.__doc__
+    self.__qualname__ = "cls_" + obj.__class__.__qualname__
+    self._op_type = OperatorType.WRAP_CLS
+    self._op_wrap = obj
+    return self
+
+  def _fn(self, fn):
+    """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a function as an operator"""
+    self.forward = fn # override the forward function
+    # override the file this is necessary for getting the remote operations running
+    self.__file__ = inspect.getfile(fn)
+    self.__doc__ = fn.__doc__
+    self.__qualname__ = "fn_" + fn.__name__
+    self._op_type = OperatorType.WRAP_FN
+    self._op_wrap = fn
+    return self
 
   # /mixin
 
-  # information passing/
+  # python state modification /
 
-  def __repr__(self):
-    # from torch.nn.Module
-    def _addindent(s_, numSpaces):
-      s = s_.split('\n')
-      # don't do anything for single-line stuff
-      if len(s) == 1:
-        return s_
-      first = s.pop(0)
-      s = [(numSpaces * ' ') + line for line in s]
-      s = '\n'.join(s)
-      s = first + '\n' + s
-      return s
-
-    # We treat the extra repr like the sub-module, one item per line
-    extra_lines = []
-    extra_repr = ""
-    # empty string will be split into list ['']
-    if extra_repr:
-      extra_lines = extra_repr.split('\n')
-    child_lines = []
-    for key, module in self._operators.items():
-      mod_str = repr(module)
-      mod_str = _addindent(mod_str, 2)
-      child_lines.append('(' + key + '): ' + mod_str)
-    lines = extra_lines + child_lines
-
-    main_str = self.__qualname__ + '('
-    if lines:
-      # simple one-liner info, which most builtin Modules will use
-      if len(extra_lines) == 1 and not child_lines:
-        main_str += extra_lines[0]
-      else:
-        main_str += '\n  ' + '\n  '.join(lines) + '\n'
-
-    main_str += ')'
-    return main_str
+  """The functions below are part of a larger effort to make Operator interact better with the underlying
+  user classes and functions. Most Importantly we are borrowing the ray concept that functions map to jobs
+  and classes map to actors. We are also extending it a little bit to make it more pythonic in ways by adding
+  suppoprt for multiple inbuilt python object methods like __getitem__, __setitem__ etc. So in order to make
+  it work we are adding those methods below as well and each method will based on its type take a call on
+  what to do.
+  """
 
   def __setattr__(self, key, value: 'Operator'):
     obj = getattr(self, key, None)
-    if (
-      key != "forward" and
-      obj is not None and
-      callable(obj) and
-      not isinstance(value, Operator)
-    ):
+    if key != "forward" and obj is not None and callable(obj) and not isinstance(value, Operator):
       raise AttributeError(f"cannot assign {key} as it is already a method")
     if isinstance(value, Operator):
       if not "_operators" in self.__dict__:
-        raise AttributeError("cannot assign operator before Operator.__init__() call")
+        raise AttributeError("cannot assign operator before super().__init__() call")
       if key in self.__dict__ and key not in self._operators:
         raise KeyError(f"attribute '{key}' already exists")
       self._operators[key] = value
@@ -395,11 +537,72 @@ class Operator():
       self._op_to_resource_map[key] = self._current_resource
     self.__dict__[key] = value
 
+  def __getattr__(self, key):
+    if self._op_type == OperatorType.SERVING:
+      if key in self._nbx_serving_fn_spec:
+        return partial(self.forward, key)
+      return self.forward("__getattr__", key)
+    elif self._op_type == OperatorType.WRAP_CLS:
+      return getattr(self._op_wrap, key)
+    raise AttributeError(f"{key}")
+
+  def __getitem__(self, key):
+    if self._op_type == OperatorType.SERVING:
+      return self.forward("__getitem__", key)
+    if self._op_type in [OperatorType.WRAP_FN, OperatorType.WRAP_CLS]:
+      return self._op_wrap[key]
+    raise KeyError(f"{key}")
+
+  def __setitem__(self, key, value):
+    if self._op_type == OperatorType.SERVING:
+      return self.forward("__setitem__", key, value)
+    if self._op_type in [OperatorType.WRAP_CLS]:
+      self._op_wrap[key] = value
+      return
+    raise KeyError(f"{key}")
+
+  def __delitem__(self, key):
+    if self._op_type == OperatorType.SERVING:
+      return self.forward("__delitem__", key)
+    if self._op_type in [OperatorType.WRAP_CLS]:
+      del self._op_wrap[key]; return
+    raise KeyError(f"{key}")
+
+  def __iter__(self):
+    if self._op_type == OperatorType.SERVING:
+      return self.forward("__iter__")
+    if self._op_type in [OperatorType.WRAP_CLS]:
+      return iter(self._op_wrap)
+    raise ValueError(f"Operator cannot iterate")
+
+  def __next__(self):
+    if self._op_type == OperatorType.SERVING:
+      return self.forward("__next__")
+    if self._op_type in [OperatorType.WRAP_CLS]:
+      return next(self._op_wrap)
+    raise ValueError(f"Operator cannot iterate")
+
+  def __len__(self):
+    if self._op_type == OperatorType.SERVING:
+      return self.forward("__len__")
+    if self._op_type in [OperatorType.WRAP_CLS]:
+      return len(self._op_wrap)
+    raise ValueError(f"Operator cannot iterate")
+
+  def __contains__(self, key):
+    if self._op_type == OperatorType.SERVING:
+      return self.forward("__contains__", key)
+    if self._op_type in [OperatorType.WRAP_CLS]:
+      return key in self._op_wrap
+    raise ValueError(f"Operator cannot iterate")
+
+  # / python state modification
+
   def propagate(self, **kwargs):
     """Set kwargs for each child in the Operator"""
     for k, v in kwargs.items():
       setattr(self, k, v)
-    for c in self.children:
+    for c in self._operators.values():
       c.propagate(**kwargs)
 
   def thaw(self, job: JobProto):
@@ -419,11 +622,6 @@ class Operator():
           ))
         )
 
-  def operators(self):
-    r"""Returns an iterator over all operators in the job."""
-    for _, module in self.named_operators():
-      yield module
-
   def named_operators(self, memo = None, prefix: str = '', remove_duplicate: bool = True):
     r"""Returns an iterator over all modules in the network, yielding both the name of the module
     as well as the module itself."""
@@ -440,47 +638,25 @@ class Operator():
         for m in module.named_operators(memo, submodule_prefix, remove_duplicate):
           yield m
 
-  @property
-  def children(self) -> Iterable['Operator']:
-    """Get children of the operator."""
-    return self._operators.values()
-
-  @property
-  def inputs(self):
-    if self._raise_on_io:
-      args = inspect.getfullargspec(self.forward).args
-      try:
-        args.remove('self')
-      except:
-        raise ValueError("forward function must have 'self' as first argument")
-      if self._inputs:
-        args += self._inputs
-      return args
-    return []
-
   def __call__(self, *args, **kwargs):
-    # # Type Checking and create input dicts
-    # inputs = self.inputs
-    # if self._raise_on_io:
-    #   len_inputs = len(args) + len(kwargs)
-    #   if len_inputs > len(inputs):
-    #     raise ValueError(f"Number of arguments ({len(inputs)}) does not match number of inputs ({len_inputs})")
-    #   elif len_inputs < len(args):
-    #     raise ValueError(f"Need at least arguments ({len(args)}) but got ({len_inputs})")
+    # check if calling is allowed based on the type
+    if self._op_type == OperatorType.SERVING:
+      # the fn_spec is set during the .from_serving() classmethod
+      if len(self._nbx_serving_fn_spec) == 1 and "forward" in self._nbx_serving_fn_spec:
+        # this means that an OperatorType.UNSET or OperatorType.WRAP_FN are on the other side of the pipe
+        return self.forward("forward", *args, **kwargs)
+      else:
+        # this means that OperatorType.WRAP_CLS is on the other side of the pipe
+        raise ValueError(f"Cannot call servings directly, will interfere with nbox")
+    elif self._op_type == OperatorType.WRAP_CLS:
+      raise ValueError(f"Cannot call class wrappers directly, will interfere with nbox")
 
     input_dict = {}
-    # for i, arg in enumerate(args):
-    #   input_dict[self.inputs[i]] = arg
-    # for key, value in kwargs.items():
-    #   if key in inputs:
-    #     input_dict[key] = value
-
     logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
     _ts = get_current_timestamp()
     self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
     if self._tracer != None:
       self._tracer(self.node)
-
     # ---- USER SEPERATION BOUNDARY ---- #
 
     with log_latency(f"{self.__class__.__name__}-forward"):
@@ -488,21 +664,11 @@ class Operator():
 
     # ---- USER SEPERATION BOUNDARY ---- #
     outputs = {}
-    # if out is None:
-    #   outputs = {"out_0": str(type(None))}
-    # elif isinstance(out, dict):
-    #   outputs = {k: str(type(v)) for k, v in out.items()}
-    # elif isinstance(out, (list, tuple)):
-    #   outputs = {f"out_{i}": str(type(v)) for i, v in enumerate(out)}
-    # else:
-    #   outputs = {"out_0": str(type(out))}
-
     logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
     _ts = get_current_timestamp()
-    self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = outputs,))
+    self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
     if self._tracer != None:
       self._tracer(self.node)
-
     return out
 
   def forward(self):
@@ -549,7 +715,7 @@ class Operator():
     self,
     workspace_id: str,
     id_or_name:str = None,
-    deployment_type = "job",
+    deployment_type: str = None,
     resource: Resource = None,
     *,
     _unittest = False
@@ -557,21 +723,39 @@ class Operator():
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint, returns the relevant
     ``.from_job()`` or ``.from_serving`` Operator. This uploads the entire folder where the caller file is located.
     In which case having a ``.nboxignore`` and ``requirements.txt`` will also be moved over.
-    
+
     Args:
       workspace_id (str): The workspace id to deploy to.
-      id_or_name (str, optional): The id or name of the deployment. Defaults to None.
-      deployment_type (str, optional): The type of deployment. Defaults to "job".
-      resource (Resource, optional): The resource to deploy to. Defaults to None.
+      id_or_name (str, optional): The id or name of the deployment. if deployment_type is 'serving' this this must be provided.
+      deployment_type (str, optional): Defaults to 'serving' if WRAP_CLS else 'job'. The type of deployment to create.
+      resource (Resource, optional): The resource to deploy to, uses a reasonable default.
     """
+    # go over reasonable checks for deployment
+    if deployment_type == None:
+      if self._op_type == OperatorType.WRAP_CLS:
+        deployment_type = "serving"
+      else:
+        deployment_type = "job"
+    if self._op_type == OperatorType.WRAP_CLS and deployment_type != "serving":
+      raise ValueError(f"Cannot deploy a class as a job, only as a serving")
+    if deployment_type not in OperatorType._valid_deployment_types():
+      raise ValueError(f"Invalid deployment type: {deployment_type}. Must be one of {OperatorType._valid_deployment_types()}")
+    if deployment_type == OperatorType.SERVING.value:
+      if id_or_name is None:
+        raise ValueError("id_or_name must be provided for serving deployment")
+
+    # get the filepath and name to import for convience
     if self._op_type == OperatorType.UNSET:
       fp = inspect.getfile(self.__class__)
       name = self.__qualname__
     elif self._op_type in [OperatorType.JOB, OperatorType.SERVING]:
       raise ValueError("Cannot deploy an operator that is already deployed")
-    elif self._op_type == OperatorType.WRAP:
+    elif self._op_type == OperatorType.WRAP_FN:
       fp = self.__file__
       name = self.__qualname__[3:] # to account for "fn_"
+    elif self._op_type == OperatorType.WRAP_CLS:
+      fp = self.__file__
+      name = self.__qualname__[4:] # to account for "cls_"
 
     logger.info(f"Deploying '{name}' from '{fp}'")
     logger.info(f"Deployment Type: {deployment_type}")
@@ -590,7 +774,6 @@ class Operator():
 
     # copy over all the files and wait for it, else the changes below won't be reflected
     folder, file = os.path.split(fp)
-    print(folder, file)
     Popen(f'cp -r {folder}/ {nbx_folder}/', shell = True).wait()
 
     # in a way nbx_user.py and the three functions could simply be a router and the real functions can be
@@ -602,8 +785,11 @@ from nbox.hyperloop.job_pb2 import Resource
 
 from {file.split('.')[0]} import {name}
 
-def get_op(*a):
-  out = {name}{'() # initialise the operator' if self._op_type == OperatorType.UNSET else f' # no need to initiliaze since is wrapped'}
+def get_op(*_, **__):
+  # takes no input since programtically generated returns the exact object
+  out = {name}{
+    '()' if self._op_type in [OperatorType.UNSET, OperatorType.WRAP_CLS] else ''
+  }
   return out
 
 get_resource = lambda: read_file_to_binary('{rsp}', message = Resource())
@@ -613,24 +799,35 @@ get_schedule = lambda: None
     if _unittest:
       return
 
-    # now we have created the entire folder and we can run it
-    fn = Job.upload if deployment_type == "job" else Serve.upload
-    out: Union[Job, Serve] = fn(
-      init_folder = nbx_folder,
-      id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
-      workspace_id = workspace_id,
-    )
+    if deployment_type == OperatorType.JOB.value:
+      out = Job.upload(
+        init_folder = nbx_folder,
+        id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
+        workspace_id = workspace_id,
+      )
+      return self.from_job(
+        job_id_or_name = out.id,
+        workspace_id = workspace_id,
+      )
+    elif deployment_type == OperatorType.SERVING.value:
+      out = Serve.upload(
+        init_folder = nbx_folder,
+        id_or_name = id_or_name,
+        workspace_id = workspace_id,
+      )
+      stub = nbox_ws_v1.workspace.u(workspace_id).deployments.u(out.id)
+      data = stub()
+      token = data["deployment"]["api_key"]
+      return self.from_serving(
+        deployment_id_or_name = out.id,
+        token = token,
+        workspace_id = workspace_id,
+      )
 
-    return self.from_job(
-      job_id_or_name = out.id,
-      workspace_id = workspace_id,
-    )
-
-  def parallel(self):
+  def map(self, inputs: Union[List[Any], Tuple[Any]]):
     pass
-  # /nbx
 
-operator = Operator.fn
+  # /nbx
 
 class Machine():
   def __init__(self, parent_op: Operator, resource: Resource):
@@ -649,3 +846,6 @@ class Machine():
 
   def __exit__(self, *args):
     self.parent_op._current_resource = None
+
+
+operator = Operator.fn # convinience

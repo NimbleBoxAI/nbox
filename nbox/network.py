@@ -65,7 +65,7 @@ def deploy_serving(
 
   # zip init folder
   zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name)
-  _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
+  return _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
 
 
 def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name):

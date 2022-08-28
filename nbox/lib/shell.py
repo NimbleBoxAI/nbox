@@ -17,7 +17,6 @@ class ShellCommand(Operator):
     all_in = []
     for c in self.commands:
       all_in.extend([tup[1] for tup in string.Formatter().parse(c) if tup[1] is not None])
-    self._inputs = all_in
 
   def forward(self, *args, **kwargs):
     import shlex

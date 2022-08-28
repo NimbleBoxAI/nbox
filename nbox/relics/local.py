@@ -1,5 +1,5 @@
 import os
-import dill
+import cloudpickle
 from glob import glob
 from uuid import uuid4
 from pathlib import Path
@@ -44,7 +44,7 @@ class RelicLocal(BaseStore):
         self._objects = {}
       else:
         with open(self._objects_bin_path, "rb") as f:
-          self._objects = dill.load(f)
+          self._objects = cloudpickle.load(f)
       if not os.path.exists(f"{self.cache_dir}/items"):
         os.makedirs(f"{self.cache_dir}/items")
       self._logs = FileLogger(self._file_logger_path)
@@ -60,11 +60,11 @@ class RelicLocal(BaseStore):
   def _read_state(self):
     if os.path.exists(self._objects_bin_path):
       with open(self._objects_bin_path, "rb") as f:
-        self._objects = dill.load(f)
+        self._objects = cloudpickle.load(f)
 
   def _write_state(self):
     with open(self._objects_bin_path, "wb") as f:
-      dill.dump(self._objects, f)
+      cloudpickle.dump(self._objects, f)
 
   """
   Standard set of APIs for put, get, rm, has.
@@ -120,7 +120,7 @@ class RelicLocal(BaseStore):
     self._read_state()
     object_key, item_path = self.get_id(key) # internal path
     with open(item_path, "wb") as f:
-      dill.dump(value, f)
+      cloudpickle.dump(value, f)
     self._objects[object_key] = item_path # the path is the actual place to store
     self._logs.info(f"[{self.workspace_id}/{self.relic_name}] PUTO {key}")
     self._write_state()
@@ -132,7 +132,7 @@ class RelicLocal(BaseStore):
     if item_path is not None and os.path.exists(item_path):
       self._logs.info(f"[{self.workspace_id}/{self.relic_name}] GETO {key}")
       with open(item_path, "rb") as f:
-        out = dill.load(f)
+        out = cloudpickle.load(f)
       return out
     elif (item_path is not None) and (not os.path.exists(item_path)):
       raise Exception("Trying to get missing file")
