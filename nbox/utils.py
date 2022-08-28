@@ -34,17 +34,18 @@ This has a couple of cool things:
 import os
 import io
 import sys
-from typing import List
-import dill
 import logging
 import hashlib
 import requests
 import tempfile
 import traceback
 import randomname
+import cloudpickle
 from uuid import uuid4
+from typing import List
 from functools import partial
 from contextlib import contextmanager
+from base64 import b64encode, b64decode
 from datetime import datetime, timezone
 from pythonjsonlogger import jsonlogger
 from importlib.util import spec_from_file_location, module_from_spec
@@ -243,11 +244,18 @@ def join(x, *args):
 
 def to_pickle(obj, path):
   with open(path, "wb") as f:
-    dill.dump(obj, f)
+    cloudpickle.dump(obj, f)
 
 def from_pickle(path):
   with open(path, "rb") as f:
-    return dill.load(f)
+    return cloudpickle.load(f)
+
+def py_to_bs64(x: str):
+  return b64encode(cloudpickle.dumps(x)).decode("utf-8")
+
+def py_from_bs64(x: str):
+  return cloudpickle.loads(b64decode(x.encode("utf-8")))
+
 
 
 # /path

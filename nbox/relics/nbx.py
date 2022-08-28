@@ -2,7 +2,7 @@
 This is the code for NBX-Relics which is a simple file system for your organisation.
 """
 import os
-import dill
+import cloudpickle
 import requests
 import tabulate
 from hashlib import md5
@@ -133,9 +133,7 @@ class RelicsNBX(BaseStore):
           #if chunk: 
           f.write(chunk)
           total_size += len(chunk)
-    logger.info("Download status: OK")
-    logger.info(f"      filepath: {local_path}")
-    logger.info(f"    total_size: {total_size//1024} KB")
+    logger.debug(f"Download '{local_path}' status: OK ({total_size//1024} KB)")
 
   """
   At it's core the Relic is supposed to be a file system and not a client. Thus you cannot download something
@@ -225,7 +223,7 @@ class RelicsNBX(BaseStore):
       os.makedirs(cache_dir)
     _key = os.path.join(cache_dir, md5(key.encode()).hexdigest())
     with open(_key, "wb") as f:
-      dill.dump(py_object, f)
+      cloudpickle.dump(py_object, f)
     self.put_to(_key, key)
 
   def get_object(self, key: str):
@@ -236,7 +234,7 @@ class RelicsNBX(BaseStore):
     _key = os.path.join(cache_dir, md5(key.encode()).hexdigest())
     self.get_from(_key, key)
     with open(_key, "rb") as f:
-      out = dill.load(f)
+      out = cloudpickle.load(f)
     return out
 
   """

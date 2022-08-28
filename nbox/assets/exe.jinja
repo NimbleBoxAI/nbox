@@ -26,13 +26,14 @@ from nbox import Operator, nbox_grpc_stub
 from nbox.messages import rpc, get_current_timestamp
 from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 from nbox.relics import RelicsNBX
+from nbox.nbxlib.exe_serving import get_fastapi_routes
 
 def _exit_program():
   os._exit(0)
 
-
 @lru_cache(1)
-def get_op(cloud = False, serving: bool = False):
+def get_op(cloud = False, serving: bool = False) -> Operator:
+  # The beauty of this function is that it ensures that the operator class is loaded only once
   op: Operator = get_op_user(serving)
   if cloud:
     try:
@@ -86,38 +87,6 @@ def run():
   # tl;dr: os._exit kills without cleanup and so it's okay on the Pod
 
 
-def get_fastapi_fwd():
-  from pydantic import create_model
-
-  # first time loading the operator, will automatically create a cache miss and then all the rest will
-  # be cache hits
-  op = get_op(cloud = True, serving = True)
-  
-  # we use inspect signature instead of writing our own ast thing
-  signature = inspect.signature(op.forward)
-  data_dict = {}
-  for param in signature.parameters.values():
-    default = param.default
-    annot = param.annotation
-    if default == inspect._empty:
-      default = None
-    if param.annotation == inspect._empty:
-      annot = Any
-    data_dict[param.name] = (annot, default)
-
-  # if your function takes in inputs then it is expected to be sent as query params, so create a pydantic
-  # model and FastAPI will take care of the rest
-  base_model = create_model(f"{op.__class__.__qualname__}_Request", **data_dict)
-
-  # pretty simple forward function, note that it gets operator using get_op which will be a cache hit
-  async def forward(req: base_model):
-    data = req.dict()
-    op = get_op(cloud = True, serving = True)
-    return op(**data)
-
-  return forward
-
-
 def serve(
   host: str = "0.0.0.0",
   port: int = 8000,
@@ -139,9 +108,11 @@ def serve(
     return {"metadata": {"name": "{{ model_name }}"}}
   app.add_api_route("/metadata", metadata, methods=["GET"], response_class=JSONResponse)
 
-  # define forward method
-  _forward = get_fastapi_fwd()
-  app.add_api_route("/forward", _forward, methods=["POST"], response_class=JSONResponse)
+  # first time loading the operator, will automatically create a cache miss and then all the rest will be cache hits
+  op = get_op(cloud = True, serving = True)
+  routes = get_fastapi_routes(op)
+  for route in routes:
+    app.add_api_route(*route, methods=["POST"], response_class=JSONResponse)
 
   if debug:
     # this is for debugging purposes, it will print the cache status every second
@@ -154,7 +125,7 @@ def serve(
     t = Thread(target = print_cache_status, daemon = True)
     t.start()
 
-  run(app, host = host, port = port,)
+  run(app, host = host, port = port)
 
 
 if __name__ == "__main__":
