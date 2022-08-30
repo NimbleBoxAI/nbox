@@ -1,135 +1,46 @@
-# DO NOT TOUCH
-# ============
+# Auto generated code by 'nbox deploy/serve upload' command
 # created time: {{ created_time }}
 # nbox version: {{ nbox_version }}
-# Auto generated code by 'nbox deploy/serve upload' command
 
 import os
-import fire
-import inspect
-from time import sleep
-from typing import Any
-from threading import Thread
-from functools import lru_cache
-
-# the trick to importing nbox is to ensure proper loading order and setting
-# of correct env vars, the first import is made in the user stub
 os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
 os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 
-from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
-from nbox import logger
-import nbox.utils as U
-from nbox.nbxlib.tracer import Tracer
-from nbox.hyperloop.job_pb2 import Job
-from nbox import Operator, nbox_grpc_stub
-from nbox.messages import rpc, get_current_timestamp
-from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
-from nbox.relics import RelicsNBX
-from nbox.nbxlib.exe_serving import get_fastapi_routes
+import fire
+from functools import lru_cache, partial
 
-def _exit_program():
-  os._exit(0)
+try:
+  from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
+except ImportError:
+  # adding it here to stop linters from going crazy
+  get_op_user = None
+
+from nbox import Operator, logger
+import nbox.utils as U
+from nbox.lib.dist import NBXLet
 
 @lru_cache(1)
 def get_op(cloud = False, serving: bool = False) -> Operator:
   # The beauty of this function is that it ensures that the operator class is loaded only once
-  op: Operator = get_op_user(serving)
+  try:
+    op: Operator = get_op_user(serving)
+  except Exception as e:
+    U.log_traceback()
+    logger.error(f"Failed to load operator: {e}")
+    U._exit_program()
+
   if cloud:
     try:
       op.remote_init()
     except Exception as e:
       U.log_traceback()
-      logger.error("Failed to initialise remote operator!")
-      _exit_program()
+      logger.error(f"Failed to remote initialise operator: {e}")
+      U._exit_program()
   return op
 
-
-def run():
-  _tracer = Tracer()
-  from nbox.auth import secret
-  secret.put("username", _tracer.job_proto.auth_info.username)
-
-  op: Operator = get_op(cloud = True, serving = False)
-  op.propagate(_tracer = _tracer)
-  if hasattr(op._tracer, "job_proto"):
-    op.thaw(op._tracer.job_proto)
-
-  status = Job.Status.ERROR
-  try:
-    # now for some jobs there might be a relic Object so we can check if that exists, it will always
-    # be present in the dot_deploy_cache folder and will be in the {job_id} folder
-    relic = RelicsNBX("dot_deploy_cache", _tracer.job_proto.auth_info.workspace_id, create = True)
-    _in = f"{_tracer.job_id}/args_kwargs"
-    if relic.has(_in):
-      (args, kwargs) = relic.get_object(_in)
-    else:
-      args, kwargs = (), {}
-    out = op(*args, **kwargs)
-    relic.put_object(f"{_tracer.job_id}/return", out)
-    status = Job.Status.COMPLETED
-  except Exception as e:
-    U.log_traceback()
-  finally:
-    logger.info(f"Job {_tracer.job_id} completed with status {status}")
-    if hasattr(op._tracer, "job_proto"):
-      op._tracer.job_proto.status = status
-      rpc(
-        nbox_grpc_stub.UpdateRun, UpdateRunRequest(
-          token = op._tracer.run_id, job=op._tracer.job_proto, updated_at=get_current_timestamp()
-        ), "Failed to end job!"
-      )
-    _exit_program()
-
-  # why use os._exit over sys.exit:
-  # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
-  # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
-  # tl;dr: os._exit kills without cleanup and so it's okay on the Pod
-
-
-def serve(
-  host: str = "0.0.0.0",
-  port: int = 8000,
-  debug: bool = False,
-):
-  from uvicorn import run
-  from fastapi import FastAPI
-  from fastapi.responses import JSONResponse
-
-  app = FastAPI()
-
-  # define ping endpoint
-  async def ping_fn():
-    return {"message": "pong"}
-  app.add_api_route("/", ping_fn, methods=["GET"], response_class=JSONResponse)
-
-  # define metadata endpoint
-  async def metadata():
-    return {"metadata": {"name": "{{ model_name }}"}}
-  app.add_api_route("/metadata", metadata, methods=["GET"], response_class=JSONResponse)
-
-  # first time loading the operator, will automatically create a cache miss and then all the rest will be cache hits
-  op = get_op(cloud = True, serving = True)
-  routes = get_fastapi_routes(op)
-  for route in routes:
-    app.add_api_route(*route, methods=["POST"], response_class=JSONResponse)
-
-  if debug:
-    # this is for debugging purposes, it will print the cache status every second
-    def print_cache_status():
-      while True:
-        print(get_op.cache_info())
-        sleep(1)
-
-    # daemon thread means if main thread dies, these also eventually die
-    t = Thread(target = print_cache_status, daemon = True)
-    t.start()
-
-  run(app, host = host, port = port)
-
-
 if __name__ == "__main__":
+  nbxlet = NBXLet(op = get_op(cloud = True))
   fire.Fire({
-    "run": run,     # NBX-Jobs
-    "serve": serve, # NBX-Deploy
+    "run": nbxlet.run,     # NBX-Jobs
+    "serve": partial(nbxlet.serve, model_name = "{{ model_name }}"), # NBX-Deploy
   })

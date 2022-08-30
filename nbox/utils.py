@@ -473,3 +473,10 @@ class PoolBranch:
     return res
 
 # /pool
+
+def _exit_program():
+  # why use os._exit over sys.exit:
+  # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
+  # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
+  # tl;dr: os._exit kills without cleanup and so it's okay on the Pod
+  os._exit(0)

@@ -40,7 +40,7 @@ from requests.sessions import Session
 import nbox.utils as U
 from nbox.auth import secret
 from nbox.utils import logger
-from nbox.subway import TIMEOUT_CALLS
+from nbox.subway import TIMEOUT_CALLS, Sub30
 from nbox.init import nbox_ws_v1, create_webserver_subway
 
 
@@ -193,6 +193,34 @@ class Instance():
 
     out = stub_all_projects(_method = "post", **kwargs_dict)
     return out
+
+  ################################################################################
+  """
+  # Utility Methods
+
+  Functions are responsible for doing things that otherwise the user would struggle with.
+  """
+  ################################################################################
+
+  def get_subway(self, key = "stablediff"):
+    self._unopened_error()
+
+    build = "build"
+    if "app.c." in secret.get("nbx_url"):
+      build = "build.c"
+    elif "app.rc" in secret.get("nbx_url"):
+      build = "build.rc"
+    url = f"https://{key}-{self.open_data['url']}.{build}.nimblebox.ai/",
+    session = Session(
+      headers = {
+        "NBX-TOKEN": self.open_data["token"],
+        "X-NBX-USERNAME": secret.get("username"),
+      }
+    )
+    r = session.get(url + "openapi.json")
+    data = r.json()
+    sub = Sub30(url, data, session)
+    return sub
 
   ################################################################################
   """

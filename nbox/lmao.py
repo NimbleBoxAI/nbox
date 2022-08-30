@@ -74,7 +74,8 @@ class Lmao():
     self._nbx_job_id = self.tracer.job_id
     if self._nbx_run_id is not None:
       # update the username you have
-      self.username = self.tracer.job_proto.auth_info.username
+      secret.put("username", self.tracer.job_proto.auth_info.username)
+      self.username = secret.get("username")
 
     # create a session with the auth header
     _session = Session()

@@ -172,7 +172,7 @@ class Sub30:
         path = index
         break
     if path == None:
-      raise ValueError(f"No path found for '{self._prefix}'")
+      raise AttributeError(f"No path found for '{self._prefix}'")
 
     # this is a match
     logger.debug("Matched path: " + path)
@@ -229,10 +229,11 @@ class Sub30:
       raise
 
     out = r.json()
-    try:
-      out = out[self._default_key]
-    except KeyError:
-      pass
+    if self._default_key is not None:
+      try:
+        out = out[self._default_key]
+      except KeyError:
+        pass
     return out
 
   # _get = partial(__call__, _method = "get")
@@ -249,8 +250,7 @@ class SpecSubway():
     self._caller = (
       (len(_spec) == 3 and set(_spec) == set(["method", "meta", "src"])) or
       (len(_spec) == 4 and set(_spec) == set(["method", "meta", "src", "response_kwargs_dict"])) or
-      "/" in self._spec
-    )
+      "/" in self._spec)
 
   @classmethod
   def from_openapi(cls, openapi, _url, _session):
@@ -317,10 +317,13 @@ class SpecSubway():
     if attr not in self._spec:
       raise AttributeError(f"'.{attr}' is not a valid function")
     return SpecSubway(f"{self._url}/{attr}", self._session, self._spec[attr], attr)
+
+  def u(self, attr):
+    return self.__getattr__(attr)
   
   def __call__(self, *args, _verbose = False, _parse = False, **kwargs):
-    from pprint import pprint
-    pprint(self._spec)
+    # from pprint import pprint
+    # pprint(self._spec)
     if not self._caller:
       raise AttributeError(f"'.{self._name}' is not an endpoint")
     spec = self._spec
@@ -356,9 +359,9 @@ class SpecSubway():
     url = f"{self._url}"
     if self._caller and "/" in self._spec:
       url += "/"
-    if _verbose:
-      logger.debug(f"{spec['method'].upper()} {url}")
-      logger.debug("-->>", data)
+    # if _verbose:
+    logger.debug(f"{spec['method'].upper()} {url}")
+    logger.debug(f"-->> {data}")
     r = fn(url, json = data)
     if not r.status_code == 200:
       raise ValueError(r.content.decode())

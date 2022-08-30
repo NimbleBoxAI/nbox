@@ -11,11 +11,18 @@ from time import sleep
 from threading import Thread
 from typing import Union
 
+import nbox.utils as U
 from nbox import RelicsNBX
 from nbox.relics.local import RelicLocal
 from nbox import Operator, logger
 from nbox.operator import Resource
 from nbox.utils import log_traceback
+from nbox.nbxlib.tracer import Tracer
+from nbox.hyperloop.job_pb2 import Job
+from nbox import Operator, nbox_grpc_stub
+from nbox.messages import rpc, get_current_timestamp
+from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from nbox.nbxlib.serving import serve_operator
 
 PROC_FOLDER = "./nbx_autogen_proc"
 
@@ -185,4 +192,60 @@ if __name__ == "__main__":
       sleep(1)
       out = self.relic.get_object(output_key)
     return out
+
+
+class NBXLet(Operator):
+  def __init__(self, op: Operator):
+    """The Operator that runs the things on any pod on the NimbleBox Jobs + Deploy platform.
+    Name mimics the kubelet, dockerlet, raylet, etc"""
+    super().__init__()
+    self.op = op
+    self.tracer = Tracer()
+
+  def run(self):
+    """Run this as a batch process"""
+    from nbox.auth import secret
+    secret.put("username", self.tracer.job_proto.auth_info.username)
+
+    self.op.propagate(_tracer = self.tracer)
+    if hasattr(self.op._tracer, "job_proto"):
+      self.op.thaw(self.op._tracer.job_proto)
+
+    workspace_id = self.tracer.job_proto.auth_info.workspace_id
+    job_id = self.tracer.job_id
+    status = Job.Status.ERROR
+
+    try:
+      # now for some jobs there might be a relic Object so we can check if that exists, it will always
+      # be present in the dot_deploy_cache folder and will be in the {job_id} folder
+      relic = RelicsNBX("dot_deploy_cache", workspace_id, create = True)
+      _in = f"{job_id}/args_kwargs"
+      if relic.has(_in):
+        (args, kwargs) = relic.get_object(_in)
+      else:
+        args, kwargs = (), {}
+      out = self.op(*args, **kwargs)
+      relic.put_object(f"{job_id}/return", out)
+      status = Job.Status.COMPLETED
+    except Exception as e:
+      U.log_traceback()
+    finally:
+      logger.info(f"Job {job_id} completed with status {status}")
+      if hasattr(self.tracer, "job_proto"):
+        self.op._tracer.job_proto.status = status
+        rpc(
+          nbox_grpc_stub.UpdateRun, UpdateRunRequest(
+            token = self.tracer.run_id, job=self.tracer.job_proto, updated_at=get_current_timestamp()
+          ), "Failed to end job!"
+        )
+      U._exit_program()
+
+  def serve(self, host: str = "0.0.0.0", port: int = 8000, *, model_name: str = None):
+    """Run a serving API endpoint"""
+    try:
+      serve_operator(self.op, host = host, port = port, model_name = model_name)
+    except Exception as e:
+      U.log_traceback()
+      logger.error(f"Failed to serve operator: {e}")
+      U._exit_program()
 

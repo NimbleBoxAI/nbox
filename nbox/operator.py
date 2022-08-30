@@ -112,6 +112,7 @@ Documentation
 from functools import partial
 import json
 import os
+import re
 import inspect
 from time import sleep
 import requests
@@ -121,6 +122,7 @@ from collections import OrderedDict
 from subprocess import Popen
 
 import nbox.utils as U
+from nbox.auth import secret
 from nbox.utils import logger, env
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
@@ -134,6 +136,7 @@ from nbox.jobs import Schedule, new as new_folder, Job, Serve
 from nbox.messages import get_current_timestamp, write_binary_to_file
 from nbox.relics import RelicsNBX
 from nbox.init import nbox_ws_v1
+from nbox.subway import SpecSubway
 
 
 class OperatorType(Enum):
@@ -177,6 +180,7 @@ class Operator():
   source_edges: List[Node] = None
   _op_type = OperatorType.UNSET
   _op_wrap = None
+  _op_wrap_init = None
 
   # this is a map from operator to resource, by deafult the values will be None,
   # unless explicitly modified by `chief.machine.Machine`
@@ -346,32 +350,49 @@ class Operator():
     return _op
 
   @classmethod
-  def from_serving(cls, deployment_id_or_name, token: str, workspace_id: str):
+  def from_serving(cls, url: str, token: str):
     """Latch to an existing serving operator
 
     Args:
-      deployment_id_or_name (str): The id or name of the deployment
-      token (str): The token to access the deployment, get it from settings
-      workspace_id (str, optional): The workspace id. Defaults to None.
+      url (str): The URL of the serving
+      token (str): The token to access the deployment, get it from settings.
     """
-    if not workspace_id:
-      raise DeprecationWarning("Personal workspace does not support serving")
-    serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id)
-    if serving_id is None:
-      raise ValueError(f"No serving found with name {serving_name}")
-    
-    logger.debug(f"Latching to serving '{serving_name}' ({serving_id})")
+    logger.debug(f"Latching to serving: {url}")
 
-    # common things
-    session = requests.Session()
-    session.headers.update({"NBX-KEY": token})
+    # now we can run a NBX-Let either on a Pod or on the Build instance, so we can check the URL
+    # once and make a judgement based on that
+
+    serving_loc = None
+
+    out = re.match("https:\/\/api\.nimblebox\.ai\/(\w+)\/", url)
+    if out:
+      # this is deployment on a Pod
+      session = requests.Session()
+      session.headers.update({"NBX-KEY": token})
+      serving_loc = "pod"
+    else:
+      # check if the regex with build matches
+      out = re.match("https:\/\/(\w+)-(\w+)\.build([\.rc]+)*\.nimblebox\.ai\/", url)
+      if not out:
+        raise ValueError(f"Invalid URL: {url}")
+
+      # this is deployment on a Build instance, there's a catch though without knowing the
+      session = requests.Session()
+      session.headers.update({
+        "NBX-TOKEN": token,
+        "X-NBX-USERNAME": secret.get("username"),
+      })
+      serving_loc = "build"
+
+    openapi_url = f"{url}openapi.json" # url has as trailing slash
+    r = session.get(openapi_url)
+    try:
+      data = r.json()
+    except:
+      print(r.content)
+      raise
 
     REQ = type("REQ", (object,), {})
-
-    # get the OpenAPI spec for the serving
-    url = f"https://api.nimblebox.ai/{serving_id}/openapi.json"
-    r = session.get(url)
-    data = r.json()
 
     # create a function to input spec mapper and so the generic forward method can be 
     fn_spec = {}
@@ -397,16 +418,12 @@ class Operator():
         args = out["properties"]
         fn_spec[fn_name] = args
 
+    serving_stub = SpecSubway.from_openapi(data, _url = url, _session = session)
+
     # define the forward function for this serving operator, the objective is that this will be able to handle
     # args, kwargs just like how it works on the local machine
     def forward(method, *args, **kwargs):
       if method in fn_spec:
-        # this is a simple method call
-        if method == "forward":
-          url = f"https://api.nimblebox.ai/{serving_id}/forward"
-        elif method in fn_spec:
-          url = f"https://api.nimblebox.ai/{serving_id}/method_{method}"
-
         # check in the kwargs if we have any arguments to pass
         args_dict = {k: v.get("default", REQ) for k, v in fn_spec[method].items()}
         _data = {} # the json that will be sent over
@@ -431,39 +448,41 @@ class Operator():
             missing_args.add(k)
         if len(missing_args):
           raise ValueError(f"Missing required arguments: {missing_args}")
+
+        # this is a simple method call
+        if method == "forward":
+          fn = "forward"
+        elif method in fn_spec:
+          fn = f"method_{method}"
+
       else:
-        # let's see if we can do something about this information from the server
-        url = f"https://api.nimblebox.ai/{serving_id}/nbx_py_rpc"
-        _data = {
-          "rpc_name": method,
-          "key": U.py_to_bs64(args[0]),
-        }
+        _data = {"rpc_name": method, "key": U.py_to_bs64(args[0])}
         if len(args) > 1:
           _data["value"] = U.py_to_bs64(args[1])
+        fn = "nbx_py_rpc"
 
-      # make a POST call to /forward and return the json
-      # logger.debug(f"Hitting URL: {url}")
-      # logger.debug(f"Data: {_data}")
-      r = session.post(url, json = _data)
-      if r.status_code != 200:
-        raise Exception(r.text)
-      try:
-        data = r.json()
-      except:
-        logger.error(r.text)
-        return None
-
+      # now we can call the function
+      data = serving_stub.u(fn)(**_data)
+      
       # convert to usable values
       if not data["success"]:
         raise Exception(data["message"])
       value = U.py_from_bs64(data["value"])
       return value
-      
+
+    # call the stub and get details of the operator
+    try:
+      data = serving_stub.who_are_you()
+    except AttributeError as e:
+      logger.error(f"Error: {e}")
+      logger.error("Unable to connect to the serving, you are probably not connected to a nbox serving")
+      raise ValueError("Unable to connect to the serving, you are probably not connected to a nbox serving")
+
 
     # create the class and override some values to make more sense
     _op = cls()
     _op.propagate(_nbx_serving_fn_spec = fn_spec)
-    _op.__qualname__ = "serving_" + serving_id
+    _op.__qualname__ = "serving_" + data["name"]
     _op.forward = forward
     _op._op_type = OperatorType.SERVING
     return _op
@@ -484,6 +503,7 @@ class Operator():
         def cls_init(*args, **kwargs):
           op = cls()
           op = op._cls(fn, *args, **kwargs)
+          op._op_wrap_init = (args, kwargs)
           return op
         return cls_init
     return wrap
@@ -622,7 +642,7 @@ class Operator():
           ))
         )
 
-  def named_operators(self, memo = None, prefix: str = '', remove_duplicate: bool = True):
+  def _named_operators(self, memo = None, prefix: str = '', remove_duplicate: bool = True):
     r"""Returns an iterator over all modules in the network, yielding both the name of the module
     as well as the module itself."""
     if memo is None:
@@ -635,7 +655,7 @@ class Operator():
         if module is None:
           continue
         submodule_prefix = prefix + ('.' if prefix else '') + name
-        for m in module.named_operators(memo, submodule_prefix, remove_duplicate):
+        for m in module._named_operators(memo, submodule_prefix, remove_duplicate):
           yield m
 
   def __call__(self, *args, **kwargs):
@@ -766,6 +786,8 @@ class Operator():
 
     # create a temporary directory to store all the files
     nbx_folder = os.path.join(env.NBOX_HOME_DIR(), ".auto_dep", name)
+    if os.path.exists(nbx_folder):
+      Popen(f"rm -rf {nbx_folder}", shell=True).wait()
     new_folder(nbx_folder)
 
     # just create a resource.pb, if it's empty protobuf will work it out
@@ -778,6 +800,9 @@ class Operator():
 
     # in a way nbx_user.py and the three functions could simply be a router and the real functions can be
     # imported from the orginal file.
+    init = ''
+    if self._op_type in [OperatorType.UNSET, OperatorType.WRAP_CLS]:
+      init = '()'
     with open(os.path.join(nbx_folder, "nbx_user.py"), "w") as f:
       f.write(f'''# Autogenerated for .deploy() call
 from nbox.messages import read_file_to_binary
@@ -787,9 +812,7 @@ from {file.split('.')[0]} import {name}
 
 def get_op(*_, **__):
   # takes no input since programtically generated returns the exact object
-  out = {name}{
-    '()' if self._op_type in [OperatorType.UNSET, OperatorType.WRAP_CLS] else ''
-  }
+  out = {name}{init}
   return out
 
 get_resource = lambda: read_file_to_binary('{rsp}', message = Resource())
@@ -819,9 +842,7 @@ get_schedule = lambda: None
       data = stub()
       token = data["deployment"]["api_key"]
       return self.from_serving(
-        deployment_id_or_name = out.id,
-        token = token,
-        workspace_id = workspace_id,
+        f"https://api.nimblebox.ai/{out.id}/", token = token,
       )
 
   def map(self, inputs: Union[List[Any], Tuple[Any]]):

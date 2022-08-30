@@ -4,13 +4,55 @@ import inspect
 from typing import Any, Dict
 
 try:
+  import uvicorn
+  from fastapi import FastAPI
+  from fastapi.responses import JSONResponse
+  from fastapi.middleware.cors import CORSMiddleware
   from pydantic import create_model
 except ImportError:
   # if this is happening to you sir, why don't you come work with us?
+  FastAPI = None
   pass
 
+from nbox.version import __version__
 from nbox.operator import Operator, OperatorType
-from nbox.utils import py_from_bs64, py_to_bs64
+from nbox.utils import py_from_bs64, py_to_bs64, logger
+
+def serve_operator(op: Operator, host: str = "0.0.0.0", port: int = 8000, model_name: str = None):
+  if FastAPI is None:
+    logger.error("To run servers you will need to install the relevant dependencies:")
+    logger.error("  pip install -U nbox[serving]")
+    raise ImportError("fastapi not installed")
+
+  app = FastAPI()
+  app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+  )
+
+  # define ping endpoint
+  async def ping_fn():
+    return {"message": "pong"}
+  app.add_api_route("/", ping_fn, methods=["GET"], response_class=JSONResponse)
+
+  # define metadata endpoint
+  async def metadata():
+    return {"metadata": {"name": model_name}}
+  app.add_api_route("/metadata", metadata, methods=["GET"], response_class=JSONResponse)
+
+  # a special route for Operators to communicate with each other
+  async def who_are_you():
+    return {"name": op.__qualname__, "nbox_version": __version__}
+  app.add_api_route("/who_are_you", who_are_you, methods=["GET"], response_class=JSONResponse)
+
+  routes = get_fastapi_routes(op)
+  for route, fn in routes:
+    app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
+
+  uvicorn.run(app, host = host, port = port)
 
 def get_fastapi_routes(op: Operator):
   """To keep seperation of responsibility the paths are scoped out like all the functions are
@@ -101,10 +143,10 @@ class NbxPyRpc(Operator):
   2. __getitem__: obtain any value by doing: `obj[x]`
   3. __setitem__: set any value by doing: `obj[x] = y`
   4. __delitem__: delete any value by doing: `del obj[x]`
-  6. __iter__: iterate over any iterable by doing: `for x in obj`
-  7. __next__: get next value from an iterator by doing: `next(obj)`
-  8. __len__: get length of any object by doing: `len(obj)`
-  9. __contains__: check if an object contains a value by doing: `x in obj`
+  5. __iter__: iterate over any iterable by doing: `for x in obj`
+  6. __next__: get next value from an iterator by doing: `next(obj)`
+  7. __len__: get length of any object by doing: `len(obj)`
+  8. __contains__: check if an object contains a value by doing: `x in obj`
 
   The reason we have chosen these for starting is that they can be used to represent any
   data structure required and get/set information from it. We can add more later like
@@ -153,7 +195,7 @@ class NbxPyRpc(Operator):
     }
 
     fn, *args = fn[rpc_name]
-    
+
     try:
       out = fn(*args)
       return out

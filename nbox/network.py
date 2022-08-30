@@ -198,7 +198,6 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
 
   if not new_job:
     # incase an old job exists, we need to update few things with the new information
-    from nbox.jobs import Job
     logger.debug("Found existing job, checking for update masks")
     old_job_proto = Job(job_proto.id, job_proto.auth_info.workspace_id).job_proto
     paths = []
