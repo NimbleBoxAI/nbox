@@ -6,7 +6,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 ## 🧐 What is Nbox?
 
-`nbox` provides first class support API for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
+`nbox` provides first class API support for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
 
 # 🤷Why nimblebox
 
@@ -46,7 +46,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 # 🏁 Get Started
 
 
-**Install the package from pipy:**
+**Install the package from pypi:**
 
 ```pip install nbox```
 
@@ -54,7 +54,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 For convinience you should add nbox to your path by setting up an alias. Throughout the rest of the documentation we will be using nbx as the CLI:
 
 ```# go to your .bashrc or .zshrc and add
-alias nbx="python3 -m nbox"
+alias nbx="python3 -m nimblebox "
 ```
 
 
