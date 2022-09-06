@@ -48,16 +48,6 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 **Install the package from pypi:**
 
-```pip install nbox```
-
-
-For convinience you should add nbox to your path by setting up an alias. Throughout the rest of the documentation we will be using nbx as the CLI:
-
-```# go to your .bashrc or .zshrc and add
-alias nbx="python3 -m nimblebox "
-```
-
-
 
 When loading nbox for the first time, it will prompt you the username and password and create a secrets file at ```~/.nbx/secrets.json. ``` This file then contains all the information that you don’t have to fetch manually again.
 
