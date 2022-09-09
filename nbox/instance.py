@@ -38,7 +38,7 @@ from typing import Dict, List
 from requests.sessions import Session
 
 import nbox.utils as U
-from nbox.auth import secret
+from nbox.auth import secret, ConfigString
 from nbox.utils import logger
 from nbox.subway import TIMEOUT_CALLS, Sub30
 from nbox.init import nbox_ws_v1, create_webserver_subway
@@ -53,16 +53,17 @@ make the entire process functional.
 '''
 ################################################################################
 
-def print_status(workspace_id: str = None, fields: List[str] = None):
+def print_status(fields: List[str] = [], *, workspace_id: str = ""):
   """Print complete status of NBX-Build instances. If ``workspace_id`` is not provided
   personal workspace will be used. Used in CLI"""
   logger.info("Getting NBX-Build details")
-  if workspace_id == None:
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+  if not workspace_id:
     stub_projects = nbox_ws_v1.user.projects
   else:
     stub_projects = nbox_ws_v1.workspace.u(workspace_id).projects
 
-  fields = fields if fields != None else Instance.useful_keys
+  fields = fields or Instance.useful_keys
 
   data = stub_projects()
   projects = data["project_details"]
@@ -86,7 +87,7 @@ class Instance():
   # each instance has a lot of data against it, we need to store only a few as attributes
   useful_keys = ["project_id", "project_name", "size_used", "size", "state"]
 
-  def __init__(self, i: str, workspace_id: int = None):
+  def __init__(self, i: str, *, workspace_id: str = ""):
     """NBX-Build Instance class manages the both individual instance, but provides
     webserver functionality using ``nbox_ws_v1``, such as starting and stopping,
     deletion and more.
@@ -105,7 +106,7 @@ class Instance():
     # simply add useful keys to the instance
     self.project_id: str = None
     self.project_name: str = None
-    self.workspace_id: str = workspace_id
+    self.workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id.value)
     self.size_used: float = None
     self.size: float = None
     self.state: str = None
@@ -163,16 +164,18 @@ class Instance():
   def new(
     cls,
     project_name: str,
-    workspace_id: str = None,
     storage_limit: int = 25,
     project_type: str = "blank",
     github_branch: str = "",
     github_link: str = "",
     template_id: int = 0,
     clone_id: int = 0,
+    *,
+    workspace_id: str = "",
   ) -> 'Instance':
     """Create a new NBX-Build instance."""
-    if workspace_id == None:
+    workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    if not workspace_id:
       stub_all_projects = nbox_ws_v1.user.projects
     else:
       stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects

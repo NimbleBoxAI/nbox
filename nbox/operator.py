@@ -109,21 +109,19 @@ Documentation
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # modifications: research@nimblebox.ai 2022
 
-from functools import partial
-import json
 import os
 import re
 import inspect
-from time import sleep
 import requests
 from enum import Enum
-from typing import Any, Dict, Iterable, List, Tuple, Union
+from time import sleep
+from functools import partial
 from collections import OrderedDict
-from subprocess import Popen
+from typing import Any, Dict, List, Tuple, Union
 
 import nbox.utils as U
-from nbox.auth import secret
-from nbox.utils import logger, env
+from nbox.auth import ConfigString, secret
+from nbox.utils import logger
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
 from nbox.sub_utils.latency import log_latency
@@ -131,7 +129,7 @@ from nbox.framework.on_functions import get_nbx_flow
 from nbox.framework import AirflowMixin, PrefectMixin
 from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
-from nbox.network import deploy_job, deploy_serving, _get_deployment_data, _get_job_data
+from nbox.network import _get_job_data
 from nbox.jobs import Schedule, new as new_folder, Job, Serve
 from nbox.messages import get_current_timestamp, write_binary_to_file
 from nbox.relics import RelicsNBX
@@ -171,8 +169,11 @@ DEFAULT_RESOURCE = Resource(
   max_retries = 3,      # third times the charm :P
 )
 
-def generic_method(fn, base_url, session, *args, **kwargs):
-  r = session.post(f"{base_url}/forward/{fn}")
+# we will keep on expanding this list, note that this cannot be directly used with copytree,
+# to make it work remove the trailing slash
+FN_IGNORE = [
+  "__pycache__/", "venv/", ".git/", ".vscode/"
+]
 
 
 class Operator():
@@ -295,7 +296,7 @@ class Operator():
     # implement this when we have the client-server that allows us to get the metadata for the job
     if not workspace_id:
       raise DeprecationWarning("Personal workspace does not support serving")
-    job_id, job_name = _get_job_data(job_id_or_name, workspace_id)
+    job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
     if job_id is None:
       raise ValueError(f"No serving found with name {job_name}")
 
@@ -304,7 +305,7 @@ class Operator():
     def forward(*args, **kwargs):
       """This is the forward method for a NBX-Job. All the parameters will be passed through Relics."""
       logger.debug(f"Running job '{job_name}' ({job_id})")
-      job = Job(job_id, workspace_id)
+      job = Job(job_id, workspace_id = workspace_id)
       relic = RelicsNBX("dot_deploy_cache", workspace_id, create = True)
       
       # determining the put location is very tricky because there is no way to create a sync between the
@@ -362,27 +363,18 @@ class Operator():
     # now we can run a NBX-Let either on a Pod or on the Build instance, so we can check the URL
     # once and make a judgement based on that
 
-    serving_loc = None
-
-    out = re.match("https:\/\/api\.nimblebox\.ai\/(\w+)\/", url)
-    if out:
+    session = requests.Session()
+    if re.match("https:\/\/api\.nimblebox\.ai\/(\w+)\/", url):
       # this is deployment on a Pod
-      session = requests.Session()
       session.headers.update({"NBX-KEY": token})
-      serving_loc = "pod"
-    else:
-      # check if the regex with build matches
-      out = re.match("https:\/\/(\w+)-(\w+)\.build([\.rc]+)*\.nimblebox\.ai\/", url)
-      if not out:
-        raise ValueError(f"Invalid URL: {url}")
-
+    elif re.match("https:\/\/(\w+)-(\w+)\.build([\.rc]+)*\.nimblebox\.ai\/", url):
       # this is deployment on a Build instance, there's a catch though without knowing the
-      session = requests.Session()
       session.headers.update({
         "NBX-TOKEN": token,
         "X-NBX-USERNAME": secret.get("username"),
       })
-      serving_loc = "build"
+    else:
+      raise ValueError(f"Invalid URL: {url}")
 
     openapi_url = f"{url}openapi.json" # url has as trailing slash
     r = session.get(openapi_url)
@@ -564,6 +556,8 @@ class Operator():
       return self.forward("__getattr__", key)
     elif self._op_type == OperatorType.WRAP_CLS:
       return getattr(self._op_wrap, key)
+    elif self._op_type == OperatorType.UNSET and key == "__qualname__":
+      return self.__class__.__qualname__
     raise AttributeError(f"{key}")
 
   def __getitem__(self, key):
@@ -706,7 +700,7 @@ class Operator():
         name = name[5:]
       operator_name = "CodeBlock" # default
       cls_item = getattr(self, name, None)
-      if cls_item and cls_item.__class__.__base__ == Operator:
+      if cls_item is not None and cls_item.__class__.__base__ == Operator:
         # this node is an operator
         operator_name = cls_item.__class__.__name__
         child_dag: DAG = cls_item._get_dag() # call this function recursively
@@ -737,8 +731,10 @@ class Operator():
     id_or_name:str = None,
     deployment_type: str = None,
     resource: Resource = None,
+    ignore_patterns: List[str] = [],
     *,
-    _unittest = False
+    _unittest = False,
+    _include_pattern = [],
   ) -> 'Operator':
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint, returns the relevant
     ``.from_job()`` or ``.from_serving`` Operator. This uploads the entire folder where the caller file is located.
@@ -752,7 +748,7 @@ class Operator():
     """
     # go over reasonable checks for deployment
     if deployment_type == None:
-      if self._op_type == OperatorType.WRAP_CLS:
+      if self._op_type in [OperatorType.WRAP_CLS, OperatorType.SERVING]:
         deployment_type = "serving"
       else:
         deployment_type = "job"
@@ -767,7 +763,7 @@ class Operator():
     # get the filepath and name to import for convience
     if self._op_type == OperatorType.UNSET:
       fp = inspect.getfile(self.__class__)
-      name = self.__qualname__
+      name = self.__class__.__qualname__
     elif self._op_type in [OperatorType.JOB, OperatorType.SERVING]:
       raise ValueError("Cannot deploy an operator that is already deployed")
     elif self._op_type == OperatorType.WRAP_FN:
@@ -776,34 +772,25 @@ class Operator():
     elif self._op_type == OperatorType.WRAP_CLS:
       fp = self.__file__
       name = self.__qualname__[4:] # to account for "cls_"
-
-    logger.info(f"Deploying '{name}' from '{fp}'")
+    fp = os.path.abspath(fp) # get the abspath, will be super useful later
+    folder, file = os.path.split(fp)
     logger.info(f"Deployment Type: {deployment_type}")
+    logger.info(f"Deploying '{name}' from '{fp}'")
+    logger.info(f"Will upload folder: {folder}")
+
+    # create a temporary directory to store all the files
+    # copy over all the files and wait for it, else the changes below won't be reflected
+    # dude damn, how did I not know this: https://dev.to/ackshaey/macos-vs-linux-the-cp-command-will-trip-you-up-2p00
 
     # so basically till now all we know is that `from fp import name` and `name()`. This process can now
     # be used to create a custom `nbx_user.py` file from which `exe.py` can import the three functions
-    # and use them the conventional way.
-
-    # create a temporary directory to store all the files
-    nbx_folder = os.path.join(env.NBOX_HOME_DIR(), ".auto_dep", name)
-    if os.path.exists(nbx_folder):
-      Popen(f"rm -rf {nbx_folder}", shell=True).wait()
-    new_folder(nbx_folder)
-
-    # just create a resource.pb, if it's empty protobuf will work it out
-    rsp = os.path.join(nbx_folder, "resource.pb")
-    write_binary_to_file(resource or DEFAULT_RESOURCE, file = rsp)
-
-    # copy over all the files and wait for it, else the changes below won't be reflected
-    folder, file = os.path.split(fp)
-    Popen(f'cp -r {folder}/ {nbx_folder}/', shell = True).wait()
-
-    # in a way nbx_user.py and the three functions could simply be a router and the real functions can be
-    # imported from the orginal file.
+    # and use them the conventional way. the three functions could simply be a router and the real operator
+    # can be imported from the orginal file.
     init = ''
     if self._op_type in [OperatorType.UNSET, OperatorType.WRAP_CLS]:
       init = '()'
-    with open(os.path.join(nbx_folder, "nbx_user.py"), "w") as f:
+
+    with open(U.join(folder, "nbx_user.py"), "w") as f:
       f.write(f'''# Autogenerated for .deploy() call
 from nbox.messages import read_file_to_binary
 from nbox.hyperloop.job_pb2 import Resource
@@ -815,16 +802,38 @@ def get_op(*_, **__):
   out = {name}{init}
   return out
 
-get_resource = lambda: read_file_to_binary('{rsp}', message = Resource())
+get_resource = lambda: read_file_to_binary('.nbx_core/resource.pb', message = Resource())
 get_schedule = lambda: None
 ''')
+
+    # create a requirements.txt file if it doesn't exist with the latest nbox version
+    if not os.path.exists(U.join(folder, "requirements.txt")):
+      with open(U.join(folder, "requirements.txt"), "w") as f:
+        f.write(f'nbox[serving]=={__version__}\n')
+
+    # create a .nboxignore file if it doesn't exist, this will tell all the files not to be uploaded to the job pod
+    _igp = set(FN_IGNORE + ignore_patterns)
+    _igp -= set(_include_pattern)
+    if not os.path.exists(U.join(folder, ".nboxignore")):
+      with open(U.join(folder, ".nboxignore"), "w") as f:
+        f.write("\n".join(_igp))
+    else:
+      with open(U.join(folder, ".nboxignore"), "r") as f:
+        _igp = _igp.union(set(f.read().splitlines()))
+      with open(U.join(folder, ".nboxignore"), "w") as f:
+        f.write("\n".join(_igp))
+
+    # just create a resource.pb, if it's empty protobuf will work it out
+    nbx_folder = U.join(folder, ".nbx_core")
+    os.makedirs(nbx_folder, exist_ok = True)
+    write_binary_to_file(resource or DEFAULT_RESOURCE, file = U.join(nbx_folder, "resource.pb"))
 
     if _unittest:
       return
 
     if deployment_type == OperatorType.JOB.value:
       out = Job.upload(
-        init_folder = nbx_folder,
+        init_folder = folder,
         id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
         workspace_id = workspace_id,
       )
@@ -833,17 +842,30 @@ get_schedule = lambda: None
         workspace_id = workspace_id,
       )
     elif deployment_type == OperatorType.SERVING.value:
-      out = Serve.upload(
-        init_folder = nbx_folder,
-        id_or_name = id_or_name,
-        workspace_id = workspace_id,
-      )
+      out = Serve.upload(init_folder = folder, id_or_name = id_or_name, workspace_id = workspace_id)
+
+      # get the serving object
       stub = nbox_ws_v1.workspace.u(workspace_id).deployments.u(out.id)
       data = stub()
       token = data["deployment"]["api_key"]
-      return self.from_serving(
-        f"https://api.nimblebox.ai/{out.id}/", token = token,
-      )
+      api_url = data["deployment"]["api_url"]
+      model_url = api_url + out.model_id + "/"
+      logger.info("model_url: " + model_url)
+
+      # we will poll here till the model is not ready and return the latched operator
+      done = False
+      while not done:
+        sleep(1)
+        data = stub()
+        this_model = list(filter(lambda x: x["id"] == out.model_id, data["models"]))[0]
+        status = this_model["status"]
+        logger.debug(f"status of model: {status}")
+        if status == "deployment.failed":
+          raise Exception("Deployment failed")
+        done = status == "deployment.ready"
+
+      return self.from_serving(model_url, token = token)
+
 
   def map(self, inputs: Union[List[Any], Tuple[Any]]):
     pass

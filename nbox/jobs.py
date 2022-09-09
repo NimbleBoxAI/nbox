@@ -17,14 +17,14 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
-from nbox.auth import secret
+from nbox.auth import secret, ConfigString
 from nbox.utils import logger
 from nbox.version import __version__
 from nbox.messages import rpc, streaming_rpc
 from nbox.hyperloop.nbox_ws_pb2 import JobInfo
 from nbox.init import nbox_grpc_stub, nbox_ws_v1
 
-from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
+from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
 
 
@@ -111,7 +111,7 @@ nbox[serving]=={__version__} # do not change this
 
   logger.info(f"Created folder: {folder_name}")
 
-def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_id: str = None, **kwargs):
+def upload_job_folder(method: str, init_folder: str, id_or_name: str, *, workspace_id: str = ""):
   """Upload the code for a job to the NBX-Jobs if not present, it will create a new Job.
 
   Args:
@@ -119,6 +119,7 @@ def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_
     id_or_name (str): Job ID or name
     workspace_id (str, optional): Workspace ID, `None` for personal workspace. Defaults to None.
   """
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
   if init_folder not in sys.path:
     sys.path.append(init_folder)
   from nbx_user import get_op, get_resource, get_schedule
@@ -159,8 +160,9 @@ the highest levels of consistency with the NBX-Jobs API.
 """
 ################################################################################
 
-def _get_deployment_data(id_or_name, workspace_id):
+def _get_deployment_data(id_or_name, *, workspace_id: str = ""):
   # filter and get "id" and "name"
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
   stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
   all_deployments = stub_all_depl()
   models = list(filter(lambda x: x["deployment_id"] == id_or_name or x["deployment_name"] == id_or_name, all_deployments))
@@ -178,10 +180,11 @@ def _get_deployment_data(id_or_name, workspace_id):
   return serving_id, serving_name
 
 
-def print_serving_list(workspace_id: str = None, sort: str = "created_on"):
+def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
   stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
   all_deployments = stub_all_depl()
   sorted_depls = sorted(all_deployments, key = lambda x: x[sort], reverse = sort == "created_on")
@@ -202,22 +205,19 @@ def print_serving_list(workspace_id: str = None, sort: str = "created_on"):
   with open("requirements.txt", "w") as f:
     f.write(f"nbox=={__version__}")
 
-def serving_forward(id_or_name: str, token: str, workspace_id: str = None, **kwargs):
-  if workspace_id is None:
-    raise DeprecationWarning("Personal workspace does not support serving")
-  from nbox.operator import Operator
-  op = Operator.from_serving(id_or_name, token, workspace_id)
-  out = op(**kwargs)
-  logger.info(out)
-
+# def serving_forward(id_or_name: str, token: str, workspace_id: str = "", **kwargs):
+#   workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+#   from nbox.operator import Operator
+#   op = Operator.from_serving(id_or_name, token, workspace_id)
+#   out = op(**kwargs)
+#   logger.info(out)
 
 class Serve:
   new = staticmethod(new) # create a new folder, alias but `jobs new` should be used
   status = staticmethod(print_serving_list)
   upload = staticmethod(partial(upload_job_folder, "serving"))
-  forward = staticmethod(serving_forward)
 
-  def __init__(self, id, workspace_id = None) -> None:
+  def __init__(self, id, model_id: str = None, *, workspace_id: str = "") -> None:
     """Python wrapper for NBX-Serving gRPC API
 
     Args:
@@ -225,7 +225,8 @@ class Serve:
       workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
     self.id = id
-    self.workspace_id = workspace_id
+    self.model_id = model_id
+    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
     if workspace_id is None:
       raise DeprecationWarning("Personal workspace does not support serving")
     else:
@@ -238,7 +239,10 @@ class Serve:
   #   raise NotImplementedError("Not implemented yet")
 
   def __repr__(self) -> str:
-    x = f"nbox.Serve('{self.id}', '{self.workspace_id}')"
+    x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
+    if self.model_id is not None:
+      x += f", model_id = '{self.model_id}'"
+    x += ")"
     return x
 
    
@@ -252,8 +256,9 @@ around the NBX-Jobs gRPC API.
 """
 ################################################################################
 
-def _get_job_data(id_or_name, workspace_id):
+def _get_job_data(id_or_name, *, workspace_id: str = ""):
   # get stub
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
   if workspace_id == None:
     stub_all_jobs = nbox_ws_v1.user.jobs
   else:
@@ -277,8 +282,10 @@ def _get_job_data(id_or_name, workspace_id):
   return job_id, job_name
 
 
-def get_job_list(workspace_id: str = None, sort: str = "name"):
+def get_job_list(sort: str = "name", *, workspace_id: str = ""):
   """Get list of jobs, optionally in a workspace"""
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -320,14 +327,15 @@ class Job:
   status = staticmethod(get_job_list)
   upload = staticmethod(partial(upload_job_folder, "jobs"))
 
-  def __init__(self, id, workspace_id = None):
+  def __init__(self, id, *, workspace_id: str = ""):
     """Python wrapper for NBX-Jobs gRPC API
 
     Args:
         id (str): job ID
         workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
-    self.id, self.name = _get_job_data(id, workspace_id)
+    workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    self.id, self.name = _get_job_data(id, workspace_id = workspace_id)
     self.workspace_id = workspace_id
     self.job_proto = JobProto(id = self.id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
     self.job_info = JobInfo(job = self.job_proto)
@@ -392,7 +400,7 @@ class Job:
     """Refresh Job statistics"""
     logger.debug(f"Updating job '{self.job_proto.id}'")
     if self.id == None:
-      self.id, self.name = _get_job_data(self.id, self.workspace_id)
+      self.id, self.name = _get_job_data(self.id, workspace_id = self.workspace_id)
     if self.id == None:
       return
       
@@ -437,30 +445,32 @@ class Job:
     runs = self.run_stub(limit = limit, page = page)["runs_list"]
     return runs
 
-  def get_runs(self, old: bool = True, page = -1, sort = "s_no", limit = 10):
+  def get_runs(self, page = -1, sort = "s_no", limit = 10):
     runs = self._get_runs(page, limit)
-    self.runs.extend(runs)
-    sorted_runs = sorted(self.runs, key = lambda x: x[sort])
-    for run in sorted_runs:
-      yield run
-    if old:
-      return
-    y = input(f">> Print {limit} more runs? (y/n): ")
-    if y == "y":
-      yield from self.get_runs(page = page + 1, sort = sort, limit = limit)
+    sorted_runs = sorted(runs, key = lambda x: x[sort])
+    return sorted_runs
 
-  def display_runs(self, sort: str = "created_at", n: int = -1):
-    runs = self.get_runs(sort, sort == "created_at") # time should be reverse
-    if n == -1:
-      n = len(runs)
+  def display_runs(self, sort: str = "created_at", page: int = -1, limit = 10):
     headers = ["s_no", "created_at", "run_id", "status"]
-    data = []
-    for i, run in enumerate(runs):
-      if i >= n:
-        break
-      data.append((run["s_no"], run["created_at"], run["run_id"], run["status"]))
-    for l in tabulate.tabulate(data, headers).splitlines():
-      logger.info(l)
+
+    def _display_runs(runs):
+      data = []
+      for run in runs:
+        data.append((run["s_no"], run["created_at"], run["run_id"], run["status"]))
+      for l in tabulate.tabulate(data, headers).splitlines():
+        logger.info(l)
+
+    runs = self.get_runs(sort = sort, page = page, limit = limit) # time should be reverse
+    _display_runs(runs)
+    if page == -1:
+      page = 1
+    y = input(f">> Print {limit} more runs? (y/n): ")
+    done = y != "y"
+    while not done:
+      _display_runs(self.get_runs(page = page + 1, sort = sort, limit = limit))
+      page += 1
+      y = input(f">> Print {limit} more runs? (y/n): ")
+      done = y != "y"
 
   def last_n_runs(self, n: int = 10):
     out = self._get_runs()[:n]

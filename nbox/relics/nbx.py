@@ -22,6 +22,7 @@ from nbox.sublime.relics_rpc_client import (
   ListRelicsRequest
 )
 from nbox.relics.base import BaseStore
+from nbox.auth import ConfigString, secret
 
 def get_relic_file(fpath: str, username: str, workspace_id: str):
   # assert os.path.exists(fpath), f"File {fpath} does not exist"
@@ -57,8 +58,9 @@ def _get_stub():
   return stub
 
 
-def print_relics(workspace_id: str):
+def print_relics(workspace_id: str = ""):
   stub = _get_stub()
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
   req = ListRelicsRequest(workspace_id = workspace_id,)
   out = stub.list_relics(req)
   headers = ["relic_name",]
@@ -78,9 +80,9 @@ class RelicsNBX(BaseStore):
     _relic = self.stub.get_relic_details(RelicProto(workspace_id=workspace_id, name=relic_name,))
     if  not _relic and create:
       # this means that a new one will have to be created
-      logger.info(f"Creating new relic {relic_name}")
+      logger.debug(f"Creating new relic {relic_name}")
       self.relic = self.stub.create_relic(CreateRelicRequest(workspace_id=workspace_id, name = relic_name,))
-      logger.info(f"Created new relic {self.relic}")
+      logger.debug(f"Created new relic {self.relic}")
     else:
       self.relic = _relic
 
@@ -149,7 +151,7 @@ class RelicsNBX(BaseStore):
     """Put the file at this path into the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Putting file: {local_path}")
+    logger.debug(f"Putting file: {local_path}")
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     self._upload_relic_file(local_path, relic_file)
@@ -157,7 +159,7 @@ class RelicsNBX(BaseStore):
   def put_to(self, local_path: str, remote_path: str) -> None:
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Putting file: {local_path} to {remote_path}")
+    logger.debug(f"Putting file: {local_path} to {remote_path}")
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     relic_file.name = remote_path # override the name
@@ -167,7 +169,7 @@ class RelicsNBX(BaseStore):
     """Get the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Getting file: {local_path}")
+    logger.debug(f"Getting file: {local_path}")
     relic_file = RelicFile(name = local_path.strip("./"),)
     relic_file.relic_name = self.relic_name
     relic_file.workspace_id = self.workspace_id
@@ -176,7 +178,7 @@ class RelicsNBX(BaseStore):
   def get_from(self, local_path: str, remote_path: str) -> None:
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Getting file: {local_path} from {remote_path}")
+    logger.debug(f"Getting file: {local_path} from {remote_path}")
     relic_file = RelicFile(name = remote_path.strip("./"),)
     relic_file.relic_name = self.relic_name
     relic_file.workspace_id = self.workspace_id
@@ -186,7 +188,7 @@ class RelicsNBX(BaseStore):
     """Delete the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Getting file: {local_path}")
+    logger.debug(f"Getting file: {local_path}")
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     out = self.stub.delete_relic_file(relic_file)
@@ -252,7 +254,7 @@ class RelicsNBX(BaseStore):
     """List all the files in the relic at path"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Listing files in relic {self.relic_name}")
+    logger.debug(f"Listing files in relic {self.relic_name}")
     out = self.stub.list_relic_files(RelicFile(
       workspace_id = self.workspace_id,
       relic_name = self.relic_name,

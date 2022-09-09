@@ -9,11 +9,7 @@ os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 import fire
 from functools import lru_cache, partial
 
-try:
-  from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
-except ImportError:
-  # adding it here to stop linters from going crazy
-  get_op_user = None
+from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
 
 from nbox import Operator, logger
 import nbox.utils as U
@@ -27,7 +23,7 @@ def get_op(cloud = False, serving: bool = False) -> Operator:
   except Exception as e:
     U.log_traceback()
     logger.error(f"Failed to load operator: {e}")
-    U._exit_program()
+    U._exit_program(1)
 
   if cloud:
     try:
@@ -35,7 +31,7 @@ def get_op(cloud = False, serving: bool = False) -> Operator:
     except Exception as e:
       U.log_traceback()
       logger.error(f"Failed to remote initialise operator: {e}")
-      U._exit_program()
+      U._exit_program(1)
   return op
 
 if __name__ == "__main__":

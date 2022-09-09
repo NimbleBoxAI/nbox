@@ -4,208 +4,24 @@ it will create a ``.nbx`` in the user's home directory (``~/.nbx``, in case of l
 a file called ``secrets.json``. This folder will also contain more information and files that
 are used elsewhere as well ex. files generated when takling to any instance.
 
-We have also provided simple built in methods to connect to your cloud provider service as a part
-of BYOC (bring your own cloud), they are still work on progress, of you are interested in them,
-please raise an issue on Github.
+Users can chose to set configs at a global level for convenience. Here's a list of configs that can be set:
 
+global.workspace_id = '' # this will set the default workspace id for all commands, users can override this by
+  passing the ``--workspace-id`` flag
 """
 import os
 import json
 import requests
 import webbrowser
 from getpass import getpass
+from enum import Enum
 
 import nbox.utils as U
-from nbox.utils import join, isthere, logger
-
-# ------ AWS Auth ------ #
-
-class AWSClient:
-  """AWS Authentication class
-  
-  EXPERIMENTAL: This is not yet ready for use.
-  """
-  @isthere("boto3", "botocore", soft = False)
-  def __init__(self, aws_access_key_id: str, aws_secret_access_key: str, region_name: str):
-    """Template for creating your own AWS authentication class.
-
-    EXPERIMENTAL: This is not yet ready for use.
-
-    Args:
-        aws_access_key_id (str): AWS access key ID
-        aws_secret_access_key (str): AWS secret access key
-        region_name (str): AWS region name
-    """
-    self.aws_access_key_id = aws_access_key_id
-    self.aws_secret_access_key = aws_secret_access_key
-    self.region_name = region_name
-
-  def get_client(self, service_name: str = "s3", **boto_config_kwargs):
-    """Get the client object for the given service
-
-    Args:
-        service_name (str): _description_. Defaults to "s3".
-    """
-    import boto3
-    from botocore.client import Config as BotoConfig
-
-    return boto3.client(
-      service_name,
-      aws_access_key_id=self.aws_access_key_id,
-      aws_secret_access_key=self.aws_secret_access_key,
-      region_name=self.region_name,
-      config = BotoConfig(
-        signature_version="s3v4",
-        **boto_config_kwargs
-      )
-    )
-
-# ------ GCP Auth ------ #
-
-class GCPClient:
-  """GCP Authentication class
-  
-  EXPERIMENTAL: This is not yet ready for use.
-  """
-  @isthere("google-cloud-sdk", "google-cloud-storage", soft = False)
-  def __init__(self, project_id: str, credentials_file):
-    """Template for creating your own authentication class.
-
-    EXPERIMENTAL: This is not yet ready for use.
-
-    Args:
-        project_id (str): GCP project ID
-        credentials_file: GCP credentials python object, must support .read() method
-    """
-
-    from google.oauth2 import service_account
-    
-    self.project_id = project_id
-    self.credentials_file = credentials_file
-    self.creds = service_account.Credentials.from_service_account_file(
-      self.credentials_file,
-      scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
-
-  def get_client(self, service_name: str = "storage", **gcp_config_kwargs):
-    """Get the client object for the given service
-
-    Args:
-        service_name (str): GCP service name
-    """
-    if service_name == "storage":
-      from google.cloud import storage
-      return storage.Client(
-        project=self.project_id,
-        credentials=self.creds,
-        **gcp_config_kwargs
-      )
-    
-
-# ------ Azure Auth ------ #
-
-class AzureClient:
-  """Azure Authentication class
-  
-  EXPERIMENTAL: This is not yet ready for use.
-  """
-  @isthere("azure-storage-blob", soft = False)
-  def __init__(self):
-    """
-    Microsoft Azure
-
-    EXPERIMENTAL: This is not yet ready for use.
-    """
-    from azure.storage.blob import BlobServiceClient
-    from azure.identity import DefaultAzureCredential
-
-    self.blob_service_client = BlobServiceClient(
-      credential=DefaultAzureCredential(),
-      endpoint="https://nbox.blob.core.windows.net"
-    )
-
-  def get_client(self, service_name = "blob", **azure_config_kwargs):
-    if service_name == "blob":
-      from azure.storage.blob import BlobClient
-
-      return BlobClient(
-        self.blob_service_client,
-        **azure_config_kwargs
-      )
-
-# ------ OCI Auth ------ #
-
-class OCIClient:
-  """Oracle Cloud Infrastructure Authentication class
-  
-  EXPERIMENTAL: This is not yet ready for use.
-  """
-  @isthere("oci", "oci-py", soft = False)
-  def __init__(self, config_file):
-    """
-    Oracle Cloud Infrastructure
-
-    EXPERIMENTAL: This is not yet ready for use.
-    """
-    from oci.config import from_file
-    from oci.signer import Signer
-
-    self.config = from_file(config_file)
-    self.signer = Signer(
-      tenancy=self.config["tenancy"],
-      user=self.config["user"],
-      fingerprint=self.config["fingerprint"],
-      private_key_file_location=self.config["key_file"]
-    )
-
-  def get_client(self, service_name = "object_storage", **oci_config_kwargs):
-
-    if service_name == "object_storage":
-      from oci.object_storage.models import CreateBucketDetails
-      from oci.object_storage.models import CreateMultipartUploadDetails
-      from oci.object_storage.models import Object
-      from oci.object_storage.models import UploadPartDetails
-      from oci.object_storage.object_storage_client import ObjectStorageClient
-
-      return ObjectStorageClient(
-        self.config["user"],
-        self.signer,
-        **oci_config_kwargs
-      )
+from nbox.utils import join, logger
 
 
-# ------ Digital Ocean Auth ------ #
-
-class DOClient:
-  """Digital Ocean Authentication class
-  
-  EXPERIMENTAL: This is not yet ready for use.
-  """
-  @isthere("doctl", soft = False)
-  def __init__(self, config_file):
-    """
-    Digital Ocean
-
-    EXPERIMENTAL: This is not yet ready for use.
-    """
-    from doctl.doctl_client import DictCursor
-    from doctl.doctl_client import DoctlClient
-
-    self.doctl_client = DoctlClient(
-      config_file=config_file,
-      cursor_class=DictCursor
-    )
-  
-  def get_client(self, service_name = "object_storage", **oci_config_kwargs):
-    if service_name == "object_storage":
-      from doctl.object_storage.object_storage_client import ObjectStorageClient
-
-      return ObjectStorageClient(
-        self.doctl_client,
-        **oci_config_kwargs
-      )
-
-# ------ NBX Auth ------ #
+class ConfigString(Enum):
+  workspace_id = "config.global.workspace_id"
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -237,12 +53,20 @@ class NBXClient:
         logger.error(f"This should not have happened, please contact NimbleBox support.")
         raise e
 
+      workspace_id = input("Set the default workspace ID (blank means personal): ").strip()
+      if not workspace_id:
+        workspace_id = "personal"
+      logger.info(f"Setting the default workspace ID to: {workspace_id}")
+
       # create the objects
       self.secrets = {
         "email": email,
         "access_token": access_token,
         "nbx_url": nbx_url,
-        "username": username
+        "username": username,
+
+        # config values that can be set by the user for convenience
+        ConfigString.workspace_id.value: workspace_id
       }
       with open(self.fp, "w") as f:
         f.write(repr(self))

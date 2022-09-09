@@ -23,7 +23,7 @@ copyright = "2021-22, nimblebox.ai"
 author = "research@nimblebox.ai"
 
 # The full version, including alpha/beta/rc tags
-release = "0.9.39"
+release = "0.9.41c9"
 
 
 # -- General configuration ---------------------------------------------------

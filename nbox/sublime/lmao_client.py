@@ -110,11 +110,11 @@ class LMAO_Stub:
     _Run = b64_to_message(echo_resp.base64_string, _Run)
     return _Run
 
-  def get_run_log(self, _Run: Run) -> RunLog:
+  def get_run_log(self, _RunLogRequest: RunLogRequest) -> RunLog:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/get_run_log",
-      Echo(message = "Run", base64_string=message_to_b64(_Run), rpc_name = "get_run_log")
+      Echo(message = "RunLogRequest", base64_string=message_to_b64(_RunLogRequest), rpc_name = "get_run_log")
     )
     if echo_resp is None:
       return None

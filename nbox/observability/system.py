@@ -41,15 +41,15 @@ class SystemMetricsLogger:
         self._bar.wait()
         time.sleep(s)
     self.rl = threading.Thread(target=_rate_limiter, daemon=True)
-    self.rl.start()
-
-    # create a thread to create metrics
     self.metrics_logger = threading.Thread(target=self._create_metrics_dict, daemon=True)
-    self.metrics_logger.start()
 
     # So this function returns the latest cpu usage thast it has gathered from the previous call
     # and so we need to do an init fire to avoid getting 0.0
     psutil.cpu_percent(percpu=True)
+
+  def start(self):    
+    self.rl.start()
+    self.metrics_logger.start()
 
   def _create_metrics_dict(self):
     while True:
@@ -73,11 +73,14 @@ class SystemMetricsLogger:
       self.dk.log(x, log_type=RunLog.LogType.SYSTEM)
     return False
 
-  def __del__(self):
+  def stop(self):
     self._bar.wait()
     self._bar.wait()
     self.rl.join()
     self.metrics_logger.join()
+
+  def __del__(self):
+    self.stop()
 
 
 if __name__ == "__main__":

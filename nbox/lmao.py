@@ -175,19 +175,20 @@ class Lmao():
     logger.info(f"    id: {run_details.run_id}")
     logger.info(f"  link: https://app.nimblebox.ai/workspace/{self.workspace_id}/monitoring/{self.project_id}/{run_details.run_id}")
 
-    # system metrics monitoring, by default is enabled optionally turn it off
-    if not U.env.NBOX_LMAO_DISABLE_SYSTEM_METRICS():
-      SystemMetricsLogger(self)
-
     # now initialize the relic
     if not U.env.NBOX_LMAO_DISABLE_RELICS():
       # The relic will be the project id
-      self.relic = RelicsNBX(self.project_id, self.workspace_id, create = True)
+      self.relic = RelicsNBX("experiments", self.workspace_id, create = True)
       logger.info(f"Will store everything in folder: {self.experiment_prefix}")
+
+    # system metrics monitoring, by default is enabled optionally turn it off
+    if not U.env.NBOX_LMAO_DISABLE_SYSTEM_METRICS():
+      self.system_monitoring = SystemMetricsLogger(self)
+      self.system_monitoring.start()
 
   @property
   def experiment_prefix(self):
-    prefix = f"{self.run.run_id}"
+    prefix = f"{self.project_id}/{self.run.run_id}"
     if self._nbx_job_id is not None:
       prefix += f"_{self._nbx_job_id}@{self._nbx_run_id}"
     prefix += "/"
@@ -277,6 +278,7 @@ class Lmao():
         logger.error("  " + l)
       raise Exception("Server Error")
     self.completed = True
+    self.system_monitoring.stop()
 
 """
 Utility functions below.

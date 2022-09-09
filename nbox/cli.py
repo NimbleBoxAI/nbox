@@ -36,16 +36,21 @@ from json import dumps
 import nbox.utils as U
 from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
-import nbox.utils as U
-from nbox.jobs import Job, Serve
-from nbox.init import nbox_ws_v1
-from nbox.auth import init_secret
+from nbox.auth import init_secret, ConfigString
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import RelicsNBX
 from nbox.version import __version__ as V
 
 logger = U.get_logger()
+
+def global_config(workspace_id: str = ""):
+  """Set global config for ``nbox``"""
+  secret = init_secret()
+  if workspace_id:
+    secret.put(ConfigString.workspace_id.value, workspace_id, True)
+    logger.info(f"Global Workspace ID set to {workspace_id}")
+
 
 def open_home():
   """Open current NBX platform"""
@@ -94,6 +99,7 @@ def why():
 def main():
   fire.Fire({
     "build"   : Instance,
+    "config"  : global_config,
     "get"     : get,
     "jobs"    : Job,
     "login"   : login,

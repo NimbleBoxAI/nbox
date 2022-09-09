@@ -24,7 +24,7 @@ from nbox.version import __version__
 from nbox.hyperloop.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub
 from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
-from nbox.messages import rpc, write_string_to_file, get_current_timestamp
+from nbox.messages import rpc, write_binary_to_file, write_string_to_file, get_current_timestamp
 from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo, Serve, Job
 from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 
@@ -108,10 +108,10 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_
   _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
   logger.info(f" [python] - {_api}")
   logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
-  logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'w' -d " + "'{}'")
+  logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   logger.info(f"   [page] - {_webpage}")
 
-  return Serve(serving_id, workspace_id)
+  return Serve(id = serving_id, model_id = model_id, workspace_id = workspace_id)
 
 
 #######################################################################################################################
@@ -149,7 +149,7 @@ def deploy_job(
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
 
-  job_id, job_name = _get_job_data(job_id_or_name, workspace_id)
+  job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
   logger.info(f"Job name: {job_name}")
   logger.info(f"Job ID: {job_id}")
 
@@ -170,13 +170,13 @@ def deploy_job(
     ),
     schedule = schedule.get_message() if schedule is not None else None,
     dag = dag,
-    resource = Resource(
+    resource = resource or Resource(
       cpu = "100m",         # 100mCPU
       memory = "200Mi",     # MiB
       disk_size = "1Gi",    # GiB
-    ) if resource == None else resource,
+    )
   )
-  write_string_to_file(job_proto, U.join(init_folder, "job_proto.pbtxt"))
+  write_binary_to_file(job_proto, U.join(init_folder, "job_proto.msg"))
 
   if _unittest:
     return job_proto
@@ -199,7 +199,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   if not new_job:
     # incase an old job exists, we need to update few things with the new information
     logger.debug("Found existing job, checking for update masks")
-    old_job_proto = Job(job_proto.id, job_proto.auth_info.workspace_id).job_proto
+    old_job_proto = Job(job_proto.id, workspace_id = job_proto.auth_info.workspace_id).job_proto
     paths = []
     if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
       paths.append("resource")
@@ -235,6 +235,9 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
 
   # if this is the first time this is being created
   if new_job:
+    job_proto.feature_gates.update({
+      "EnablePipCaching": "", # some string does not honour value
+    })
     rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job")
 
   # write out all the commands for this job
@@ -249,7 +252,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
-  return Job(job_proto.id, job_proto.auth_info.workspace_id)
+  return Job(job_proto.id, workspace_id = job_proto.auth_info.workspace_id)
 
 
 #######################################################################################################################
@@ -289,7 +292,6 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
       if re.search(ignore, f):
         to_remove_folder.append(f)
   to_remove += to_remove_folder
-
   all_f = [x for x in all_f if x not in to_remove]
   logger.info(f"Will zip {len(all_f)} files")
 
@@ -303,24 +305,23 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
       logger.debug(f"Zipping {f} => {arcname}")
       zip_file.write(f, arcname = arcname)
 
-    if not "exe.py" in zip_file.namelist():
-      logger.debug("exe.py already in zip")
-
+    # create the exe.py file
+    exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
+    exe_path = U.join(gettempdir(), "exe.py")
+    logger.debug(f"Writing exe to: {exe_path}")
+    with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
       # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
       _ct = datetime.now(timezone.utc)
       _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
       created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
 
-      # create the exe.py file
-      exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
-      exe_path = U.join(gettempdir(), "exe.py")
-      logger.debug(f"Writing exe to: {exe_path}")
-      with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
-        f2.write(jinja2.Template(f.read()).render({
-          "created_time": created_time,
-          "nbox_version": __version__,
-          **jinja_kwargs
-        }))
-      zip_file.write(exe_path, arcname = "exe.py")
-
+      # fill up the jinja template
+      code = jinja2.Template(f.read()).render({
+        "created_time": created_time,
+        "nbox_version": __version__,
+        **jinja_kwargs
+      })
+      f2.write(code)
+    # print(os.stat(exe_path))
+    zip_file.write(exe_path, arcname = "exe.py")
   return zip_path

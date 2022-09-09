@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nbox"
-version = "0.9.39"
+version = "0.9.41c9"
 description = "ML Inference 🥶"
 authors = [
   "NBX Research <research@nimblebox.ai>",
@@ -39,10 +39,7 @@ pytest = "^5.2"
 serving = ["fastapi", "uvicorn"]
 
 [tool.poetry.scripts]
-# yes nimblebox will be all these things
-nbox = "nbox.cli:main"
 nbx = "nbox.cli:main"
-nimblebox = "nbox.cli:main"
 
 [build-system]
 requires = [

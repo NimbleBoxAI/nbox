@@ -200,19 +200,19 @@ class NBXLet(Operator):
     Name mimics the kubelet, dockerlet, raylet, etc"""
     super().__init__()
     self.op = op
-    self.tracer = Tracer()
 
   def run(self):
     """Run this as a batch process"""
     from nbox.auth import secret
-    secret.put("username", self.tracer.job_proto.auth_info.username)
+    tracer = Tracer()
+    secret.put("username", tracer.job_proto.auth_info.username)
 
-    self.op.propagate(_tracer = self.tracer)
+    self.op.propagate(_tracer = tracer)
     if hasattr(self.op._tracer, "job_proto"):
       self.op.thaw(self.op._tracer.job_proto)
 
-    workspace_id = self.tracer.job_proto.auth_info.workspace_id
-    job_id = self.tracer.job_id
+    workspace_id = tracer.job_proto.auth_info.workspace_id
+    job_id = tracer.job_id
     status = Job.Status.ERROR
 
     try:
@@ -231,11 +231,11 @@ class NBXLet(Operator):
       U.log_traceback()
     finally:
       logger.info(f"Job {job_id} completed with status {status}")
-      if hasattr(self.tracer, "job_proto"):
+      if hasattr(tracer, "job_proto"):
         self.op._tracer.job_proto.status = status
         rpc(
           nbox_grpc_stub.UpdateRun, UpdateRunRequest(
-            token = self.tracer.run_id, job=self.tracer.job_proto, updated_at=get_current_timestamp()
+            token = tracer.run_id, job = tracer.job_proto, updated_at = get_current_timestamp()
           ), "Failed to end job!"
         )
       U._exit_program()
@@ -248,4 +248,3 @@ class NBXLet(Operator):
       U.log_traceback()
       logger.error(f"Failed to serve operator: {e}")
       U._exit_program()
-
