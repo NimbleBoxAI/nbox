@@ -76,8 +76,8 @@ class env:
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
   NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
-  NBOX_LMAO_DISABLE_RELICS = lambda: os.getenv("NBOX_LMAO_DISABLE_RELICS", False)
-  NBOX_LMAO_DISABLE_SYSTEM_METRICS = lambda: os.getenv("NBOX_LMAO_DISABLE_SYSTEM_METRICS", False)
+
+# logger /
 
 logger = None
 
@@ -110,6 +110,13 @@ def get_logger():
 
 logger = get_logger() # package wide logger
 
+def log_traceback():
+  # f = io.StringIO("")
+  # traceback.print_exception(*sys.exc_info(), file = f)
+  f = traceback.format_exc()
+  for _l in f.splitlines():
+    logger.error(_l.rstrip())
+
 
 @contextmanager
 def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
@@ -122,17 +129,6 @@ def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
     logger.warning(f"  replace: {replace_by}")
   if help:
     logger.warning(f"  help: {help}")
-
-
-def load_module_from_path(fn_name, file_path):
-  spec = spec_from_file_location(fn_name, file_path)
-  foo = module_from_spec(spec)
-  mod_name = get_random_name()
-  sys.modules[mod_name] = foo
-  spec.loader.exec_module(foo)
-  fn = getattr(foo, fn_name)
-  return fn
-
 
 class FileLogger:
   """Flush logs to a file, useful when we don't want to mess with current logging"""
@@ -150,13 +146,18 @@ class FileLogger:
     self.f.write(f"[{datetime.now(timezone.utc).isoformat()}] {level}: {message}\n")
     self.f.flush()
 
-
-# def log_and_exit(msg, *args, **kwargs):
-#   # convinience function to avoid tracebacks
-#   logger.error(msg, *args, **kwargs)
-#   sys.exit(1)
+# / logger
 
 # lazy_loading/
+
+def load_module_from_path(fn_name, file_path):
+  spec = spec_from_file_location(fn_name, file_path)
+  foo = module_from_spec(spec)
+  mod_name = get_random_name()
+  sys.modules[mod_name] = foo
+  spec.loader.exec_module(foo)
+  fn = getattr(foo, fn_name)
+  return fn
 
 def isthere(*packages, soft = True):
   """Checks all the packages
@@ -272,14 +273,6 @@ def hash_(item, fn="md5"):
   """Hash sting of any item"""
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
-
-def log_traceback():
-  # f = io.StringIO("")
-  # traceback.print_exception(*sys.exc_info(), file = f)
-  f = traceback.format_exc()
-  for _l in f.splitlines():
-    logger.error(_l.rstrip())
-
 # /misc
 
 # datastore/
@@ -311,35 +304,6 @@ class DBase:
 
 # /datastore
 
-# model/
-
-@isthere("PIL", soft = False)
-def get_image(file_path_or_url):
-  from PIL import Image
-  if os.path.exists(file_path_or_url):
-    return Image.open(file_path_or_url)
-  else:
-    return Image.open(io.BytesIO(fetch(file_path_or_url)))
-
-def convert_to_list(x):
-  # recursively convert tensors -> list
-  import torch
-  import numpy as np
-
-  x = x.outputs.detach()
-
-  if isinstance(x, list):
-    return x
-  if isinstance(x, dict):
-    return {k: convert_to_list(v) for k, v in x.items()}
-  elif isinstance(x, (torch.Tensor, np.ndarray)):
-    x = np.nan_to_num(x, -1.42069)
-    return x.tolist()
-  else:
-    raise Exception("Unknown type: {}".format(type(x)))
-
-# /model
-
 
 ################################################################################
 # Parallel
@@ -357,120 +321,21 @@ def convert_to_list(x):
 
 # pool/
 
-class PoolBranch:
-  def __init__(self, mode = "thread", max_workers = 2, _name: str = None):
-    """Threading is hard, your brain is not wired to handle parallelism. You are a blocking
-    python program. So a blocking function for you. There are some conditions:
-
-
-    Usage:
-
-    .. code-block:: python
-
-      # define some functions
-
-      def add_zero(x):  return x + 0
-      def add_one(x):   return x + 1
-      def add_ten(x):   return x + 10
-      def add_fifty(x): return x + 50
-
-      all_fn = [add_zero, add_one, add_ten, add_fifty]
-
-      # define some arguments
-      args = [(1,), (2,), (3,), (4,),]
-
-      # branching is applying different functions on different inputs
-      branch = PoolBranch("thread")
-      out = branch(all_fn, *args)
-
-      # pooling is applying same functions on different inputs
-      pool = PoolBranch("thread")
-      out = pool(add_zero, *args)
-
-    When using ``mode = "process"`` write your code in a function and ensure that the
-    function is called from ``__main__ == "__name__"``. From the documentation of ``concurrent.futures``:
-
-      The __main__ module must be importable by worker subprocesses. This means that
-      ``ProcessPoolExecutor`` will not work in the interactive interpreter.
-
-    - `StackOverflow <https://stackoverflow.com/questions/27932987/multiprocessing-package-in-interactive-python>`_
-    - `Another <https://stackoverflow.com/questions/24466804/multiprocessing-breaks-in-interactive-mode>`_
-
-    .. code-block:: python
-
-      def multiprocess():
-        print("MultiProcessing")
-
-        branch = PoolBranch("process")
-        out = branch(all_fn, *args)
-
-        pool = PoolBranch("process")
-        out = pool(add_zero, *args)
-
-      if __name__ == "__main__":
-        multiprocess()
-
-    Args:
-      mode (str, optional): There can be multiple pooling strategies across cores, threads,
-        k8s, nbx-instances etc.
-      max_workers (int, optional): Numbers of workers to use
-    """
-    self.mode = mode
-    self.item_id = -1 # because +1 later
-    self.futures = {}
-    self._name = _name or get_random_name(True)
-
-    if mode == "thread":
-      self.executor = ThreadPoolExecutor(
-        max_workers=max_workers,
-        thread_name_prefix=self._name
-      )
-    elif mode == "process":
-      self.executor = ProcessPoolExecutor(
-        max_workers=max_workers,
-      )
-    else:
-      raise Exception(f"Only 'thread/process' modes are supported")
-
-    logger.debug(f"Starting {mode.upper()}-PoolBranch ({self._name}) with {max_workers} workers")
-
-  def __call__(self, fn, *args):
-    """Run any function ``fn`` in parallel, where each argument is a list of arguments to
-    pass to ``fn``. Result is returned in the **same order as the input**.
-
-      ..code-block
-
-        if fn is callable:
-          thread(fn, a) for a in args -> list of results
-        elif fn is list and fn[0] is callable:
-          thread(_fn, a) for _fn, a in (fn args) -> list of results
-    """
-    assert isinstance(args[0], (tuple, list))
-
-    futures = {}
-    if isinstance(fn, (list, tuple)) and callable(fn[0]):
-      assert len(fn) == len(args), f"Number of functions ({len(fn)}) and arguments ({len(args)}) must be same in branching"
-    else:
-      assert callable(fn), "fn must be callable in pooling"
-      fn = [fn for _ in range(len(args))] # convinience
-
-    self.item_id += len(futures)
-    results = {}
-
-    if self.mode in ("thread", "process"):
-      for i, (_fn, x) in enumerate(zip(fn, args)):
-        futures[self.executor.submit(_fn, *x)] = i # insertion index
+def threaded_map(fn, inputs, wait: bool = True, max_threads = 20, _name: str = None) -> None:
+    _name = _name or get_random_name(True)
+    results = [None for _ in range(len(inputs))]
+    with ThreadPoolExecutor(max_workers = max_threads, thread_name_prefix = _name) as exe:
+      _fn = lambda i, x: [i, fn(x)]
+      futures = {exe.submit(_fn, i, x): i for i, x in enumerate(inputs)}
+      if not wait:
+        return futures
       for future in as_completed(futures):
         try:
-          result = future.result()
-          results[futures[future]] = result # update that index
+          i, res = future.result()
+          results[i] = res
         except Exception as e:
-          logger.error(f"{self.mode} error: {e}")
           raise e
-
-      res = [results[x] for x in range(len(results))]
-
-    return res
+    return results
 
 # /pool
 

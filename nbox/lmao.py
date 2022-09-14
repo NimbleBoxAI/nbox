@@ -7,7 +7,7 @@ import re
 from git import Repo
 from json import dumps
 from requests import Session
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Tuple
 from datetime import datetime, timezone
 
 import nbox.utils as U
@@ -29,14 +29,18 @@ class Lmao():
   def __init__(
     self,
     workspace_id: str,
-    metadata: Dict[str, Any],
     project_name: Optional[str] = "",
+    metadata: Dict[str, Any] = {},
     project_id: Optional[str] = "",
+    save_to_relic: bool = False,
+    enable_system_monitoring: bool = False,
   ) -> None:
     """``Lmao`` is the client library for using NimbleBox Monitoring. It talks to your monitoring instance running on your build
     and stores the information in the ``project_name`` or ``project_id``. This object inherently doesn't care what you are actually
     logging and rather concerns itself with ensuring storage."""
     self.workspace_id = workspace_id
+    self.save_to_relic = save_to_relic
+    self.enable_system_monitoring = enable_system_monitoring
 
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
     self._total_logged_elements = 0 # this variable keeps track for logging
@@ -44,12 +48,17 @@ class Lmao():
     self.tracer = None
     self.username = secret.get("username")
     self.relic: RelicsNBX = None
+    self.system_monitoring: SystemMetricsLogger = None
     self._nbx_run_id = None
     self._nbx_job_id = None
 
     # create connection and initialise the run
     self._create_connection(workspace_id)
-    self._init(project_name=project_name, project_id=project_id, config=metadata)
+    self._init(project_name, project_id, config = metadata)
+
+  def __del__(self):
+    if self.system_monitoring is not None:
+      self.system_monitoring.stop()
 
   def _create_connection(self, workspace_id: str):
     # prepare the URL
@@ -57,7 +66,7 @@ class Lmao():
     id_or_name = f"monitoring-{workspace_id}"
     logger.info(f"id_or_name: {id_or_name}")
     logger.info(f"workspace_id: {workspace_id}")
-    instance = Instance(id_or_name, workspace_id)
+    instance = Instance(id_or_name, workspace_id = workspace_id)
     try:
       open_data = instance.open_data
     except AttributeError:
@@ -119,7 +128,7 @@ class Lmao():
         project_id = common[0].project_id
     return project_id, project_name
 
-  def _init(self, project_name: Optional[str] = "", config: Dict[str, Any] = {}, project_id: Optional[str] = ""):
+  def _init(self, project_name, project_id, config: Dict[str, Any] = {}):
     # do a quick lookup and see if the project exists, if not, create it
     if project_id:
       project_id, project_name = self._get_name_id(project_id=project_id)
@@ -128,7 +137,7 @@ class Lmao():
     else:
       project_id, project_name = self._get_name_id(project_name=project_name)
       if not project_id:
-        logger.info(f"Project '{project_name}' not found, will create a new one.")
+        logger.info(f"Project '{project_name}' not found, create one from dashboard.")
 
     # this is the config value that is used to store data on the plaform, user cannot be allowed to have
     # like a full access to config values
@@ -176,13 +185,13 @@ class Lmao():
     logger.info(f"  link: https://app.nimblebox.ai/workspace/{self.workspace_id}/monitoring/{self.project_id}/{run_details.run_id}")
 
     # now initialize the relic
-    if not U.env.NBOX_LMAO_DISABLE_RELICS():
+    if self.save_to_relic:
       # The relic will be the project id
       self.relic = RelicsNBX("experiments", self.workspace_id, create = True)
       logger.info(f"Will store everything in folder: {self.experiment_prefix}")
 
     # system metrics monitoring, by default is enabled optionally turn it off
-    if not U.env.NBOX_LMAO_DISABLE_SYSTEM_METRICS():
+    if self.enable_system_monitoring:
       self.system_monitoring = SystemMetricsLogger(self)
       self.system_monitoring.start()
 
@@ -228,8 +237,8 @@ class Lmao():
 
   def save_file(self, *files: List[str]):
     """
-    Register a file save and upload it by talking to the NimbleBox Relics Backend. User should be aware of some structures
-    that we follow for standardizing the data. All the experiments are going to be tracked under the following pattern:
+    Register a file save. User should be aware of some structures that we follow for standardizing the data.
+    All the experiments are going to be tracked under the following pattern:
 
     #. ``relic_name`` is going to be the experiment ID, so any changes to the name will not affect relic storage
     #. ``{experiment_id}(_{job_id}@{run_id})`` is the name of the folder which contains all the artifacts in the experiment.
@@ -251,7 +260,7 @@ class Lmao():
         raise Exception(f"File or Folder not found: {folder_or_file}")
 
     logger.debug(f"Storing {len(all_files)} files")
-    if self.relic is not None:
+    if self.save_to_relic:
       logger.info(f"Uploading files to relic: {self.relic}")
       for f in all_files:
         print(f, f"{self.experiment_prefix}{f.strip('/')}")
@@ -278,7 +287,8 @@ class Lmao():
         logger.error("  " + l)
       raise Exception("Server Error")
     self.completed = True
-    self.system_monitoring.stop()
+    if self.enable_system_monitoring:
+      self.system_monitoring.stop()
 
 """
 Utility functions below.

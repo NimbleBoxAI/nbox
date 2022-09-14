@@ -70,6 +70,8 @@ class NBXClient:
       }
       with open(self.fp, "w") as f:
         f.write(repr(self))
+      os.makedirs(U.join(U.env.NBOX_HOME_DIR(), ".cache"), exist_ok=True)
+      os.makedirs(U.join(U.env.NBOX_HOME_DIR(), "relics"), exist_ok=True)
       logger.info("Successfully created secrets!")
     else:
       with open(self.fp, "r") as f:

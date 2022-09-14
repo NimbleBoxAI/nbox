@@ -13,6 +13,7 @@ from typing import Union
 
 import nbox.utils as U
 from nbox import RelicsNBX
+from nbox.auth import secret
 from nbox.relics.local import RelicLocal
 from nbox import Operator, logger
 from nbox.operator import Resource
@@ -203,7 +204,6 @@ class NBXLet(Operator):
 
   def run(self):
     """Run this as a batch process"""
-    from nbox.auth import secret
     tracer = Tracer()
     secret.put("username", tracer.job_proto.auth_info.username)
 
@@ -218,14 +218,22 @@ class NBXLet(Operator):
     try:
       # now for some jobs there might be a relic Object so we can check if that exists, it will always
       # be present in the dot_deploy_cache folder and will be in the {job_id} folder
-      relic = RelicsNBX("dot_deploy_cache", workspace_id, create = True)
+      relic = RelicsNBX("cache", workspace_id, create = True)
+
+      # check if there is a specific relic for this job
+      run_tag = os.getenv("NBOX_RUN_METADATA", None)
       _in = f"{job_id}/args_kwargs"
+      if run_tag:
+        _in += f"_{run_tag}"
       if relic.has(_in):
         (args, kwargs) = relic.get_object(_in)
       else:
         args, kwargs = (), {}
       out = self.op(*args, **kwargs)
-      relic.put_object(f"{job_id}/return", out)
+      _out = f"{job_id}/return"
+      if run_tag:
+        _out += f"_{run_tag}"
+      relic.put_object(_out, out)
       status = Job.Status.COMPLETED
     except Exception as e:
       U.log_traceback()

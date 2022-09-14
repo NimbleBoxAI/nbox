@@ -113,15 +113,19 @@ import os
 import re
 import inspect
 import requests
+import tabulate
+from tqdm import tqdm
 from enum import Enum
-from time import sleep
 from functools import partial
+from time import sleep, monotonic
 from collections import OrderedDict
-from typing import Any, Dict, List, Tuple, Union
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
 
 import nbox.utils as U
 from nbox.auth import ConfigString, secret
 from nbox.utils import logger
+from nbox.nbxlib import operator_spec as ospec
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
 from nbox.sub_utils.latency import log_latency
@@ -137,26 +141,6 @@ from nbox.init import nbox_ws_v1
 from nbox.subway import SpecSubway
 
 
-class OperatorType(Enum):
-  """This Enum does not concern the user, however I am describing it so people can get a feel of the breadth
-  of what nbox can do. The purpose of ``Operator`` is to build an abstract representation of any possible compute
-  and execute them in any fashion needed to improve the overall performance of any distributed software system.
-  Here are the different types of operators:
-
-  #. ``UNSET``: this is the default mode and is like using vanilla python without any nbox features.
-  #. ``JOB``: In this case the process is run as a batch process and the I/O of values is done using Relics
-  #. ``SERVING``: In this case the process is run as an API proces
-  #. ``WRAP_FN``: When we wrap a function as an ``Operator``, by default deployed as a job
-  #. ``WRAP_CLS``: When we wrap a class as an ``Operator``, by default deployed as a serving
-  """
-  UNSET = "unset" # default
-  JOB = "job"
-  SERVING = "serving"
-  WRAP_FN = "fn_wrap"
-  WRAP_CLS = "cls_wrap"
-
-  def _valid_deployment_types():
-    return (OperatorType.JOB.value, OperatorType.SERVING.value)
 
 
 DEFAULT_RESOURCE = Resource(
@@ -176,12 +160,22 @@ FN_IGNORE = [
 ]
 
 
+
 class Operator():
   node = Node()
   source_edges: List[Node] = None
-  _op_type = OperatorType.UNSET
-  _op_wrap = None
-  _op_wrap_init = None
+  _tracer: Tracer = None
+  
+  # there are some thing that are used to hide the complexity of the entire operation
+  # from the user
+  _op_type = ospec.OperatorType.UNSET
+  _op_spec: Union[
+    ospec._UnsetSpec,
+    ospec._JobSpec,
+    ospec._ServingSpec,
+    ospec._WrapClsSpec,
+    ospec._WrapFnSpec,
+  ] = ospec._UnsetSpec()
 
   # this is a map from operator to resource, by deafult the values will be None,
   # unless explicitly modified by `chief.machine.Machine`
@@ -222,8 +216,6 @@ class Operator():
       job.deploy() # WIP # WIP
     """
     self._operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
-    self._op_trace = []
-    self._tracer: Tracer = None
 
   def __remote_init__(self):
     """User can overwrite this function, this will be called only when running on remote.
@@ -276,14 +268,14 @@ class Operator():
 
   # mixin/
 
-  to_airflow_operator = AirflowMixin.to_airflow_operator
-  to_airflow_dag = AirflowMixin.to_airflow_dag
-  from_airflow_operator = classmethod(AirflowMixin.from_airflow_operator)
-  from_airflow_dag = classmethod(AirflowMixin.from_airflow_dag)
-  to_prefect_task = PrefectMixin.to_prefect_task
-  to_prefect_flow = PrefectMixin.to_prefect_flow
-  from_prefect_task = classmethod(PrefectMixin.from_prefect_task)
-  from_prefect_flow = classmethod(PrefectMixin.from_prefect_flow)
+  # to_airflow_operator = AirflowMixin.to_airflow_operator
+  # to_airflow_dag = AirflowMixin.to_airflow_dag
+  # from_airflow_operator = classmethod(AirflowMixin.from_airflow_operator)
+  # from_airflow_dag = classmethod(AirflowMixin.from_airflow_dag)
+  # to_prefect_task = PrefectMixin.to_prefect_task
+  # to_prefect_flow = PrefectMixin.to_prefect_flow
+  # from_prefect_task = classmethod(PrefectMixin.from_prefect_task)
+  # from_prefect_flow = classmethod(PrefectMixin.from_prefect_flow)
 
   # Operators are very versatile and can be created in many different ways, heres a list of those:
   # 1. from an existing job, where calling it triggers a new run and args are passed through relics
@@ -299,25 +291,32 @@ class Operator():
     job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
     if job_id is None:
       raise ValueError(f"No serving found with name {job_name}")
-
+    job = Job(job_id, workspace_id = workspace_id)
     logger.debug(f"Latching to job '{job_name}' ({job_id})")
     
-    def forward(*args, **kwargs):
+    def forward(*args, _wait: bool = True, **kwargs):
       """This is the forward method for a NBX-Job. All the parameters will be passed through Relics."""
       logger.debug(f"Running job '{job_name}' ({job_id})")
-      job = Job(job_id, workspace_id = workspace_id)
-      relic = RelicsNBX("dot_deploy_cache", workspace_id, create = True)
-      
+      relic = RelicsNBX("cache", workspace_id, create = True)
+
       # determining the put location is very tricky because there is no way to create a sync between the
       # key put here and what the run will pull. This can lead to many weird race conditions. So for now
       # I am going to rely on the fact that we cannot have two parallel active runs. Thus at any given
       # moment there can be only one file at /{job_id}/args_kwargs.pkl
-      relic.put_object(f"{job_id}/args_kwargs", (args, kwargs))
+      tag = U.get_random_name(True).split("-")[0]
+      relic.put_object(f"{job_id}/args_kwargs_{tag}", (args, kwargs))
 
       # and then we will trigger the job and wait for the run to complete
-      job.trigger()
+      job.trigger(tag = tag)
       latest_run = job.last_n_runs(1)
-      logger.debug(f"New run ID: {latest_run['id']}")
+
+      if not _wait:
+        # even though we are returning the run_id, this cannot be trusted when making parallel call because of
+        # the race condition on top run, which is the case when .map() method is called on the operator. 
+        # return tag, latest_run["id"]
+        return tag, latest_run["id"]
+
+      # if required wait else just return the 
       max_retries = latest_run['resource']['max_retries']
 
       max_polls = 600  # about 10 mins
@@ -333,20 +332,26 @@ class Operator():
           raise RuntimeError(f"Run {latest_run['id']} failed after {max_retries} retries")
         latest_run = job.last_n_runs(1)
         poll_count += 1
-        sleep(1)
+        sleep(4)
 
       if latest_run["status"] == "ERROR":
         raise Exception(f"Run failed after {max_retries} retries")
 
       # assuming everything went well we should have a file at /{job_id}/return
-      obj = relic.get_object(f"{job_id}/return")
+      obj = relic.get_object(f"{job_id}/return_{tag}")
       return obj
     
     # create the class and override some values to make more sense
     _op = cls()
     _op.__qualname__ = "job_" + job_id
     _op.forward = forward
-    _op._op_type = OperatorType.JOB
+    _op._op_type = ospec.OperatorType.JOB
+    _op._op_spec = ospec._JobSpec(
+      job_id = job_id,
+      rpc_fn_name = job_id,
+      job = job,
+      workspace_id = workspace_id,
+    )
 
     return _op
 
@@ -367,12 +372,14 @@ class Operator():
     if re.match("https:\/\/api\.nimblebox\.ai\/(\w+)\/", url):
       # this is deployment on a Pod
       session.headers.update({"NBX-KEY": token})
+      serving_id = url.split("/")[-1]
     elif re.match("https:\/\/(\w+)-(\w+)\.build([\.rc]+)*\.nimblebox\.ai\/", url):
       # this is deployment on a Build instance, there's a catch though without knowing the
       session.headers.update({
         "NBX-TOKEN": token,
         "X-NBX-USERNAME": secret.get("username"),
       })
+      serving_id = url
     else:
       raise ValueError(f"Invalid URL: {url}")
 
@@ -381,7 +388,7 @@ class Operator():
     try:
       data = r.json()
     except:
-      print(r.content)
+      logger.error(r.content)
       raise
 
     REQ = type("REQ", (object,), {})
@@ -447,6 +454,10 @@ class Operator():
         elif method in fn_spec:
           fn = f"method_{method}"
 
+        # serialize everything to b64
+        for k, v in _data.items():
+          _data[k] = U.py_to_bs64(v)
+
       else:
         _data = {"rpc_name": method, "key": U.py_to_bs64(args[0])}
         if len(args) > 1:
@@ -470,13 +481,17 @@ class Operator():
       logger.error("Unable to connect to the serving, you are probably not connected to a nbox serving")
       raise ValueError("Unable to connect to the serving, you are probably not connected to a nbox serving")
 
-
     # create the class and override some values to make more sense
     _op = cls()
-    _op.propagate(_nbx_serving_fn_spec = fn_spec)
     _op.__qualname__ = "serving_" + data["name"]
     _op.forward = forward
-    _op._op_type = OperatorType.SERVING
+    _op._op_type = ospec.OperatorType.SERVING
+    _op._op_spec = ospec._ServingSpec(
+      serving_id = serving_id,
+      rpc_fn_name = data["name"],
+      fn_spec = fn_spec,
+      workspace_id = "unknown--",
+    )
     return _op
 
   @classmethod
@@ -495,7 +510,6 @@ class Operator():
         def cls_init(*args, **kwargs):
           op = cls()
           op = op._cls(fn, *args, **kwargs)
-          op._op_wrap_init = (args, kwargs)
           return op
         return cls_init
     return wrap
@@ -507,8 +521,12 @@ class Operator():
     self.__file__ = inspect.getfile(fn)
     self.__doc__ = obj.__doc__
     self.__qualname__ = "cls_" + obj.__class__.__qualname__
-    self._op_type = OperatorType.WRAP_CLS
-    self._op_wrap = obj
+    self._op_type = ospec.OperatorType.WRAP_CLS
+    self._op_spec = ospec._WrapClsSpec(
+      cls_name = obj.__class__.__qualname__,
+      wrap_obj = obj,
+      init_ak = (args, kwargs)
+    )
     return self
 
   def _fn(self, fn):
@@ -518,8 +536,8 @@ class Operator():
     self.__file__ = inspect.getfile(fn)
     self.__doc__ = fn.__doc__
     self.__qualname__ = "fn_" + fn.__name__
-    self._op_type = OperatorType.WRAP_FN
-    self._op_wrap = fn
+    self._op_type = ospec.OperatorType.WRAP_FN
+    self._op_spec = ospec._WrapFnSpec(fn_name = fn.__name__, wrap_obj = fn)
     return self
 
   # /mixin
@@ -550,63 +568,63 @@ class Operator():
     self.__dict__[key] = value
 
   def __getattr__(self, key):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       if key in self._nbx_serving_fn_spec:
         return partial(self.forward, key)
       return self.forward("__getattr__", key)
-    elif self._op_type == OperatorType.WRAP_CLS:
+    elif self._op_type == ospec.OperatorType.WRAP_CLS:
       return getattr(self._op_wrap, key)
-    elif self._op_type == OperatorType.UNSET and key == "__qualname__":
+    elif self._op_type == ospec.OperatorType.UNSET and key == "__qualname__":
       return self.__class__.__qualname__
     raise AttributeError(f"{key}")
 
   def __getitem__(self, key):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__getitem__", key)
-    if self._op_type in [OperatorType.WRAP_FN, OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.WRAP_FN, ospec.OperatorType.WRAP_CLS]:
       return self._op_wrap[key]
     raise KeyError(f"{key}")
 
   def __setitem__(self, key, value):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__setitem__", key, value)
-    if self._op_type in [OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.WRAP_CLS]:
       self._op_wrap[key] = value
       return
     raise KeyError(f"{key}")
 
   def __delitem__(self, key):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__delitem__", key)
-    if self._op_type in [OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.WRAP_CLS]:
       del self._op_wrap[key]; return
     raise KeyError(f"{key}")
 
   def __iter__(self):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__iter__")
-    if self._op_type in [OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.WRAP_CLS]:
       return iter(self._op_wrap)
     raise ValueError(f"Operator cannot iterate")
 
   def __next__(self):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__next__")
-    if self._op_type in [OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.WRAP_CLS]:
       return next(self._op_wrap)
     raise ValueError(f"Operator cannot iterate")
 
   def __len__(self):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__len__")
-    if self._op_type in [OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.WRAP_CLS]:
       return len(self._op_wrap)
     raise ValueError(f"Operator cannot iterate")
 
   def __contains__(self, key):
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__contains__", key)
-    if self._op_type in [OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.WRAP_CLS]:
       return key in self._op_wrap
     raise ValueError(f"Operator cannot iterate")
 
@@ -654,15 +672,15 @@ class Operator():
 
   def __call__(self, *args, **kwargs):
     # check if calling is allowed based on the type
-    if self._op_type == OperatorType.SERVING:
+    if self._op_type == ospec.OperatorType.SERVING:
       # the fn_spec is set during the .from_serving() classmethod
-      if len(self._nbx_serving_fn_spec) == 1 and "forward" in self._nbx_serving_fn_spec:
-        # this means that an OperatorType.UNSET or OperatorType.WRAP_FN are on the other side of the pipe
-        return self.forward("forward", *args, **kwargs)
+      if len(self._op_spec.fn_spec) == 1 and "forward" in self._op_spec.fn_spec:
+        # this means that an ospec.OperatorType.UNSET or ospec.OperatorType.WRAP_FN are on the other side of the pipe
+        out = self.forward("forward", *args, **kwargs)
       else:
-        # this means that OperatorType.WRAP_CLS is on the other side of the pipe
+        # this means that ospec.OperatorType.WRAP_CLS is on the other side of the pipe
         raise ValueError(f"Cannot call servings directly, will interfere with nbox")
-    elif self._op_type == OperatorType.WRAP_CLS:
+    elif self._op_type == ospec.OperatorType.WRAP_CLS:
       raise ValueError(f"Cannot call class wrappers directly, will interfere with nbox")
 
     input_dict = {}
@@ -683,6 +701,9 @@ class Operator():
     self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
     if self._tracer != None:
       self._tracer(self.node)
+
+    # if user has enabled _tracking, then we will store the input, output values as well
+    
     return out
 
   def forward(self):
@@ -748,28 +769,28 @@ class Operator():
     """
     # go over reasonable checks for deployment
     if deployment_type == None:
-      if self._op_type in [OperatorType.WRAP_CLS, OperatorType.SERVING]:
+      if self._op_type in [ospec.OperatorType.WRAP_CLS, ospec.OperatorType.SERVING]:
         deployment_type = "serving"
       else:
         deployment_type = "job"
-    if self._op_type == OperatorType.WRAP_CLS and deployment_type != "serving":
+    if self._op_type == ospec.OperatorType.WRAP_CLS and deployment_type != "serving":
       raise ValueError(f"Cannot deploy a class as a job, only as a serving")
-    if deployment_type not in OperatorType._valid_deployment_types():
-      raise ValueError(f"Invalid deployment type: {deployment_type}. Must be one of {OperatorType._valid_deployment_types()}")
-    if deployment_type == OperatorType.SERVING.value:
+    if deployment_type not in ospec.OperatorType._valid_deployment_types():
+      raise ValueError(f"Invalid deployment type: {deployment_type}. Must be one of {ospec.OperatorType._valid_deployment_types()}")
+    if deployment_type == ospec.OperatorType.SERVING.value:
       if id_or_name is None:
         raise ValueError("id_or_name must be provided for serving deployment")
 
     # get the filepath and name to import for convience
-    if self._op_type == OperatorType.UNSET:
+    if self._op_type == ospec.OperatorType.UNSET:
       fp = inspect.getfile(self.__class__)
       name = self.__class__.__qualname__
-    elif self._op_type in [OperatorType.JOB, OperatorType.SERVING]:
+    elif self._op_type in [ospec.OperatorType.JOB, ospec.OperatorType.SERVING]:
       raise ValueError("Cannot deploy an operator that is already deployed")
-    elif self._op_type == OperatorType.WRAP_FN:
+    elif self._op_type == ospec.OperatorType.WRAP_FN:
       fp = self.__file__
       name = self.__qualname__[3:] # to account for "fn_"
-    elif self._op_type == OperatorType.WRAP_CLS:
+    elif self._op_type == ospec.OperatorType.WRAP_CLS:
       fp = self.__file__
       name = self.__qualname__[4:] # to account for "cls_"
     fp = os.path.abspath(fp) # get the abspath, will be super useful later
@@ -787,7 +808,7 @@ class Operator():
     # and use them the conventional way. the three functions could simply be a router and the real operator
     # can be imported from the orginal file.
     init = ''
-    if self._op_type in [OperatorType.UNSET, OperatorType.WRAP_CLS]:
+    if self._op_type in [ospec.OperatorType.UNSET, ospec.OperatorType.WRAP_CLS]:
       init = '()'
 
     with open(U.join(folder, "nbx_user.py"), "w") as f:
@@ -831,7 +852,7 @@ get_schedule = lambda: None
     if _unittest:
       return
 
-    if deployment_type == OperatorType.JOB.value:
+    if deployment_type == ospec.OperatorType.JOB.value:
       out = Job.upload(
         init_folder = folder,
         id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
@@ -841,16 +862,11 @@ get_schedule = lambda: None
         job_id_or_name = out.id,
         workspace_id = workspace_id,
       )
-    elif deployment_type == OperatorType.SERVING.value:
+    elif deployment_type == ospec.OperatorType.SERVING.value:
       out = Serve.upload(init_folder = folder, id_or_name = id_or_name, workspace_id = workspace_id)
 
       # get the serving object
       stub = nbox_ws_v1.workspace.u(workspace_id).deployments.u(out.id)
-      data = stub()
-      token = data["deployment"]["api_key"]
-      api_url = data["deployment"]["api_url"]
-      model_url = api_url + out.model_id + "/"
-      logger.info("model_url: " + model_url)
 
       # we will poll here till the model is not ready and return the latched operator
       done = False
@@ -864,11 +880,133 @@ get_schedule = lambda: None
           raise Exception("Deployment failed")
         done = status == "deployment.ready"
 
+      token = data["deployment"]["api_key"]
+      api_url = data["deployment"]["api_url"]
+      model_url = api_url + out.model_id + "/"
+      logger.info("model_url: " + model_url)
       return self.from_serving(model_url, token = token)
 
+  def map(self, inputs: Union[List[Any], Tuple[Any]], timeout: int = 600) -> Iterable[Any]:
+    """Take the same logic and apply it to a list of inputs, different from star_map in that it
+    takes in different logic and applied different inputs."""
+    # this another big ass function that manages this call for all the different types of ospec.OperatorTypes
+    # if len(inputs) > 10:
+    #   raise RuntimeError(f"Too many maps: {len(inputs)}, current limit is 10")
 
-  def map(self, inputs: Union[List[Any], Tuple[Any]]):
-    pass
+    _inputs = []
+    if isinstance(inputs[0], (list, tuple)):
+      _inputs = inputs
+    else:
+      _inputs = [[x] for x in inputs]
+    inputs = _inputs
+
+    if self._op_type in [ospec.OperatorType.UNSET, ospec.OperatorType.WRAP_FN, ospec.OperatorType.WRAP_CLS]:
+      raise NotImplementedError("Local Multiprocessing is yet to be implemented")
+    elif self._op_type == ospec.OperatorType.SERVING:
+      raise NotImplementedError("What does a map call really mean for an API endpoint, like parallel calls?")
+    elif self._op_type == ospec.OperatorType.JOB:
+      # now this is simple enough, we need to implement a waiting queue that's it
+
+      _start_time = monotonic()
+
+      run_ids = []
+      run_tags = []
+      run_tag_to_input_idx = {}
+
+      # # though the threadpool is a faster method, cannot trust the run_id because of the race condition on top run
+      # with ThreadPoolExecutor(20) as exe:
+      #   trigger = lambda i, x: [i, self(*x, _wait = False)]
+      #   results = {exe.submit(trigger, i, x) for i,x in enumerate(inputs)}
+      #   for future in as_completed(results):
+      #     try:
+      #       i, (tag, run_id) = future.result()
+      #       logger.debug(f"(tag, run_id) = ('{tag}', '{run_id}')")
+      #       run_ids.append(run_id)
+      #       run_tags.append(tag)
+      #       run_tag_to_input_idx[tag] = i
+      #     except Exception as e:
+      #       raise Exception(e)
+
+      for i, x in enumerate(inputs):
+        tag, run_id = self(*x, _wait = False)
+        logger.debug(f"(tag, run_id) = ('{tag}', '{run_id}')")
+        run_ids.append(run_id)
+        run_tags.append(tag)
+        run_tag_to_input_idx[tag] = i
+
+      # print("run_tags:", run_tags)
+      # print("run_ids:", run_ids)
+      # print("run_tag_to_input_idx:", run_tag_to_input_idx)
+      # print("inputs:", inputs, len(inputs))
+      
+      proc_hash = U.hash_(",".join(run_tags), "sha256")[:8]
+      logger.info(f"Waiting for {len(run_ids)} processes to finish, this may take a while...")
+      html_path = U.join(U.env.NBOX_HOME_DIR(), ".cache", f"{proc_hash}.html")
+
+      def _write_html_page(data, headers = ["created_at", "end_time", "input_id", "run_id", "status", "tag", "files"]):
+        with open(U.join(U.folder(__file__), "assets", "run_status.jinja"), "r") as src, open(html_path, "w") as dst:
+          import jinja2
+          template = jinja2.Template(src.read())
+          dst.write(template.render(data = data, headers = headers))
+
+      _write_html_page([[] for _ in range(len(inputs))])
+
+      run_status = {rid: None for rid in run_ids}
+      active_runs = {rid for rid, done in run_status.items() if not done}
+      pbar = tqdm(total = len(inputs), desc = f"Waiting for runs ({html_path})")
+      relic = RelicsNBX("cache", workspace_id = self._op_spec.workspace_id)
+
+      def _update_runs():
+        # get all runs, filter those in this invocation, update the status
+        files_ = {}
+        for t in run_tags:
+          files_[t] = (
+            relic.has(f"{self._op_spec.job_id}/return_{tag}"),
+          )
+        out = self._op_spec.job.last_n_runs(len(inputs))
+        # print(out)
+        if not isinstance(out, (list, tuple)):
+          out = [out]
+        proc_runs = list(filter(lambda x: x["id"] in run_ids, out))
+        data = [
+          [
+            x["created_at"],
+            x["end_time"],
+            run_tag_to_input_idx[t],
+            x["id"],
+            x["status"],
+            t,
+            sum(files_[t])
+          ] for x, t in zip(proc_runs, run_tags)
+        ]
+        data = sorted(data, key = lambda x: x[2])
+        _write_html_page(data)
+
+        _active_runs = {x["id"] for x in proc_runs if x["status"] not in ["COMPLETED", "ERROR"]}
+        pbar.update(len(active_runs) - len(_active_runs))
+
+        all_files_ready = sum([sum(files_[t]) for t in run_tags]) == len(run_tags)
+
+        return _active_runs, all_files_ready
+
+      while len(active_runs) > 0:
+        active_runs, all_files_ready = _update_runs()
+        if all_files_ready:
+          break
+        sleep(1)
+
+      pbar.close()
+
+      # load the results in memory in the exact order of the inputs
+      results = []
+      for tag, _idx in run_tag_to_input_idx.items():
+        obj = relic.get_object(f"{self._op_spec.job_id}/return_{tag}")
+        results.append(obj)
+
+      _end_time = monotonic()
+
+      logger.info(f"Finished waiting for {len(run_ids)} processes to finish in {_end_time - _start_time} seconds")
+      return results
 
   # /nbx
 

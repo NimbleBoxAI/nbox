@@ -1,6 +1,7 @@
 # https://github.com/apache/airflow/issues/7870
 
 import inspect
+import json
 from typing import Any, Dict
 
 try:
@@ -15,10 +16,37 @@ except ImportError:
   pass
 
 from nbox.version import __version__
-from nbox.operator import Operator, OperatorType
+from nbox.operator import Operator
+from nbox.nbxlib.operator_spec import OperatorType
 from nbox.utils import py_from_bs64, py_to_bs64, logger
 
-def serve_operator(op: Operator, host: str = "0.0.0.0", port: int = 8000, model_name: str = None):
+
+# class GenericMetric:
+#   def __init__(self, method, value):
+#     self.name = name
+#     self.value = value
+
+# class NetworkMetricsLMAO:
+#   """This is class is responsible for collecting metrics from the network layer. It is not the same as in case of
+#   prometheus because in our structure the pod is going to be informing the DB about the metrics and not the other way
+#   around. We are chosing this approach because it allows for more flexibility in the future."""
+#   def __init__(self):
+#     # lmao stub will need to be replaced with a real implementation
+#     self.lmao_stub = None
+
+#   def __call__(self, method, endpoint, value = 1):
+#     pass
+
+
+
+def serve_operator(
+  op: Operator,
+  host: str = "0.0.0.0",
+  port: int = 8000,
+  log_metrics: bool = False,
+  *,
+  model_name: str = ""
+):
   if FastAPI is None:
     logger.error("To run servers you will need to install the relevant dependencies:")
     logger.error("  pip install -U nbox[serving]")
@@ -48,9 +76,10 @@ def serve_operator(op: Operator, host: str = "0.0.0.0", port: int = 8000, model_
     return {"name": op.__qualname__, "nbox_version": __version__}
   app.add_api_route("/who_are_you", who_are_you, methods=["GET"], response_class=JSONResponse)
 
-  routes = get_fastapi_routes(op)
-  for route, fn in routes:
+  for route, fn in get_fastapi_routes(op):
     app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
+
+  # app.add_middleware()
 
   uvicorn.run(app, host = host, port = port)
 
@@ -60,22 +89,28 @@ def get_fastapi_routes(op: Operator):
   if op._op_type == OperatorType.WRAP_CLS:
     routes = []
     # add functions that the user has exposed
-    wrap_class = op._op_wrap
+    wrap_class = op._op_spec.wrap_obj
     for p in dir(wrap_class.__class__):
       if p.startswith("__"):
         continue
       fn = getattr(wrap_class, p)
       routes.append((f"/method_{p}", get_fastapi_fn(fn)))
+      routes.append((f"/method_{p}_rest", get_fastapi_fn(fn, _rest = True)))
 
     # add functions that the python itself can support
     routes.append((f"/nbx_py_rpc", nbx_py_rpc(op)))
+  elif op._op_type in [OperatorType.JOB, OperatorType.SERVING]:
+    raise RuntimeError("Cannot serve a job or serving operator")
   else:
-    routes = [("/forward", get_fastapi_fn(op.forward)),]
+    routes = [
+      ("/forward", get_fastapi_fn(op.forward)),
+      ("/forward_rest", get_fastapi_fn(op.forward, _rest = True)),
+    ]
   return routes
 
 
 # builder method is used to progrmatically generate api routes related information for the fastapi app
-def get_fastapi_fn(fn):
+def get_fastapi_fn(fn, _rest = False):
   from pydantic import create_model
   
   # we use inspect signature instead of writing our own ast thing
@@ -93,6 +128,8 @@ def get_fastapi_fn(fn):
   # if your function takes in inputs then it is expected to be sent as query params, so create a pydantic
   # model and FastAPI will take care of the rest
   name = f"{fn.__name__}_Request"
+  if _rest:
+    name = f"{fn.__name__}_Rest_Request"
   base_model = create_model(name, **data_dict)
 
   # pretty simple forward function, note that it gets operator using get_op which will be a cache hit
@@ -100,12 +137,27 @@ def get_fastapi_fn(fn):
     # need to add serialisation to this function because user won't by default send in a serialised object
     data = req.dict()
     try:
+      data = {k: py_from_bs64(v) for k, v in data.items()}
       out = fn(**data)
       return {"success": True, "value": py_to_bs64(out)}
     except Exception as e:
       return {"success": False, "message": str(e)}
 
-  return generic_fwd
+  # pretty simple forward function for REST endpoints
+  async def generic_fwd_rest(req: base_model):
+    # need to add serialisation to this function because user won't by default send in a serialised object
+    data = req.dict()
+    try:
+      out = fn(**data)
+      try:
+        _ = json.dumps(out)
+      except:
+        return {"success": False, "message": "Function output cannot be serialised to JSON"}
+      return {"success": True, "value": out}
+    except Exception as e:
+      return {"success": False, "message": str(e)}
+
+  return generic_fwd_rest if _rest else generic_fwd
 
 
 def nbx_py_rpc(op: Operator):

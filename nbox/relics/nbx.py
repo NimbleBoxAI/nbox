@@ -51,7 +51,12 @@ def get_relic_file(fpath: str, username: str, workspace_id: str):
 
 @lru_cache()
 def _get_stub():
-  url = "https://app.nimblebox.ai/relics"
+  # url = "https://app.nimblebox.ai/relics"
+  # if "app.c" in secret.get("nbx_url"):
+  #   url = "https://app.c.nimblebox.ai/relics"
+  # elif "app.rc" in secret.get("nbx_url"):
+  #   url = "https://app.rc.nimblebox.ai/relics"
+  url = secret.get("nbx_url") + "/relics"
   logger.debug("Connecting to RelicStore at: " + url)
   session = deepcopy(nbox_ws_v1._session)
   stub = RelicStore_Stub(url, session)
@@ -70,10 +75,10 @@ def print_relics(workspace_id: str = ""):
 
 
 class RelicsNBX(BaseStore):
-  list_relics = staticmethod(print_relics)
+  list = staticmethod(print_relics)
 
-  def __init__(self, relic_name: str, workspace_id: str, create: bool = False):
-    self.workspace_id = workspace_id
+  def __init__(self, relic_name: str, workspace_id: str = "", create: bool = False):
+    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
     self.relic_name = relic_name
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
     self.stub = _get_stub()

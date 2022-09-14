@@ -1,6 +1,9 @@
-"""This file contains the code for observability in the networking layer."""
+"""This file contains the code for observability in the networking layer. This is not the same as in case of prometheus
+because in our structure the pod is going to be informing the DB about the metrics and not the other way around. We are
+chosing this approach because it allows for more flexibility in the future."""
 
 from typing import Tuple
+from threading import Lock
 import time
 
 try:
@@ -18,8 +21,15 @@ except ImportError:
 class GenericMetric:
   # this is like the prometheus client's Counter, Gauge, Histogram, etc. but instead of client
   # worrying about the types, here we are saying that it's the servers headache to worry about
-  def __init__(self, name: str):
-    pass
+  def __init__(self, name: str, description: str = ""):
+    self.name = name
+    self.description = description
+    self._value = 0
+    self._mutex = Lock()
+
+  def inc(self, value: int = 1):
+    with self._mutex:
+      self._value += value
 
 
 class AsgiLmaoMiddleware(BaseHTTPMiddleware):
@@ -70,14 +80,14 @@ class AsgiLmaoMiddleware(BaseHTTPMiddleware):
 
 
 
-def metrics(request: Request) -> Response:
-  if "prometheus_multiproc_dir" in os.environ:
-    registry = CollectorRegistry()
-    MultiProcessCollector(registry)
-  else:
-    registry = REGISTRY
+# def metrics(request: Request) -> Response:
+#   if "prometheus_multiproc_dir" in os.environ:
+#     registry = CollectorRegistry()
+#     MultiProcessCollector(registry)
+#   else:
+#     registry = REGISTRY
 
-  return Response(generate_latest(registry), headers={"Content-Type": CONTENT_TYPE_LATEST})
+#   return Response(generate_latest(registry), headers={"Content-Type": CONTENT_TYPE_LATEST})
 
 
 

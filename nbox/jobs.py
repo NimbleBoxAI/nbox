@@ -230,7 +230,7 @@ class Serve:
     if workspace_id is None:
       raise DeprecationWarning("Personal workspace does not support serving")
     else:
-      serving_id, serving_name = _get_deployment_data(self.id, self.workspace_id)
+      serving_id, serving_name = _get_deployment_data(self.id, workspace_id = self.workspace_id)
     self.serving_id = serving_id
     self.serving_name = serving_name
     self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
@@ -413,10 +413,12 @@ class Job:
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
-  def trigger(self):
+  def trigger(self, tag: str = ""):
     """Manually triger this job"""
     logger.debug(f"Triggering job '{self.job_proto.id}'")
-    rpc(nbox_grpc_stub.TriggerJob, JobInfo(job=self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
+    if tag:
+      self.job_proto.feature_gates.update({"SetRunMetadata": tag})
+    rpc(nbox_grpc_stub.TriggerJob, JobInfo(job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
     logger.info(f"Triggered job '{self.job_proto.id}'")
     self.refresh()
 
@@ -473,10 +475,21 @@ class Job:
       done = y != "y"
 
   def last_n_runs(self, n: int = 10):
-    out = self._get_runs()[:n]
+    all_items = []
+    _page = 1
+    out = self._get_runs(_page, 20)
+    all_items.extend(out)
+
+    while len(all_items) < n:
+      _page += 1
+      out = self._get_runs(_page, 20)
+      if not len(out):
+        break
+      all_items.extend(out)
+
     if n == 1:
-      out = out[0]
-    return out
+      return all_items[0]
+    return all_items
 
 class Schedule:
   def __init__(

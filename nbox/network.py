@@ -57,7 +57,7 @@ def deploy_serving(
   if wait_for_deployment:
     logger.warning("Wait for deployment is coming in the following release!")
 
-  serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id)
+  serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id = workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
   model_name = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
