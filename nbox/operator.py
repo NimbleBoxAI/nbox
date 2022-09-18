@@ -124,7 +124,7 @@ from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
 
 import nbox.utils as U
 from nbox.auth import ConfigString, secret
-from nbox.utils import logger
+from nbox.utils import logger, SimplerTimes
 from nbox.nbxlib import operator_spec as ospec
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
@@ -135,12 +135,10 @@ from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
 from nbox.network import _get_job_data
 from nbox.jobs import Schedule, new as new_folder, Job, Serve
-from nbox.messages import get_current_timestamp, write_binary_to_file
-from nbox.relics import RelicsNBX
+from nbox.messages import write_binary_to_file
+from nbox.relics import RelicsNBX, RelicLocal
 from nbox.init import nbox_ws_v1
 from nbox.subway import SpecSubway
-
-
 
 
 DEFAULT_RESOURCE = Resource(
@@ -457,7 +455,6 @@ class Operator():
         # serialize everything to b64
         for k, v in _data.items():
           _data[k] = U.py_to_bs64(v)
-
       else:
         _data = {"rpc_name": method, "key": U.py_to_bs64(args[0])}
         if len(args) > 1:
@@ -569,7 +566,7 @@ class Operator():
 
   def __getattr__(self, key):
     if self._op_type == ospec.OperatorType.SERVING:
-      if key in self._nbx_serving_fn_spec:
+      if key in self._op_spec.fn_spec:
         return partial(self.forward, key)
       return self.forward("__getattr__", key)
     elif self._op_type == ospec.OperatorType.WRAP_CLS:
@@ -676,7 +673,7 @@ class Operator():
       # the fn_spec is set during the .from_serving() classmethod
       if len(self._op_spec.fn_spec) == 1 and "forward" in self._op_spec.fn_spec:
         # this means that an ospec.OperatorType.UNSET or ospec.OperatorType.WRAP_FN are on the other side of the pipe
-        out = self.forward("forward", *args, **kwargs)
+        return self.forward("forward", *args, **kwargs)
       else:
         # this means that ospec.OperatorType.WRAP_CLS is on the other side of the pipe
         raise ValueError(f"Cannot call servings directly, will interfere with nbox")
@@ -685,7 +682,7 @@ class Operator():
 
     input_dict = {}
     logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = get_current_timestamp()
+    _ts = SimplerTimes.get_now_pb()
     self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
     if self._tracer != None:
       self._tracer(self.node)
@@ -697,7 +694,7 @@ class Operator():
     # ---- USER SEPERATION BOUNDARY ---- #
     outputs = {}
     logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = get_current_timestamp()
+    _ts = SimplerTimes.get_now_pb()
     self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
     if self._tracer != None:
       self._tracer(self.node)
@@ -767,6 +764,9 @@ class Operator():
       deployment_type (str, optional): Defaults to 'serving' if WRAP_CLS else 'job'. The type of deployment to create.
       resource (Resource, optional): The resource to deploy to, uses a reasonable default.
     """
+    if not workspace_id:
+      raise ValueError("Must provide a workspace_id")
+
     # go over reasonable checks for deployment
     if deployment_type == None:
       if self._op_type in [ospec.OperatorType.WRAP_CLS, ospec.OperatorType.SERVING]:
@@ -782,19 +782,7 @@ class Operator():
         raise ValueError("id_or_name must be provided for serving deployment")
 
     # get the filepath and name to import for convience
-    if self._op_type == ospec.OperatorType.UNSET:
-      fp = inspect.getfile(self.__class__)
-      name = self.__class__.__qualname__
-    elif self._op_type in [ospec.OperatorType.JOB, ospec.OperatorType.SERVING]:
-      raise ValueError("Cannot deploy an operator that is already deployed")
-    elif self._op_type == ospec.OperatorType.WRAP_FN:
-      fp = self.__file__
-      name = self.__qualname__[3:] # to account for "fn_"
-    elif self._op_type == ospec.OperatorType.WRAP_CLS:
-      fp = self.__file__
-      name = self.__qualname__[4:] # to account for "cls_"
-    fp = os.path.abspath(fp) # get the abspath, will be super useful later
-    folder, file = os.path.split(fp)
+    fp, folder, file, name = ospec.get_operator_location(self)
     logger.info(f"Deployment Type: {deployment_type}")
     logger.info(f"Deploying '{name}' from '{fp}'")
     logger.info(f"Will upload folder: {folder}")
@@ -888,57 +876,131 @@ get_schedule = lambda: None
 
   def map(self, inputs: Union[List[Any], Tuple[Any]], timeout: int = 600) -> Iterable[Any]:
     """Take the same logic and apply it to a list of inputs, different from star_map in that it
-    takes in different logic and applied different inputs."""
+    takes in different logic and applied different inputs. Returns results in the same order as
+    inputs.
+    
+    In the current version runs as many workers as are the inputs."""
     # this another big ass function that manages this call for all the different types of ospec.OperatorTypes
-    # if len(inputs) > 10:
-    #   raise RuntimeError(f"Too many maps: {len(inputs)}, current limit is 10")
+    if len(inputs) > 10:
+      raise RuntimeError(f"Too many maps: {len(inputs)}, current limit is 10")
 
-    _inputs = []
-    if isinstance(inputs[0], (list, tuple)):
-      _inputs = inputs
-    else:
-      _inputs = [[x] for x in inputs]
+    _inputs = [[x] for x in inputs]
     inputs = _inputs
 
-    if self._op_type in [ospec.OperatorType.UNSET, ospec.OperatorType.WRAP_FN, ospec.OperatorType.WRAP_CLS]:
-      raise NotImplementedError("Local Multiprocessing is yet to be implemented")
-    elif self._op_type == ospec.OperatorType.SERVING:
-      raise NotImplementedError("What does a map call really mean for an API endpoint, like parallel calls?")
+    if self._op_type in [ospec.OperatorType.UNSET, ospec.OperatorType.WRAP_FN]:
+      import sys
+      from subprocess import Popen
+      FOLDER = ".nbx-para-logs"
+      os.makedirs(FOLDER, exist_ok = True)
+
+      # here's how this thing does a map on local machines:
+      # * we create an exe.py object in the current folder, serialise and store all the inputs in the local relics
+      #   start a process manager that waits till all the processes are done and files are ready for consumption
+      #   all the logs (stdout, stderr) of the execution will be written in separate files.
+      # * the current parent process only cares about ensuring that the process runs correctly, and not about the
+      #   logic to be executed by the workers.
+      # * instead of writing to the RelicsLocal we directly write to file which helps us avoid lack of locks in relics.
+      #   all the files will be written in the .nbx-para-logs folder.
+
+      # create the exe.py file
+      fp, folder, file, name = ospec.get_operator_location(self)
+      exe_file = U.join(folder, "exe.py")
+      init = ''
+      if self._op_type == ospec.OperatorType.UNSET:
+        init = '()'
+      with open(exe_file, "w") as f:
+        f.write(f"""
+import os
+os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
+from nbox.lib.dist import LocalNBXLet
+from {file.split('.')[0]} import {name}
+
+if __name__ == "__main__":
+  tag = os.getenv("NBOX_TAG_ID", None)
+  if tag is None:
+    raise ValueError("NBOX_TAG_ID not set")
+  op = LocalNBXLet({name}{init}, os.path.join("{FOLDER}",tag+"_input"), os.path.join("{FOLDER}",tag+"_output"))
+  print(op)
+  op()
+""".strip())
+
+      run_tags = [U.get_random_name(True).split("-")[0] for _ in range(len(inputs))]
+      U.threaded_map(
+        lambda tag, inp: U.to_pickle(inp, os.path.join(FOLDER, tag + "_input")),
+        [[x,inp] for x,inp in zip(run_tags, inputs)],
+        _name = "write_inputs",
+      )
+
+      processes = []
+      run_tag_to_input_idx = {}
+      proc_ids = []
+      open_files = []
+      for idx, tag in enumerate(run_tags):
+        run_tag_to_input_idx[tag] = idx
+        stdout = open(f".nbx-para-logs/{tag}.log", "w")
+        proc = Popen(
+          args = [sys.executable, exe_file],
+          bufsize = 2 << 9, # 1024 bytes buffer when writing the files
+          env = {"NBOX_TAG_ID": tag},
+          stdout = stdout,
+          stderr = stdout,
+          shell = False
+        )
+        processes.append(proc)
+        proc_ids.append(proc.pid)
+        open_files.append(stdout)
+
+      # wait till all the processes are done
+      while True:
+        sleep(1)
+        status = [p.poll() for p in processes]
+        success = [x == 0 for x in status]
+        errored = [x is not None and x != 0 for x in status]
+        completed = sum([s is not None for s in status])
+        logger.debug(f"total: {len(status)}, success: {sum(success)}, errored: {sum(errored)}, completed: {completed}")
+        if completed == len(inputs):
+          break
+      
+      # get the results
+      results = []
+      for tag in run_tags:
+        results.append(U.from_pickle(os.path.join(FOLDER, tag + "_output")))
+
+      # clean up
+      for f in open_files:
+        f.close()
+      return results
+
     elif self._op_type == ospec.OperatorType.JOB:
       # now this is simple enough, we need to implement a waiting queue that's it
 
       _start_time = monotonic()
 
-      run_ids = []
       run_tags = []
       run_tag_to_input_idx = {}
 
-      # # though the threadpool is a faster method, cannot trust the run_id because of the race condition on top run
-      # with ThreadPoolExecutor(20) as exe:
-      #   trigger = lambda i, x: [i, self(*x, _wait = False)]
-      #   results = {exe.submit(trigger, i, x) for i,x in enumerate(inputs)}
-      #   for future in as_completed(results):
-      #     try:
-      #       i, (tag, run_id) = future.result()
-      #       logger.debug(f"(tag, run_id) = ('{tag}', '{run_id}')")
-      #       run_ids.append(run_id)
-      #       run_tags.append(tag)
-      #       run_tag_to_input_idx[tag] = i
-      #     except Exception as e:
-      #       raise Exception(e)
+      # though the threadpool is a faster method, cannot trust the run_id because of the race condition on top run
+      with ThreadPoolExecutor(min(len(inputs), 10)) as exe:
+        trigger = lambda i, x: [i, self(*x, _wait = False)]
+        results = {exe.submit(trigger, i, x) for i,x in enumerate(inputs)}
+        for future in as_completed(results):
+          try:
+            i, (tag, run_id) = future.result()
+            run_tags.append(tag)
+            run_tag_to_input_idx[tag] = i
+          except Exception as e:
+            raise Exception(e)
 
-      for i, x in enumerate(inputs):
-        tag, run_id = self(*x, _wait = False)
-        logger.debug(f"(tag, run_id) = ('{tag}', '{run_id}')")
-        run_ids.append(run_id)
-        run_tags.append(tag)
-        run_tag_to_input_idx[tag] = i
+      run_tag_to_input_idx = {k:v for k,v in sorted(run_tag_to_input_idx.items(), key = lambda x: x[1])}
+      sleep(1) # sleep for a bit before requesting the webserver, this sleep matters now that we have the threadpool
+      runs = self._op_spec.job.last_n_runs(len(inputs))
+      run_ids = [x["id"] for x in runs]
 
       # print("run_tags:", run_tags)
       # print("run_ids:", run_ids)
       # print("run_tag_to_input_idx:", run_tag_to_input_idx)
       # print("inputs:", inputs, len(inputs))
-      
+
       proc_hash = U.hash_(",".join(run_tags), "sha256")[:8]
       logger.info(f"Waiting for {len(run_ids)} processes to finish, this may take a while...")
       html_path = U.join(U.env.NBOX_HOME_DIR(), ".cache", f"{proc_hash}.html")
@@ -1007,6 +1069,11 @@ get_schedule = lambda: None
 
       logger.info(f"Finished waiting for {len(run_ids)} processes to finish in {_end_time - _start_time} seconds")
       return results
+    
+    elif self._op_type == ospec.OperatorType.SERVING:
+      raise NotImplementedError("What does a map call really mean for an API endpoint, like parallel calls?")
+    elif self._op_type == ospec.OperatorType.WRAP_CLS:
+      raise NotImplementedError("What does a map call really mean for a class, like parallel calls?")
 
   # /nbx
 

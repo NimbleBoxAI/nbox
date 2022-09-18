@@ -7,7 +7,6 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
-import proto.common_pb2
 import typing
 import typing_extensions
 
@@ -32,7 +31,6 @@ class Relic(google.protobuf.message.Message):
     STARRED_FIELD_NUMBER: builtins.int
     TAGS_FIELD_NUMBER: builtins.int
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
-    AWS_S3_FIELD_NUMBER: builtins.int
     id: typing.Text
     """these are the primary fields"""
 
@@ -49,8 +47,6 @@ class Relic(google.protobuf.message.Message):
     workspace_id: typing.Text
     """this is the workspace id"""
 
-    @property
-    def aws_s3(self) -> proto.common_pb2.AWS_S3: ...
     def __init__(self,
         *,
         id: typing.Text = ...,
@@ -60,11 +56,8 @@ class Relic(google.protobuf.message.Message):
         starred: builtins.bool = ...,
         tags: typing.Optional[typing.Iterable[typing.Text]] = ...,
         workspace_id: typing.Text = ...,
-        aws_s3: typing.Optional[proto.common_pb2.AWS_S3] = ...,
         ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","bucket",b"bucket"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","bucket",b"bucket","created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","starred",b"starred","tags",b"tags","workspace_id",b"workspace_id"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["bucket",b"bucket"]) -> typing.Optional[typing_extensions.Literal["aws_s3"]]: ...
+    def ClearField(self, field_name: typing_extensions.Literal["created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","starred",b"starred","tags",b"tags","workspace_id",b"workspace_id"]) -> None: ...
 global___Relic = Relic
 
 class RelicFile(google.protobuf.message.Message):
@@ -143,7 +136,6 @@ class RelicFile(google.protobuf.message.Message):
     URL_FIELD_NUMBER: builtins.int
     HEADERS_FIELD_NUMBER: builtins.int
     BODY_FIELD_NUMBER: builtins.int
-    AWS_S3_FIELD_NUMBER: builtins.int
     name: typing.Text
     created_on: builtins.int
     last_modified: builtins.int
@@ -189,8 +181,6 @@ class RelicFile(google.protobuf.message.Message):
     def body(self) -> google.protobuf.internal.containers.ScalarMap[typing.Text, typing.Text]:
         """the body to be used by the client"""
         pass
-    @property
-    def aws_s3(self) -> proto.common_pb2.AWS_S3: ...
     def __init__(self,
         *,
         name: typing.Text = ...,
@@ -208,9 +198,6 @@ class RelicFile(google.protobuf.message.Message):
         url: typing.Text = ...,
         headers: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         body: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
-        aws_s3: typing.Optional[proto.common_pb2.AWS_S3] = ...,
         ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","bucket",b"bucket"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","body",b"body","bucket",b"bucket","comment",b"comment","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["bucket",b"bucket"]) -> typing.Optional[typing_extensions.Literal["aws_s3"]]: ...
+    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___RelicFile = RelicFile

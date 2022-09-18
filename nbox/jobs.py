@@ -477,12 +477,12 @@ class Job:
   def last_n_runs(self, n: int = 10):
     all_items = []
     _page = 1
-    out = self._get_runs(_page, 20)
+    out = self._get_runs(_page, n)
     all_items.extend(out)
 
     while len(all_items) < n:
       _page += 1
-      out = self._get_runs(_page, 20)
+      out = self._get_runs(_page, n)
       if not len(out):
         break
       all_items.extend(out)

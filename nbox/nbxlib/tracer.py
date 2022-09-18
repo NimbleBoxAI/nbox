@@ -7,13 +7,13 @@ from time import sleep
 from json import dumps
 
 import nbox.utils as U
-from nbox.utils import logger
+from nbox.utils import logger, SimplerTimes
 from nbox.init import nbox_grpc_stub
 from nbox.auth import secret
 from nbox.hyperloop.job_pb2 import Job as JobProto
 from nbox.hyperloop.dag_pb2 import Node
 from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
-from nbox.messages import rpc, get_current_timestamp, read_file_to_binary, read_file_to_string, message_to_dict
+from nbox.messages import rpc, read_file_to_binary, read_file_to_string, message_to_dict
 
 class Tracer:
   def __init__(self, local: bool = False, start_heartbeat: bool = True, heartbeat_every: int = 60):
@@ -117,7 +117,7 @@ class Tracer:
     while True:
       rpc(
         nbox_grpc_stub.UpdateRun,
-        UpdateRunRequest(token = self.run_id, job = self.job_proto, updated_at = get_current_timestamp()),
+        UpdateRunRequest(token = self.run_id, job = self.job_proto, updated_at = SimplerTimes.get_now_pb()),
         "Heartbeat failed",
         raise_on_error = False
       )

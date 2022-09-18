@@ -19,12 +19,12 @@ from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
 from nbox.auth import secret
-from nbox.utils import logger
+from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
 from nbox.hyperloop.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub
 from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
-from nbox.messages import rpc, write_binary_to_file, write_string_to_file, get_current_timestamp
+from nbox.messages import rpc, write_binary_to_file
 from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo, Serve, Job
 from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
 
@@ -163,7 +163,7 @@ def deploy_job(
   job_proto = JobProto(
     id = job_id,
     name = job_name or U.get_random_name(True).split("-")[0],
-    created_at = get_current_timestamp(),
+    created_at = SimplerTimes.get_now_pb(),
     auth_info = NBXAuthInfo(
       username = secret.get("username"),
       workspace_id = workspace_id,

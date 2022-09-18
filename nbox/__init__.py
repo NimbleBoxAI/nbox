@@ -5,7 +5,7 @@ from nbox.utils import logger
 from nbox.subway import Sub30
 from nbox.init import nbox_grpc_stub, nbox_session, nbox_ws_v1
 from nbox.operator import Operator, operator
-from nbox.jobs import Job
+from nbox.jobs import Job, Serve
 from nbox.model import Model
 from nbox.load import load, PRETRAINED_MODELS
 from nbox.instance import Instance

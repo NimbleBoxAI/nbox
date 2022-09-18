@@ -1,3 +1,5 @@
+import os
+import inspect
 from enum import Enum
 
 class OperatorType(Enum):
@@ -26,6 +28,9 @@ class _UnsetSpec:
   def __init__(self):
     self.type = OperatorType.UNSET.value
 
+  def __repr__(self):
+    return f"[{self.type}]"
+
 class _JobSpec:
   def __init__(
     self,
@@ -34,11 +39,16 @@ class _JobSpec:
     job,
     workspace_id,
   ):
+    from nbox import Job
+
     self.type = OperatorType.JOB.value
     self.job_id = job_id
     self.rpc_fn_name = rpc_fn_name
-    self.job = job
+    self.job: Job = job
     self.workspace_id = workspace_id
+
+  def __repr__(self):
+    return f"[{self.type} {self.job_id} {self.workspace_id}]"
 
 class _ServingSpec:
   def __init__(
@@ -56,11 +66,17 @@ class _ServingSpec:
     self.workspace_id = workspace_id
     self.track_io = track_io
 
+  def __repr__(self):
+    return f"[{self.type} {self.serving_id} {self.workspace_id}]"
+
 class _WrapFnSpec:
   def __init__(self, fn_name, wrap_obj):
     self.type = OperatorType.WRAP_FN.value
     self.fn_name = fn_name
     self.wrap_obj = wrap_obj
+
+  def ___repr__(self):
+    return f"[{self.type} {self.fn_name}]"
 
 class _WrapClsSpec:
   def __init__(self, cls_name, wrap_obj, init_ak):
@@ -68,3 +84,24 @@ class _WrapClsSpec:
     self.cls_name = cls_name
     self.wrap_obj = wrap_obj
     self.init_ak = init_ak
+
+  def ___repr__(self):
+    return f"[{self.type} {self.cls_name}]"
+
+
+def get_operator_location(_op):
+  # get the filepath and name to import for convience
+  if _op._op_type == OperatorType.UNSET:
+    fp = inspect.getfile(_op.__class__)
+    name = _op.__class__.__qualname__
+  elif _op._op_type in [OperatorType.JOB, OperatorType.SERVING]:
+    raise ValueError("Cannot deploy an operator that is already deployed")
+  elif _op._op_type == OperatorType.WRAP_FN:
+    fp = _op.__file__
+    name = _op.__qualname__[3:] # to account for "fn_"
+  elif _op._op_type == OperatorType.WRAP_CLS:
+    fp = _op.__file__
+    name = _op.__qualname__[4:] # to account for "cls_"
+  fp = os.path.abspath(fp) # get the abspath, will be super useful later
+  folder, file = os.path.split(fp)
+  return fp, folder, file, name

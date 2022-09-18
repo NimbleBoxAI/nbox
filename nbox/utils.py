@@ -50,6 +50,7 @@ from datetime import datetime, timezone
 from pythonjsonlogger import jsonlogger
 from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from google.protobuf.timestamp_pb2 import Timestamp as Timestamp_pb
 
 class env:
   """
@@ -322,20 +323,23 @@ class DBase:
 # pool/
 
 def threaded_map(fn, inputs, wait: bool = True, max_threads = 20, _name: str = None) -> None:
-    _name = _name or get_random_name(True)
-    results = [None for _ in range(len(inputs))]
-    with ThreadPoolExecutor(max_workers = max_threads, thread_name_prefix = _name) as exe:
-      _fn = lambda i, x: [i, fn(x)]
-      futures = {exe.submit(_fn, i, x): i for i, x in enumerate(inputs)}
-      if not wait:
-        return futures
-      for future in as_completed(futures):
-        try:
-          i, res = future.result()
-          results[i] = res
-        except Exception as e:
-          raise e
-    return results
+  """
+  inputs is a list of tuples, each tuple is the input for single invocation of fn
+  """
+  _name = _name or get_random_name(True)
+  results = [None for _ in range(len(inputs))]
+  with ThreadPoolExecutor(max_workers = max_threads, thread_name_prefix = _name) as exe:
+    _fn = lambda i, x: [i, fn(*x)]
+    futures = {exe.submit(_fn, i, x): i for i, x in enumerate(inputs)}
+    if not wait:
+      return futures
+    for future in as_completed(futures):
+      try:
+        i, res = future.result()
+        results[i] = res
+      except Exception as e:
+        raise e
+  return results
 
 # /pool
 
@@ -345,3 +349,27 @@ def _exit_program(code = 0):
   # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
   # tl;dr: os._exit kills without cleanup and so it's okay on the Pod
   os._exit(code)
+
+
+class SimplerTimes:
+  tz = timezone.utc
+
+  def get_now_datetime() -> datetime:
+    return datetime.now(SimplerTimes.tz)
+
+  def get_now_float() -> float:
+    return SimplerTimes.get_now_datetime().timestamp()
+
+  def get_now_i64() -> int:
+    return int(SimplerTimes.get_now_datetime().timestamp())
+
+  def get_now_str() -> str:
+    return SimplerTimes.get_now_datetime().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+  def get_now_pb():
+    ts = Timestamp_pb()
+    ts.GetCurrentTime()
+    return ts
+
+  def i64_to_datetime(i64) -> datetime:
+    return datetime.fromtimestamp(i64, SimplerTimes.tz)

@@ -4,25 +4,59 @@ NimbleBox LMAO is our general purpose observability tool for any kind of computa
 
 import os
 import re
+import time
+import threading
+from queue import Queue, Empty
 from git import Repo
 from json import dumps
 from requests import Session
 from typing import Dict, Any, List, Optional, Union, Tuple
-from datetime import datetime, timezone
+
+try:
+  import starlette
+  from starlette.requests import Request
+  from starlette.responses import Response
+  from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+  from starlette.routing import Match
+  from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
+  from starlette.types import ASGIApp
+except ImportError:
+  starlette = None
+
 
 import nbox.utils as U
 from nbox import Instance
-from nbox.utils import logger
+from nbox.utils import logger, SimplerTimes
 from nbox.auth import secret
 from nbox.nbxlib.tracer import Tracer
 from nbox.relics import RelicsNBX
+
+# all the sublime -> hyperloop stuff
+from nbox.sublime.lmao_client import LMAO_Stub # main stub class
 from nbox.sublime.lmao_client import (
-  LMAO_Stub, Record, File, FileList, AgentDetails, RunLog, Run, InitRunRequest, ListProjectsRequest, RelicFile
+  Record, File, FileList, AgentDetails, RunLog, Run, InitRunRequest, ListProjectsRequest, RelicFile
 )
+from nbox.sublime.lmao_client import (
+  Serving, LogBuffer, ServingHTTPLog
+)
+
+
 from nbox.observability.system import SystemMetricsLogger
 
 DEBUG_LOG_EVERY = 100
 INFO_LOG_EVERY = 100
+
+def post_buffer(lmao: LMAO_Stub, queue: Queue, bar: threading.Barrier):
+  while True:
+    bar.wait() # rate_limit
+    buff = LogBuffer()
+    while True:
+      try:
+        item = queue.get()
+        buff.logs.append(item)
+      except Empty:
+        break
+    lmao.on_livelog(buff)
 
 
 class Lmao():
@@ -62,7 +96,6 @@ class Lmao():
 
   def _create_connection(self, workspace_id: str):
     # prepare the URL
-    # id_or_name, workspace_id = U.split_iw(instance_id)
     id_or_name = f"monitoring-{workspace_id}"
     logger.info(f"id_or_name: {id_or_name}")
     logger.info(f"workspace_id: {workspace_id}")
@@ -153,13 +186,14 @@ class Lmao():
 
     # continue as before
     self._agent_details = AgentDetails(
+      type = AgentDetails.NBX.JOB,
       nbx_job_id = self._nbx_job_id or "jj_guvernr",
       nbx_run_id = self._nbx_run_id or "fake_run",
     )
     run_details = self.lmao.init_run(
       _InitRunRequest = InitRunRequest(
         agent_details=self._agent_details,
-        created_at = get_timestamp(),
+        created_at = SimplerTimes.get_now_i64(),
         project_name = project_name,
         project_id = project_id,
         config = dumps(log_config),
@@ -217,7 +251,7 @@ class Lmao():
     if self._total_logged_elements % INFO_LOG_EVERY == 0:
       logger.info(f"Logging: {y.keys()} | {self._total_logged_elements}")
 
-    step = step if step is not None else get_timestamp()
+    step = step if step is not None else SimplerTimes.get_now_i64()
     if step < 0:
       raise Exception("Step must be <= 0")
     run_log = RunLog(run_id = self.run.run_id, log_type=log_type)
@@ -354,6 +388,113 @@ def get_git_details(folder):
     "size": size,
   }
 
-def get_timestamp():
-  """Get the current timestamp."""
-  return int(datetime.now(timezone.utc).timestamp())
+
+"""
+Code responsible for Monitoring of live servings
+"""
+
+class LmaoASGIMiddleware(BaseHTTPMiddleware):
+  def __init__(self, app: ASGIApp, workspace_id: str = "") -> None:
+    if starlette is None:
+      raise ValueError("Starlette is not installed. pip install -U nbox\[serving\]")
+    super().__init__(app)
+
+    # rate limiter
+    self._bar = threading.Barrier(2)
+    def _rate_limiter(s = 1.0):
+      while True:
+        self._bar.wait()
+        time.sleep(s)
+    rl = threading.Thread(target=_rate_limiter, daemon=True)
+
+    # create connection and handshake with the lmao server
+    self.workspace_id = workspace_id
+    self._create_connection(workspace_id)
+    serving = self.lmao.init_serving(
+      InitRunRequest(
+        agent_details = AgentDetails(
+          type = AgentDetails.NBX.SERVING,
+          nbx_serving_id = self._nbx_job_id or "jj_guvernr",
+          nbx_run_id = self._nbx_run_id or "fake_deploy",
+        ),
+        created_at = SimplerTimes.get_now_i64(),
+        config = dumps({
+          "my_config": "config"
+        })
+      )
+    )
+    self.serving = serving
+    self.buffer = Queue(maxsize = 2 << 14)
+    self.logger_thread = threading.Thread(target = post_buffer, args = (self.lmao, self.buffer, self._bar), daemon = True)
+    rl.start()
+    self.logger_thread.start()
+
+  def _create_connection(self, workspace_id: str):
+    # prepare the URL
+    id_or_name = f"monitoring-{workspace_id}"
+    logger.info(f"id_or_name: {id_or_name}")
+    logger.info(f"workspace_id: {workspace_id}")
+    instance = Instance(id_or_name, workspace_id = workspace_id)
+    try:
+      open_data = instance.open_data
+    except AttributeError:
+      raise Exception(f"Is instance '{instance.project_id}' running?")
+    build = "build"
+    if "app.c." in secret.get("nbx_url"):
+      build = "build.c"
+    url = f"https://server-{open_data['url']}.{build}.nimblebox.ai/"
+    logger.info(f"URL: {url}")
+
+    # create a tracer object that will load all the information
+    self.tracer = Tracer(start_heartbeat=False)
+    self._nbx_run_id = self.tracer.run_id
+    self._nbx_job_id = self.tracer.job_id
+    if self._nbx_run_id is not None:
+      # update the username you have
+      secret.put("username", self.tracer.job_proto.auth_info.username)
+      self.username = secret.get("username")
+
+    # create a session with the auth header
+    _session = Session()
+    _session.headers.update({"NBX-TOKEN": open_data["token"], "X-NBX-USERNAME": self.username})
+
+    # define the stub
+    # self.lmao = LMAO_Stub(url = "http://127.0.0.1:8080", session = Session()) # debug
+    self.lmao = LMAO_Stub(url = url, session = _session)
+
+  async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    method = request.method
+    path_template, is_handled_path = self.get_path_template(request)
+    if not is_handled_path:
+      return await call_next(request)
+
+    before_time = time.perf_counter()
+    try:
+      response = await call_next(request)
+    except BaseException as e:
+      status_code = HTTP_500_INTERNAL_SERVER_ERROR
+      raise e from None
+    else:
+      status_code = response.status_code
+      after_time = time.perf_counter()
+
+    path = path_template.strip("/")
+    if path:
+      _log = ServingHTTPLog(
+        path = path,
+        method = method,
+        status_code = status_code,
+        latency_ms = 1e3 * (after_time-before_time),
+        timestamp = SimplerTimes.get_now_pb(),
+      )
+      self.buffer.put_nowait(_log)
+
+    return response
+
+  @staticmethod
+  def get_path_template(request: Request) -> Tuple[str, bool]:
+    for route in request.app.routes:
+      match, child_scope = route.matches(request.scope)
+      if match == Match.FULL:
+        return route.path, True
+    return request.url.path, False

@@ -25,7 +25,7 @@ class RelicLocal(BaseStore):
       1459d663d14b7b7ad82ebe5c98c8a0397b21d4e2b9f4711562746a5cb48f86c4
       ...
   """
-  def __init__(self, relic_name: str, workspace_id: str, create: bool = False):
+  def __init__(self, relic_name: str, workspace_id: str = "local", create: bool = False):
     self.relic_name = relic_name
     self.workspace_id = workspace_id
     self.cache_dir = os.path.join(env.NBOX_HOME_DIR(), "relics")

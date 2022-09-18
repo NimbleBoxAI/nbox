@@ -1,50 +1,32 @@
 # https://github.com/apache/airflow/issues/7870
 
-import inspect
-import json
-from typing import Any, Dict
-
 try:
-  import uvicorn
-  from fastapi import FastAPI
-  from fastapi.responses import JSONResponse
-  from fastapi.middleware.cors import CORSMiddleware
   from pydantic import create_model
+  import uvicorn
+
+  from fastapi import FastAPI
+  from fastapi.responses import JSONResponse, Response
+  from fastapi.middleware.cors import CORSMiddleware
 except ImportError:
   # if this is happening to you sir, why don't you come work with us?
   FastAPI = None
-  pass
+
+import json
+import inspect
+from typing import Any, Dict
 
 from nbox.version import __version__
 from nbox.operator import Operator
 from nbox.nbxlib.operator_spec import OperatorType
 from nbox.utils import py_from_bs64, py_to_bs64, logger
 
-
-# class GenericMetric:
-#   def __init__(self, method, value):
-#     self.name = name
-#     self.value = value
-
-# class NetworkMetricsLMAO:
-#   """This is class is responsible for collecting metrics from the network layer. It is not the same as in case of
-#   prometheus because in our structure the pod is going to be informing the DB about the metrics and not the other way
-#   around. We are chosing this approach because it allows for more flexibility in the future."""
-#   def __init__(self):
-#     # lmao stub will need to be replaced with a real implementation
-#     self.lmao_stub = None
-
-#   def __call__(self, method, endpoint, value = 1):
-#     pass
-
-
-
 def serve_operator(
   op: Operator,
   host: str = "0.0.0.0",
   port: int = 8000,
-  log_metrics: bool = False,
   *,
+  log_system_metrics: bool = True,
+  log_user_io: bool = False,
   model_name: str = ""
 ):
   if FastAPI is None:
@@ -79,7 +61,8 @@ def serve_operator(
   for route, fn in get_fastapi_routes(op):
     app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
 
-  # app.add_middleware()
+  # if log_system_metrics:
+  #   app.add_middleware(LmaoASGIMiddleware)
 
   uvicorn.run(app, host = host, port = port)
 
@@ -131,20 +114,29 @@ def get_fastapi_fn(fn, _rest = False):
   if _rest:
     name = f"{fn.__name__}_Rest_Request"
   base_model = create_model(name, **data_dict)
+  base_model_rpc = create_model(name, **{k:(str, py_to_bs64(v[1])) for k,v in data_dict.items()})
 
   # pretty simple forward function, note that it gets operator using get_op which will be a cache hit
-  async def generic_fwd(req: base_model):
+  async def generic_fwd(req: base_model_rpc, response: Response):
     # need to add serialisation to this function because user won't by default send in a serialised object
     data = req.dict()
     try:
       data = {k: py_from_bs64(v) for k, v in data.items()}
+    except Exception as e:
+      logger.error(f"Failed to convert {data} to python object")
+      logger.error(e)
+      response.status_code = 400
+      return {"error": str(e)}
+
+    try:
       out = fn(**data)
       return {"success": True, "value": py_to_bs64(out)}
     except Exception as e:
+      response.status_code = 500
       return {"success": False, "message": str(e)}
 
   # pretty simple forward function for REST endpoints
-  async def generic_fwd_rest(req: base_model):
+  async def generic_fwd_rest(req: base_model, response: Response):
     # need to add serialisation to this function because user won't by default send in a serialised object
     data = req.dict()
     try:
@@ -152,9 +144,11 @@ def get_fastapi_fn(fn, _rest = False):
       try:
         _ = json.dumps(out)
       except:
+        response.status_code = 500
         return {"success": False, "message": "Function output cannot be serialised to JSON"}
       return {"success": True, "value": out}
     except Exception as e:
+      response.status_code = 500
       return {"success": False, "message": str(e)}
 
   return generic_fwd_rest if _rest else generic_fwd
@@ -164,10 +158,10 @@ def nbx_py_rpc(op: Operator):
   base_model = create_model("nbx_py_rpc", rpc_name = (str, ""), key = (str, ""), value = (str, ""),)
   _nbx_py_rpc = NbxPyRpc(op)
   
-  async def forward(req: base_model):
+  async def forward(req: base_model, response: Response):
     # no need to add serialisation because the NbPyRpc class will handle it
     data = req.dict()
-    return _nbx_py_rpc(data)
+    return _nbx_py_rpc(data, response)
 
   return forward
 
@@ -210,32 +204,13 @@ class NbxPyRpc(Operator):
     super().__init__()
     self.wrapped_cls = op
 
-  def forward(self, data) -> Dict[str, str]:
+  def forward(self, data, response: Response) -> Dict[str, str]:
     _k = set(tuple(data.keys())) - set(["rpc_name", "key", "value"])
     if _k:
-      return {"success": False, "message": f"400: invalid keys: {_k}"}
+      response.status_code = 400
+      return {"success": False, "message": f"invalid keys: {_k}"}
     rpc_name = data.get("rpc_name", "")
-    if rpc_name not in {
-      "__getattr__",
-      "__getitem__",
-      "__setitem__",
-      "__delitem__",
-      "__iter__",
-      "__next__",
-      "__len__",
-      "__contains__",
-    }:
-      return {"success": False, "message": f"400: invalid rpc_name: {rpc_name}"}
-
-    key = data.get("key", "")
-    value = data.get("value", "")
-
-    if key:
-      key = py_from_bs64(key)
-    if value:
-      value = py_from_bs64(value)
-
-    fn = {
+    fn_map = {
       "__getattr__": (self.fn_getattr, key),
       "__getitem__": (self.fn_getitem, key),
       "__setitem__": (self.fn_setitem, key, value),
@@ -245,13 +220,25 @@ class NbxPyRpc(Operator):
       "__len__": (self.fn_len),
       "__contains__": (self.fn_contains, key),
     }
+    _items = fn_map.get(rpc_name, None)
+    if _items is None:
+      response.status_code = 400
+      return {"success": False, "message": f"invalid rpc_name: {rpc_name}"}
 
-    fn, *args = fn[rpc_name]
+    key = data.get("key", "")
+    value = data.get("value", "")
 
+    if key:
+      key = py_from_bs64(key)
+    if value:
+      value = py_from_bs64(value)
+
+    fn, *args = _items
     try:
       out = fn(*args)
       return out
     except Exception as e:
+      response.status_code = 500
       return {"success": False, "message": str(e)}
   
   def fn_getattr(self, key):
