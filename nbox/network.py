@@ -60,10 +60,17 @@ def deploy_serving(
   serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id = workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
+  if serving_id is None:
+    logger.error("Could not find service ID, creating a new one")
+    data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
+    serving_id = data["deployment_id"]
+    logger.info(f"Serving ID: {serving_id}")
   model_name = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
   logger.debug(f"Model name: {model_name}")
 
   # zip init folder
+  # if git: -> git commit + git patch apply [+ git untracked]
+
   zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name)
   return _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
 
@@ -174,6 +181,7 @@ def deploy_job(
       cpu = "100m",         # 100mCPU
       memory = "200Mi",     # MiB
       disk_size = "1Gi",    # GiB
+      max_retries = 2,      # 2 retries
     )
   )
   write_binary_to_file(job_proto, U.join(init_folder, "job_proto.msg"))
@@ -242,14 +250,15 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
 
   # write out all the commands for this job
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
-  _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
-  _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
-  _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
+  # _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
+  # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
   _webpage = f"{secret.get('nbx_url')}/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
-  logger.info(f" [python] - {_api}")
-  logger.info(f"    [CLI] - {_cli}")
-  logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
-  logger.info(f"   [page] - {_webpage}")
+  # logger.info(f" [python] - {_api}")
+  # logger.info(f"    [CLI] - {_cli}")
+  # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
+  # logger.info(f"   [page] - {_webpage}")
+  logger.info(f"See job on page: {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
   return Job(job_proto.id, workspace_id = job_proto.auth_info.workspace_id)

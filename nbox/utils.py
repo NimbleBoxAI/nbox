@@ -32,8 +32,8 @@ This has a couple of cool things:
 # this file has bunch of functions that are used everywhere
 
 import os
-import io
 import sys
+import json
 import logging
 import hashlib
 import requests
@@ -77,6 +77,13 @@ class env:
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
   NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
+  NBOX_NO_CHECK_VERSION = lambda: os.getenv("NBOX_NO_CHECK_VERSION", False)
+
+  def set(key, value):
+    os.environ[key] = value
+
+  def get(key, default=None):
+    return os.environ.get(key, default)
 
 # logger /
 
@@ -303,6 +310,13 @@ class DBase:
   def __repr__(self):
     return str(self.get_dict())
 
+  def json(self, fp: str = "") -> str:
+    if fp:
+      with open(fp, "w") as f:
+        f.write(json.dumps(self.get_dict()))
+    else:    
+      return json.dumps(self.get_dict())
+
 # /datastore
 
 
@@ -324,7 +338,7 @@ class DBase:
 
 def threaded_map(fn, inputs, wait: bool = True, max_threads = 20, _name: str = None) -> None:
   """
-  inputs is a list of tuples, each tuple is the input for single invocation of fn
+  inputs is a list of tuples, each tuple is the input for single invocation of fn. order is preserved.
   """
   _name = _name or get_random_name(True)
   results = [None for _ in range(len(inputs))]

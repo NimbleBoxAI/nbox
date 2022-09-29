@@ -40,6 +40,7 @@ from nbox.auth import init_secret, ConfigString
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import RelicsNBX
+from nbox.lmao import LmaoCLI
 from nbox.version import __version__ as V
 
 logger = U.get_logger()
@@ -89,7 +90,7 @@ def version():
 def why():
   print("\nWhy we build NimbleBox?\n")
   print("  * Artificial intelligence will be the most important technology of the 21st century.")
-  print("  * Every single piece of software ever written will need to be upgraded.")
+  print("  * Every major piece of software ever written will need to be upgraded and rewritten.")
   print("  * Energy spent per code token will increase exponentially to handle the bandwidth of AI.")
   print("  * AI is still software and software engineering is hard.")
   print("  * Nimblebox is a general purpose tool to build and manage such operations.")
@@ -102,6 +103,7 @@ def main():
     "config"  : global_config,
     "get"     : get,
     "jobs"    : Job,
+    "lmao"    : LmaoCLI,
     "login"   : login,
     "open"    : open_home,
     "relics"  : RelicsNBX,

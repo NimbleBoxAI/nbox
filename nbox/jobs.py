@@ -9,6 +9,7 @@ Notes
 
 import os
 import sys
+from typing import Union
 import jinja2
 import tabulate
 from functools import partial
@@ -20,11 +21,13 @@ import nbox.utils as U
 from nbox.auth import secret, ConfigString
 from nbox.utils import logger
 from nbox.version import __version__
-from nbox.messages import rpc, streaming_rpc
-from nbox.hyperloop.nbox_ws_pb2 import JobInfo
+from nbox.messages import rpc, streaming_rpc, write_binary_to_file
 from nbox.init import nbox_grpc_stub, nbox_ws_v1
+from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
+from nbox.hyperloop.nbox_ws_pb2 import JobInfo
 from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from nbox.hyperloop.dag_pb2 import DAG as DAGProto
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
 
 
@@ -95,8 +98,10 @@ __pycache__/
 # Examples:
 # pandas
 
-# always be on lookout for optimisations, ex:
-# save 85% download if using CPU torch add `-f https://download.pytorch.org/whl/torch_stable.html`
+# always be on lookout for optimisations, ex: save 85% download CPU torch by using the two lines
+# -f https://download.pytorch.org/whl/torch_stable.html
+# torch==1.11.0+cpu
+
 
 nbox[serving]=={__version__} # do not change this
 """)
@@ -111,35 +116,145 @@ nbox[serving]=={__version__} # do not change this
 
   logger.info(f"Created folder: {folder_name}")
 
-def upload_job_folder(method: str, init_folder: str, id_or_name: str, *, workspace_id: str = ""):
-  """Upload the code for a job to the NBX-Jobs if not present, it will create a new Job.
+def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_id: str = "", _ret: bool = False, **init_kwargs):
+  """Upload the code for a job or serving to the NBX. if `id_or_name` is not present, it will create a new Job.
+  Only the folder in teh 
 
   Args:
-    init_folder (str): folder with all the relevant files
+    init_folder (str): folder with all the relevant files or ``file_path:fn_name`` pair so you can
     id_or_name (str): Job ID or name
     workspace_id (str, optional): Workspace ID, `None` for personal workspace. Defaults to None.
+    init_kwargs (dict): kwargs to pass to the `init` function, if possible
   """
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
-  if init_folder not in sys.path:
-    sys.path.append(init_folder)
-  from nbx_user import get_op, get_resource, get_schedule
-
   from nbox import Operator
   from nbox.network import deploy_job, deploy_serving
-  operator: Operator = get_op(method == "serving")
+  import nbox.nbxlib.operator_spec as ospec
+  from nbox.nbxlib.operator_spec import OperatorType as OT
 
-  if method == "jobs":
+  if method not in OT._valid_deployment_types():
+    raise ValueError(f"Invalid method: {method}, should be either {OT._valid_deployment_types()}")
+  if ":" in init_folder:
+    fn_file, fn_name = init_folder.split(":")
+    if not os.path.exists(fn_file+".py"):
+      raise ValueError(f"File {fn_file}.py does not exist")
+    init_folder, file_name = os.path.split(fn_file)
+    # if init_folder:
+    #   logger.error("Please run this command from the folder where the file is located")
+    #   logger.error(f"  Fix: cd {init_folder} && nbx jobs upload {file_name}:{fn_name} --id_or_name {id_or_name}")
+    #   raise RuntimeError(f"Call this file from the same directory as {file_name}.py")
+    init_folder = init_folder or "."
+    fn_name = fn_name.strip()
+  else:
+    fn_name = None
+    file_name = None
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+  logger.info(f"Uploading code from folder: {init_folder}:{file_name}:{fn_name}")
+
+  if not os.path.exists(init_folder):
+    raise ValueError(f"Folder {init_folder} does not exist")
+
+  _curdir = os.getcwd()
+  os.chdir(init_folder)
+
+  # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
+  # in this case the module is loaded on the local machine and so user will need to have
+  # everything installed locally.
+  if fn_name is None:
+    # we need to check if the user has a `nbx_user.py` file
+    if not os.path.exists(U.join(init_folder, "nbx_user.py")):
+      logger.error(f"Folder {init_folder} does not contain a `nbx_user.py` file")
+      logger.error(f"  Fix: run `nbx jobs new {init_folder}` to create a new job folder")
+      logger.error(f"  Fix: you can use the `file_path:fn` syntax. eg. ... upload trainer:main ...")
+      raise ValueError(f"Folder {init_folder} does not contain a `nbx_user.py` file")
+    if init_folder not in sys.path:
+      sys.path.append(init_folder)
+
+    get_op, get_resource, get_schedule = map(
+      partial(U.load_module_from_path, file_path = U.join(init_folder, "nbx_user.py")),
+      ["get_op", "get_resource", "get_schedule",],
+    )
+    operator: Operator = get_op(method == "serving")
+    get_dag = operator._get_dag
+  
+  # this is a style of `file_path:fn_name` where we need to upload the entire
+  # thing as if it is done programmatically (i.e. no `nbx_user.py` file)
+  else:
+    tea = Astea(fn_file+".py")
+    items = tea.find(fn_name, [IT.CLASS, IT.FUNCTION])
+    if len(items) > 1:
+      raise ModuleNotFoundError(f"Multiple {fn_name} found in {fn_file}.py")
+    elif len(items) == 0:
+      logger.error(f"Could not find function or class type: '{fn_name}'")
+      raise ModuleNotFoundError(f"Could not find function or class type: '{fn_name}'")
+    fn = items[0]
+    if fn.type == IT.FUNCTION:
+      # does not require initialisation
+      if len(init_kwargs):
+        logger.error(f"Cannot pass kwargs to a function: '{fn_name}'")
+        logger.error(f"  Fix: you cannot pass kwargs {set(init_kwargs.keys())} to a function")
+        raise ValueError("Function does not require initialisation")
+      init_code = f"{fn_name}"
+    elif fn.type == IT.CLASS:
+      # requires initialisation, in this case we will store the relevant to things in the 
+      init_code = f"{fn_name}()"
+      raise ValueError("Class not supported yet")
+
+    with open("nbx_user.py", "w") as f:
+      f.write(f'''# Autogenerated for .deploy() call
+
+from nbox.messages import read_file_to_binary
+from nbox.hyperloop.job_pb2 import Resource
+
+def get_op(*_, **__):
+  # takes no input since programtically generated returns the exact object
+  from {file_name} import {fn_name}
+  out = {init_code}
+  return out
+
+get_resource = lambda: read_file_to_binary('.nbx_core/resource.pb', message = Resource())
+get_schedule = lambda: None
+''')
+
+    # create a requirements.txt file if it doesn't exist with the latest nbox version
+    if not os.path.exists(U.join(".", "requirements.txt")):
+      with open(U.join(".", "requirements.txt"), "w") as f:
+        f.write(f'nbox[serving]=={__version__}\n')
+
+    # create a .nboxignore file if it doesn't exist, this will tell all the files not to be uploaded to the job pod
+    _igp = set(ospec.FN_IGNORE)
+    if not os.path.exists(U.join(".", ".nboxignore")):
+      with open(U.join(".", ".nboxignore"), "w") as f:
+        f.write("\n".join(_igp))
+    else:
+      with open(U.join(".", ".nboxignore"), "r") as f:
+        _igp = _igp.union(set(f.read().splitlines()))
+      with open(U.join(".", ".nboxignore"), "w") as f:
+        f.write("\n".join(_igp))
+
+    # just create a resource.pb, if it's empty protobuf will work it out
+    nbx_folder = U.join(".", ".nbx_core")
+    os.makedirs(nbx_folder, exist_ok = True)
+    write_binary_to_file(ospec.DEFAULT_RESOURCE, file = U.join(nbx_folder, "resource.pb"))
+
+    # we cannot use the traditional _deploy_nbx_user because we cannot execute anything locally
+    # ie. we cannot import any file. we just need to provide dummy functions
+    get_resource = lambda *_, **__: None
+    if method == OT.JOB.value:
+      get_schedule = lambda: None
+      get_dag = lambda: DAGProto()
+
+  # common to both, kept out here because these two will eventually merge
+  if method == ospec.OperatorType.JOB.value:
     out: Job = deploy_job(
       init_folder = init_folder,
       job_id_or_name = id_or_name,
-      dag = operator._get_dag(),
+      dag = get_dag(),
       workspace_id = workspace_id,
       schedule = get_schedule(),
       resource = get_resource(),
       _unittest = False
     )
-    return out
-  elif method == "serving":
+  elif method == ospec.OperatorType.SERVING.value:
     out: Serve = deploy_serving(
       init_folder = init_folder,
       deployment_id_or_name = id_or_name,
@@ -148,8 +263,13 @@ def upload_job_folder(method: str, init_folder: str, id_or_name: str, *, workspa
       wait_for_deployment = False,
       _unittest = False
     )
-  
-  return out
+  else:
+    raise ValueError(f"Unknown method: {method}")
+
+  os.chdir(_curdir)
+  if _ret:
+    return out
+
 
 ################################################################################
 """
@@ -325,7 +445,7 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
 class Job:
   new = staticmethod(new)
   status = staticmethod(get_job_list)
-  upload = staticmethod(partial(upload_job_folder, "jobs"))
+  upload = staticmethod(partial(upload_job_folder, "job"))
 
   def __init__(self, id, *, workspace_id: str = ""):
     """Python wrapper for NBX-Jobs gRPC API

@@ -1,8 +1,10 @@
 # Auto generated file. DO NOT EDIT.
 
+import os
 import requests
 from functools import partial
 
+from google.protobuf.timestamp_pb2 import *
 from nbox.sublime.proto.relics_pb2 import *
 from nbox.sublime.proto.common_pb2 import *
 from nbox.sublime.proto.lmao_pb2 import *
@@ -31,6 +33,19 @@ class LMAO_Stub:
     _Run = Run() # predefine the output proto
     _Run = b64_to_message(echo_resp.base64_string, _Run)
     return _Run
+
+  def update_run_status(self, _Run: Run) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/update_run_status",
+      Echo(message = "Run", base64_string=message_to_b64(_Run), rpc_name = "update_run_status")
+    )
+    if echo_resp is None:
+      return None
+
+    _Acknowledge = Acknowledge() # predefine the output proto
+    _Acknowledge = b64_to_message(echo_resp.base64_string, _Acknowledge)
+    return _Acknowledge
 
   def on_log(self, _RunLog: RunLog) -> Acknowledge:
     echo_resp: Echo = call_rpc(
@@ -110,11 +125,11 @@ class LMAO_Stub:
     _Run = b64_to_message(echo_resp.base64_string, _Run)
     return _Run
 
-  def get_run_log(self, _Run: Run) -> RunLog:
+  def get_run_log(self, _RunLogRequest: RunLogRequest) -> RunLog:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/get_run_log",
-      Echo(message = "Run", base64_string=message_to_b64(_Run), rpc_name = "get_run_log")
+      Echo(message = "RunLogRequest", base64_string=message_to_b64(_RunLogRequest), rpc_name = "get_run_log")
     )
     if echo_resp is None:
       return None

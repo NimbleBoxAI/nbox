@@ -113,17 +113,15 @@ import os
 import re
 import inspect
 import requests
-import tabulate
 from tqdm import tqdm
-from enum import Enum
 from functools import partial
 from time import sleep, monotonic
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, Dict, Iterable, List, Tuple, Union
+from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import nbox.utils as U
-from nbox.auth import ConfigString, secret
+from nbox.auth import secret, ConfigString
 from nbox.utils import logger, SimplerTimes
 from nbox.nbxlib import operator_spec as ospec
 from nbox.nbxlib.tracer import Tracer
@@ -134,29 +132,15 @@ from nbox.framework import AirflowMixin, PrefectMixin
 from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
 from nbox.network import _get_job_data
-from nbox.jobs import Schedule, new as new_folder, Job, Serve
+from nbox.jobs import Schedule, Job, Serve
 from nbox.messages import write_binary_to_file
 from nbox.relics import RelicsNBX, RelicLocal
 from nbox.init import nbox_ws_v1
 from nbox.subway import SpecSubway
 
-
-DEFAULT_RESOURCE = Resource(
-  cpu = "100m",         # 100mCPU
-  memory = "200Mi",     # MiB
-  disk_size = "1Gi",    # GiB
-  gpu = "none",         # keep "none" for no GPU
-  gpu_count = "0",      # keep "0" when no GPU
-  timeout = 120_000,    # 2 minutes between attempts
-  max_retries = 3,      # third times the charm :P
-)
-
-# we will keep on expanding this list, note that this cannot be directly used with copytree,
-# to make it work remove the trailing slash
-FN_IGNORE = [
-  "__pycache__/", "venv/", ".git/", ".vscode/"
-]
-
+# alias
+DEFAULT_RESOURCE = ospec.DEFAULT_RESOURCE
+FN_IGNORE = ospec.FN_IGNORE
 
 
 class Operator():
@@ -281,9 +265,10 @@ class Operator():
   # 3. from a function, where we decorate an existing function and convert it to an operator
 
   @classmethod
-  def from_job(cls, job_id_or_name, workspace_id: str):
+  def from_job(cls, job_id_or_name, workspace_id: str = ""):
     """latch an existing job so that it can be called as an operator."""
     # implement this when we have the client-server that allows us to get the metadata for the job
+    workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
     if not workspace_id:
       raise DeprecationWarning("Personal workspace does not support serving")
     job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
@@ -845,13 +830,11 @@ get_schedule = lambda: None
         init_folder = folder,
         id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
         workspace_id = workspace_id,
+        _ret = True
       )
-      return self.from_job(
-        job_id_or_name = out.id,
-        workspace_id = workspace_id,
-      )
+      return self.from_job(job_id_or_name = out.id, workspace_id = workspace_id)
     elif deployment_type == ospec.OperatorType.SERVING.value:
-      out = Serve.upload(init_folder = folder, id_or_name = id_or_name, workspace_id = workspace_id)
+      out = Serve.upload(init_folder = folder, id_or_name = id_or_name, workspace_id = workspace_id, _ret = True)
 
       # get the serving object
       stub = nbox_ws_v1.workspace.u(workspace_id).deployments.u(out.id)
@@ -874,19 +857,24 @@ get_schedule = lambda: None
       logger.info("model_url: " + model_url)
       return self.from_serving(model_url, token = token)
 
-  def map(self, inputs: Union[List[Any], Tuple[Any]], timeout: int = 600) -> Iterable[Any]:
+  def map(self, inputs: Union[List[Any], Tuple[Any]], workers: int = -1) -> Iterable[Any]:
     """Take the same logic and apply it to a list of inputs, different from star_map in that it
     takes in different logic and applied different inputs. Returns results in the same order as
     inputs.
     
     In the current version runs as many workers as are the inputs."""
+    if self._op_type == ospec.OperatorType.SERVING:
+      raise NotImplementedError("What does a map call really mean for an API endpoint? Like parallel calls, try mapping a function.")
+    elif self._op_type == ospec.OperatorType.WRAP_CLS:
+      raise NotImplementedError("What does a map call really mean for a class?")
+
     # this another big ass function that manages this call for all the different types of ospec.OperatorTypes
     if len(inputs) > 10:
       raise RuntimeError(f"Too many maps: {len(inputs)}, current limit is 10")
+    workers = len(inputs) if workers == -1 else workers
+    inputs = [[x] for x in inputs]
 
-    _inputs = [[x] for x in inputs]
-    inputs = _inputs
-
+    # the main if/else tree
     if self._op_type in [ospec.OperatorType.UNSET, ospec.OperatorType.WRAP_FN]:
       import sys
       from subprocess import Popen
@@ -926,7 +914,7 @@ if __name__ == "__main__":
 
       run_tags = [U.get_random_name(True).split("-")[0] for _ in range(len(inputs))]
       U.threaded_map(
-        lambda tag, inp: U.to_pickle(inp, os.path.join(FOLDER, tag + "_input")),
+        lambda tag, inp: U.to_pickle(inp, U.join(FOLDER, tag + "_input")),
         [[x,inp] for x,inp in zip(run_tags, inputs)],
         _name = "write_inputs",
       )
@@ -962,9 +950,7 @@ if __name__ == "__main__":
           break
       
       # get the results
-      results = []
-      for tag in run_tags:
-        results.append(U.from_pickle(os.path.join(FOLDER, tag + "_output")))
+      results = U.threaded_map(lambda x: U.from_pickle(U.join(FOLDER, x + "_output")), [[x] for x in run_tags], _name = "read_outputs")
 
       # clean up
       for f in open_files:
@@ -973,9 +959,7 @@ if __name__ == "__main__":
 
     elif self._op_type == ospec.OperatorType.JOB:
       # now this is simple enough, we need to implement a waiting queue that's it
-
       _start_time = monotonic()
-
       run_tags = []
       run_tag_to_input_idx = {}
 
@@ -1069,31 +1053,7 @@ if __name__ == "__main__":
 
       logger.info(f"Finished waiting for {len(run_ids)} processes to finish in {_end_time - _start_time} seconds")
       return results
-    
-    elif self._op_type == ospec.OperatorType.SERVING:
-      raise NotImplementedError("What does a map call really mean for an API endpoint, like parallel calls?")
-    elif self._op_type == ospec.OperatorType.WRAP_CLS:
-      raise NotImplementedError("What does a map call really mean for a class, like parallel calls?")
 
   # /nbx
-
-class Machine():
-  def __init__(self, parent_op: Operator, resource: Resource):
-    """Simple class to scope the operations to a specific resource"""
-    self.parent_op = parent_op
-    self.resource = resource
-
-    # these are all the ops that are to be run on this machine as a group
-    self.ops_list = []
-
-  def add_child(self, op: Operator):
-    self.ops_list.append(op)
-
-  def __enter__(self):
-    self.parent_op._current_resource = self.resource
-
-  def __exit__(self, *args):
-    self.parent_op._current_resource = None
-
 
 operator = Operator.fn # convinience

@@ -14,12 +14,11 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12proto/common.proto\"/\n\x0b\x41\x63knowledge\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"(\n\x06\x41WS_S3\x12\x0e\n\x06\x62ucket\x18\x01 \x01(\t\x12\x0e\n\x06region\x18\x02 \x01(\tb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12proto/common.proto\"/\n\x0b\x41\x63knowledge\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\tb\x06proto3')
 
 
 
 _ACKNOWLEDGE = DESCRIPTOR.message_types_by_name['Acknowledge']
-_AWS_S3 = DESCRIPTOR.message_types_by_name['AWS_S3']
 Acknowledge = _reflection.GeneratedProtocolMessageType('Acknowledge', (_message.Message,), {
   'DESCRIPTOR' : _ACKNOWLEDGE,
   '__module__' : 'proto.common_pb2'
@@ -27,18 +26,9 @@ Acknowledge = _reflection.GeneratedProtocolMessageType('Acknowledge', (_message.
   })
 _sym_db.RegisterMessage(Acknowledge)
 
-AWS_S3 = _reflection.GeneratedProtocolMessageType('AWS_S3', (_message.Message,), {
-  'DESCRIPTOR' : _AWS_S3,
-  '__module__' : 'proto.common_pb2'
-  # @@protoc_insertion_point(class_scope:AWS_S3)
-  })
-_sym_db.RegisterMessage(AWS_S3)
-
 if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
   _ACKNOWLEDGE._serialized_start=22
   _ACKNOWLEDGE._serialized_end=69
-  _AWS_S3._serialized_start=71
-  _AWS_S3._serialized_end=111
 # @@protoc_insertion_point(module_scope)

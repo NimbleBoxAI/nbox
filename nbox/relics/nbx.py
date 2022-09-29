@@ -51,11 +51,7 @@ def get_relic_file(fpath: str, username: str, workspace_id: str):
 
 @lru_cache()
 def _get_stub():
-  # url = "https://app.nimblebox.ai/relics"
-  # if "app.c" in secret.get("nbx_url"):
-  #   url = "https://app.c.nimblebox.ai/relics"
-  # elif "app.rc" in secret.get("nbx_url"):
-  #   url = "https://app.rc.nimblebox.ai/relics"
+  # url = "http://0.0.0.0:8081/relics" # debug
   url = secret.get("nbx_url") + "/relics"
   logger.debug("Connecting to RelicStore at: " + url)
   session = deepcopy(nbox_ws_v1._session)
@@ -79,14 +75,16 @@ class RelicsNBX(BaseStore):
 
   def __init__(self, relic_name: str, workspace_id: str = "", create: bool = False):
     self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    # print("ASDFSADFASDFASfd", self.workspace_id, relic_name, create)
     self.relic_name = relic_name
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
     self.stub = _get_stub()
-    _relic = self.stub.get_relic_details(RelicProto(workspace_id=workspace_id, name=relic_name,))
-    if  not _relic and create:
+    _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
+    # print("asdfasdfasdfasdf", _relic, not _relic and create)
+    if not _relic and create:
       # this means that a new one will have to be created
       logger.debug(f"Creating new relic {relic_name}")
-      self.relic = self.stub.create_relic(CreateRelicRequest(workspace_id=workspace_id, name = relic_name,))
+      self.relic = self.stub.create_relic(CreateRelicRequest(workspace_id=self.workspace_id, name = relic_name,))
       logger.debug(f"Created new relic {self.relic}")
     else:
       self.relic = _relic
