@@ -12,7 +12,7 @@ import sys
 from typing import Union
 import jinja2
 import tabulate
-from functools import partial
+from functools import lru_cache, partial
 from datetime import datetime, timedelta, timezone
 from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.field_mask_pb2 import FieldMask
@@ -376,6 +376,7 @@ around the NBX-Jobs gRPC API.
 """
 ################################################################################
 
+@lru_cache(16)
 def _get_job_data(id_or_name, *, workspace_id: str = ""):
   # get stub
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)

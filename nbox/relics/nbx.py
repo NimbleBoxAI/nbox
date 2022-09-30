@@ -73,11 +73,20 @@ def print_relics(workspace_id: str = ""):
 class RelicsNBX(BaseStore):
   list = staticmethod(print_relics)
 
-  def __init__(self, relic_name: str, workspace_id: str = "", create: bool = False):
+  def __init__(self, relic_name: str, workspace_id: str = "", create: bool = False, prefix: str = ""):
+    """
+    The client for NBX-Relics.
+
+    Args:
+      relic_name (str): The name of the relic.
+      workspace_id (str): The workspace ID, if not provided, will be one in global config.
+      create (bool): Create the relic if it does not exist.
+      prefix (str): The prefix to use for all files in this relic. If provided all the files are uploaded and downloaded with this prefix.
+    """
     self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
-    # print("ASDFSADFASDFASfd", self.workspace_id, relic_name, create)
     self.relic_name = relic_name
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
+    self.prefix = prefix.strip("/")
     self.stub = _get_stub()
     _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
     # print("asdfasdfasdfasdf", _relic, not _relic and create)
@@ -95,6 +104,8 @@ class RelicsNBX(BaseStore):
   def _upload_relic_file(self, local_path: str, relic_file: RelicFile):
     if not relic_file.relic_name:
       raise ValueError("relic_name not set in RelicFile")
+    if self.prefix:
+      relic_file.name = f"{self.prefix}/{relic_file.name}"
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Uploading {local_path} to {relic_file.name}")
@@ -104,7 +115,6 @@ class RelicsNBX(BaseStore):
     
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
-    logger.debug(f"URL: {out.url}")
     r = requests.post(
       url = out.url,
       data = out.body,
@@ -118,6 +128,8 @@ class RelicsNBX(BaseStore):
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
+    if self.prefix:
+      relic_file.name = self.prefix + "/" + relic_file.name
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Downloading {local_path} from S3 ...")
@@ -127,7 +139,7 @@ class RelicsNBX(BaseStore):
     
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
-    logger.debug(f"URL: {out.url}")
+    # logger.debug(f"URL: {out.url}")
     with requests.get(out.url, stream=True) as r:
       r.raise_for_status()
       total_size = 0

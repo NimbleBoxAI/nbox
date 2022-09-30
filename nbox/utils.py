@@ -119,8 +119,6 @@ def get_logger():
 logger = get_logger() # package wide logger
 
 def log_traceback():
-  # f = io.StringIO("")
-  # traceback.print_exception(*sys.exc_info(), file = f)
   f = traceback.format_exc()
   for _l in f.splitlines():
     logger.error(_l.rstrip())

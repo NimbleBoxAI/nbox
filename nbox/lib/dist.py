@@ -38,7 +38,7 @@ class LocalNBXLet(Operator):
 class NBXLet(Operator):
   def __init__(self, op: Operator):
     """The Operator that runs the things on any pod on the NimbleBox Jobs + Deploy platform.
-    Name mimics the kubelet, dockerlet, raylet, etc"""
+    Name a parody of kubelet, dockerlet, raylet, etc"""
     super().__init__()
     self.op = op
 
@@ -73,7 +73,7 @@ class NBXLet(Operator):
         _lmaoConfig.kv = init_data
         args = _lmaoConfig.kv["args"]
         kwargs = _lmaoConfig.kv["kwargs"]
-        print(_lmaoConfig.kv)
+        logger.info(_lmaoConfig.kv)
       else:
         # check if there is a specific relic for this job
         relic = RelicsNBX("cache", workspace_id)
@@ -88,11 +88,16 @@ class NBXLet(Operator):
       # call the damn thing
       out = self.op(*args, **kwargs)
 
-      # save the output
-      _out = f"{job_id}/return"
-      if run_tag:
-        _out += f"_{run_tag}"
+      # save the output to the relevant place
+      if run_tag.startswith(LMAO_JOB_TYPE_PREFIX):
+        _out = fp+"/return.pkl"
+      else:
+        _out = f"{job_id}/return"
+        if run_tag:
+          _out += f"_{run_tag}"
       relic.put_object(_out, out)
+
+      # last step mark as completed
       status = Job.Status.COMPLETED
     except Exception as e:
       U.log_traceback()
