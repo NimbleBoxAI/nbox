@@ -206,8 +206,9 @@ class Lmao():
   def __init__(
     self,
     project_name: Optional[str] = "",
-    metadata: Dict[str, Any] = {},
     project_id: Optional[str] = "",
+    experiment_id: Optional[str] = "",
+    metadata: Dict[str, Any] = {},
     save_to_relic: bool = False,
     enable_system_monitoring: bool = False,
     workspace_id: str = "",
@@ -222,19 +223,23 @@ class Lmao():
 
     if _lmaoConfig.kv:
       # load all the values from the config
-      workspace_id = _lmaoConfig.kv["workspace_id"]
-      project_id = _lmaoConfig.kv["project_id"]
       project_name = _lmaoConfig.kv["project_name"]
+      project_id = _lmaoConfig.kv["project_id"]
       experiment_id = _lmaoConfig.kv["experiment_id"]
       metadata = _lmaoConfig.kv["metadata"]
       save_to_relic = _lmaoConfig.kv["save_to_relic"]
       enable_system_monitoring = _lmaoConfig.kv["enable_system_monitoring"]
+      workspace_id = _lmaoConfig.kv["workspace_id"]
 
-    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    self.project_name = project_name
+    self.project_id = project_id
+    self.experiment_id = experiment_id
+    self.metadata = metadata
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
-    self.experiment_id = experiment_id
-
+    self.workspace_id = workspace_id
+    
+    # now set the supporting keys
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
     self._total_logged_elements = 0 # this variable keeps track for logging
     self.completed = False
@@ -361,7 +366,7 @@ class Lmao():
 
     self.project_name = project_name
     self.project_id = project_id
-    self.config = config
+    self.metadata = config
 
     self.run = run_details
     logger.info(f"Created a new LMAO run")
@@ -389,6 +394,7 @@ class Lmao():
 
   @lru_cache(maxsize=1)
   def get_relic(self):
+    """Get the underlying Relic for more advanced usage patterns."""
     return RelicsNBX("experiments", self.workspace_id, create = True, prefix = f"{self.project_name}/{self.run.experiment_id}")
 
   def log(self, y: Dict[str, Union[int, float, str]], step = None, *, log_type: str = RunLog.LogType.USER):
@@ -457,7 +463,7 @@ class Lmao():
     self.lmao.on_save(_FileList = fl)
 
   def end(self):
-    """End thr run to declare it complete. This is more of a convinience function than anything else. For example when you
+    """End the run to declare it complete. This is more of a convinience function than anything else. For example when you
     are monitoring a live API you may never know when the experiment is complete. This function locks the experiment name
     so it can't be modified."""
     if self.completed:
@@ -586,6 +592,7 @@ lmao trigger project_name_or_id
 lmao open project_name_or_id
 """
 
+@lru_cache()
 def get_project_name_id(project_name_or_id: str, workspace_id: str):
   username = secret.get("username")
   lmao_stub = get_lmao_stub(username, workspace_id)

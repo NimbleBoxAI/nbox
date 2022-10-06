@@ -18,18 +18,37 @@ class CreateRelicRequest(google.protobuf.message.Message):
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
     REGION_FIELD_NUMBER: builtins.int
+    NBX_INTEGRATION_TOKEN_FIELD_NUMBER: builtins.int
+    NBX_RESOURCE_ID_FIELD_NUMBER: builtins.int
+    BUCKET_META_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
     """the main separation layer"""
 
     name: typing.Text
     region: typing.Text
+    nbx_integration_token: typing.Text
+    """deprecated, will be removed soon"""
+
+    nbx_resource_id: typing.Text
+    """this is the resource id for which will be paired with integration token"""
+
+    @property
+    def bucket_meta(self) -> proto.relics_pb2.BucketMetadata:
+        """If the bucket is in their platform then they tell us that they want one there
+        else we are going to assume that they want one in our platform
+        """
+        pass
     def __init__(self,
         *,
         workspace_id: typing.Text = ...,
         name: typing.Text = ...,
         region: typing.Text = ...,
+        nbx_integration_token: typing.Text = ...,
+        nbx_resource_id: typing.Text = ...,
+        bucket_meta: typing.Optional[proto.relics_pb2.BucketMetadata] = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["name",b"name","region",b"region","workspace_id",b"workspace_id"]) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","name",b"name","nbx_integration_token",b"nbx_integration_token","nbx_resource_id",b"nbx_resource_id","region",b"region","workspace_id",b"workspace_id"]) -> None: ...
 global___CreateRelicRequest = CreateRelicRequest
 
 class ListRelicsRequest(google.protobuf.message.Message):
@@ -37,6 +56,7 @@ class ListRelicsRequest(google.protobuf.message.Message):
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     RELIC_NAME_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
+    RELIC_ID_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
     """the main separation layer"""
 
@@ -46,13 +66,17 @@ class ListRelicsRequest(google.protobuf.message.Message):
     page_no: builtins.int
     """the page number for pagination needs"""
 
+    relic_id: typing.Text
+    """the ID of the parent relic"""
+
     def __init__(self,
         *,
         workspace_id: typing.Text = ...,
         relic_name: typing.Text = ...,
         page_no: builtins.int = ...,
+        relic_id: typing.Text = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["page_no",b"page_no","relic_name",b"relic_name","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["page_no",b"page_no","relic_id",b"relic_id","relic_name",b"relic_name","workspace_id",b"workspace_id"]) -> None: ...
 global___ListRelicsRequest = ListRelicsRequest
 
 class ListRelicsResponse(google.protobuf.message.Message):
