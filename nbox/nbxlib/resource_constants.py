@@ -9,12 +9,14 @@ class PresetMachineConfig(object):
     gpu: str = "0",
     gpu_name: str = "none",
     disk_size: str = "10Gi",
+    metadata: dict = {}
   ) -> None:
     self.cpu = cpu
     self.memory = memory
     self.gpu = gpu
     self.gpu_name = gpu_name
     self.disk_size = disk_size
+    self.metadata = metadata
 
   def set_gpu(self, gpu: Union[str, int], gpu_name: str) -> None:
     if isinstance(gpu, int):
@@ -39,6 +41,7 @@ class PresetMachineConfig(object):
 
   @property
   def resource(self) -> Resource:
+    """Resource object as needed by the NBX Jobs + Deploy Pods"""
     return Resource(
       cpu = self.cpu,
       memory = self.memory,
@@ -48,6 +51,11 @@ class PresetMachineConfig(object):
       max_retries = 2,
       timeout = 120_000,
     )
+
+  @property
+  def build_resource(self) -> dict:
+    """Resource object as needed by the NBX Build Instances"""
+    pass
 
   def __call__(
     self,
