@@ -19,7 +19,7 @@ except ImportError:
   from pip._vendor.packaging.version import parse
 
 
-from nbox.auth import secret
+from nbox.auth import secret, ConfigString
 from nbox.utils import logger, env
 from nbox.subway import Sub30
 from nbox.hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
@@ -104,3 +104,5 @@ def nbox_version_update():
 
 if not env.NBOX_NO_CHECK_VERSION():
   nbox_version_update()
+
+logger.info(f"Current workspace id: {secret.get(ConfigString.workspace_id)} ({secret.get(ConfigString.workspace_name)})")

@@ -45,8 +45,8 @@ class PresetMachineConfig(object):
     return Resource(
       cpu = self.cpu,
       memory = self.memory,
-      gpu = self.gpu,
-      gpu_name = self.gpu_name,
+      gpu_count = self.gpu,
+      gpu = self.gpu_name,
       disk_size = self.disk_size,
       max_retries = 2,
       timeout = 120_000,
@@ -55,7 +55,18 @@ class PresetMachineConfig(object):
   @property
   def build_resource(self) -> dict:
     """Resource object as needed by the NBX Build Instances"""
-    pass
+    raise NotImplementedError("In works")
+    return {
+      "cpu": self.cpu,
+      "gpu": self.gpu_name,
+      "gpu_count": self.gpu,
+      "auto_shutdown": False,
+      "dedicated_hw": True,
+      "zone": "asia-east1-a",
+    }
+
+  def __repr__(self) -> str:
+    return str(self.resource)
 
   def __call__(
     self,

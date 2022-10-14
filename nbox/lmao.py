@@ -634,8 +634,11 @@ class LmaoCLI:
     resource_max_retries: int = 2,
 
     # the following arguments are used for the initialisation of lmao class
-    save_to_relic: bool = False,
+    save_to_relic: bool = True,
     enable_system_monitoring: bool = False,
+
+    # the following things are needed for the different modules in the process
+    relics_kwargs: Dict[str, Any] = {},
 
     # any other things to pass to the function / class being called
     **run_kwargs
@@ -660,7 +663,7 @@ class LmaoCLI:
       **run_kwargs: These are the kwargs that will be passed to your Operator.
     """
     # reconstruct the entire CLI command so we can show it in the UI
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     reconstructed_cli_comm = (
       f"nbx lmao upload '{init_path}' '{project_name_or_id}'"
       f" --workspace_id '{workspace_id}'"
@@ -678,6 +681,16 @@ class LmaoCLI:
       reconstructed_cli_comm += " --untracked"
     if untracked_no_limit:
       reconstructed_cli_comm += " --untracked_no_limit"
+    if save_to_relic:
+      reconstructed_cli_comm += " --save_to_relic"
+    if enable_system_monitoring:
+      reconstructed_cli_comm += " --enable_system_monitoring"
+
+    # uncommenting these since it can contain sensitive information, kept just in case for taking dictionaries as input
+    # if relics_kwargs:
+    #   rks = str(relics_kwargs).replace("'", "")
+    #   reconstructed_cli_comm += f" --relics_kwargs '{rks}'"
+    
     for k, v in run_kwargs.items():
       if type(v) == bool:
         reconstructed_cli_comm += f" --{k}"
@@ -705,12 +718,9 @@ class LmaoCLI:
       raise ValueError()
 
     # first step is to get all the relevant information from the DB
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     project_name, project_id = get_project_name_id(project_name_or_id, workspace_id)
     logger.info(f"Project: {project_name} ({project_id})")
-    job = Job("nbxj_" + project_name[:15], workspace_id = workspace_id)
-    relic = RelicsNBX(LMAO_RELIC_NAME, workspace_id = workspace_id, create = True)
-    lmao_stub = get_lmao_stub(secret.get("username"), workspace_id)
 
     # create a call init run and get the experiment metadata
     init_folder, _ = os.path.split(init_path)
@@ -730,6 +740,8 @@ class LmaoCLI:
       }
     }
 
+    job = Job("nbxj_" + project_name[:15], workspace_id = workspace_id)
+    lmao_stub = get_lmao_stub(secret.get("username"), workspace_id)
     run = lmao_stub.init_run(InitRunRequest(
       agent_details = AgentDetails(
         type = AgentDetails.NBX.JOB,
@@ -740,6 +752,15 @@ class LmaoCLI:
       project_id = project_id,
     ))
     logger.info(f"Run ID: {run.experiment_id}")
+
+    # connect to the relic
+    r_keys = set(relics_kwargs.keys())
+    valid_keys = {"bucket_name", "region", "nbx_resource_id", "nbx_integration_token"}
+    extra_keys = r_keys - valid_keys
+    if extra_keys:
+      logger.error("Unknown arguments found:\n  * " + "\n  * ".join(extra_keys))
+      raise RuntimeError("Unknown arguments found in the Relic")
+    relic = RelicsNBX(LMAO_RELIC_NAME, workspace_id = workspace_id, create = True, **relics_kwargs)
 
     # create a git patch and upload it to relics
     if git_det:
@@ -761,7 +782,6 @@ class LmaoCLI:
               logger.warning("  Fix: use --untracked-no-limit to upload all files")
               continue
             zip_file.write(f, arcname = f)
-      relic = RelicsNBX(LMAO_RELIC_NAME, workspace_id = workspace_id, create = True)
       relic.put_to(_zf, f"{project_name}/{run.experiment_id}/git.zip")
       os.remove(_zf)
       os.remove(patch_file)

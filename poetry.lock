@@ -302,7 +302,7 @@ python-versions = ">=3.6.1"
 typing-extensions = ">=3.7.4.3"
 
 [package.extras]
-dotenv = ["python-dotenv (>=0.10.4)"]
+dotenv = ["python-dotenv (>=0.10.5)"]
 email = ["email-validator (>=1.0.3)"]
 
 [[package]]

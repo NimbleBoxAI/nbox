@@ -27,6 +27,7 @@ from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from nbox.messages import rpc, write_binary_to_file
 from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo, Serve, Job
 from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
+from nbox.nbxlib.operator_spec import OperatorType as OT
 
 
 #######################################################################################################################
@@ -65,13 +66,13 @@ def deploy_serving(
     data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
     serving_id = data["deployment_id"]
     logger.info(f"Serving ID: {serving_id}")
-  model_name = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
-  logger.debug(f"Model name: {model_name}")
+  model_name = U.get_random_name().replace("-", "_")
+  logger.info(f"Model name: {model_name}")
 
   # zip init folder
   # if git: -> git commit + git patch apply [+ git untracked]
 
-  zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name)
+  zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name, type = OT.SERVING)
   return _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
 
 
@@ -98,7 +99,9 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_
   logger.debug(f"deployment_id: {deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
-  logger.debug("Uploading model to S3 ...")
+  # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
+  # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
+  logger.info(f"Uploading model to S3 ... (fs: {file_size/1024/1024:0.3f} MB)")
   r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(zip_path, "rb"))})
   status = r.status_code == 204
   logger.debug(f"Upload status: {status}")
@@ -109,14 +112,14 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_
 
   # write out all the commands for this deployment
   logger.info("API will soon be hosted, here's how you can use it:")
-  _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
-  _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
-  _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
+  # _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
+  # _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
+  # _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
   _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
-  logger.info(f" [python] - {_api}")
-  logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
-  logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
-  logger.info(f"   [page] - {_webpage}")
+  # logger.info(f" [python] - {_api}")
+  # logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
+  # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
+  logger.info(f"  [page] - {_webpage}")
 
   return Serve(id = serving_id, model_id = model_id, workspace_id = workspace_id)
 
@@ -190,7 +193,7 @@ def deploy_job(
     return job_proto
 
   # zip the entire init folder to zip
-  zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id)
+  zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id, type = OT.JOB)
   return _upload_job_zip(zip_path, job_proto)
 
 def _upload_job_zip(zip_path: str, job_proto: JobProto):
@@ -233,7 +236,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
-  logger.debug("Uploading model to S3 ...")
+  logger.info(f"Uploading model to S3 ... (fs: {job_proto.code.size/1024/1024:0.3f} MB)")
   r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
   try:
     r.raise_for_status()
@@ -272,9 +275,9 @@ Function related to both NBX-Serving and NBX-Jobs
 """
 #######################################################################################################################
 
-def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
+def zip_to_nbox_folder(init_folder, id, workspace_id, type, **jinja_kwargs):
   # zip all the files folder
-  all_f = U.get_files_in_folder(init_folder)
+  all_f = U.get_files_in_folder(init_folder, followlinks = False)
 
   # find a .nboxignore file and ignore items in it
   to_ignore_pat = []
@@ -290,10 +293,18 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
             to_ignore_pat.append(pat)
       break
 
+  # print(all_f)
+
+  # print("to_ignore_pat:", to_ignore_pat)
+  # print("to_ignore_folder:", to_ignore_folder)
+
   # two different lists for convinience
   to_remove = []
   for ignore in to_ignore_pat:
-    x = fnmatch.filter(all_f, ignore)
+    if "*" in ignore:
+      x = fnmatch.filter(all_f, ignore)
+    else:
+      x = [f for f in all_f if f.endswith(ignore)]
     to_remove.extend(x)
   to_remove_folder = []
   for ignore in to_ignore_folder:
@@ -303,6 +314,10 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
   to_remove += to_remove_folder
   all_f = [x for x in all_f if x not in to_remove]
   logger.info(f"Will zip {len(all_f)} files")
+  # print(all_f)
+  # exit()
+  # print(to_remove)
+  # exit()
 
   # zip all the files folder
   zip_path = U.join(gettempdir(), f"nbxjd_{id}@{workspace_id}.nbox")
@@ -332,5 +347,12 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, **jinja_kwargs):
       })
       f2.write(code)
     # print(os.stat(exe_path))
+
+    # currently the serving pod does not come with secrets file so we need to make a temporary fix while that
+    # feature is being worked on
+    if type == OT.SERVING:
+      secrets_path = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
+      zip_file.write(secrets_path, arcname = ".nbx/secrets.json")
+
     zip_file.write(exe_path, arcname = "exe.py")
   return zip_path
