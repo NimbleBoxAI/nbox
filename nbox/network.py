@@ -70,8 +70,6 @@ def deploy_serving(
   logger.info(f"Model name: {model_name}")
 
   # zip init folder
-  # if git: -> git commit + git patch apply [+ git untracked]
-
   zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name, type = OT.SERVING)
   return _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
 

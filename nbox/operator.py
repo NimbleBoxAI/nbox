@@ -99,11 +99,14 @@ run in distributed fashion.
 - `@operator` decorator on your class and it will be run as a serving by default, you want that.
 
 ## Documentation
+
 """
 # Some parts of the code are based on the pytorch nn.Module class
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # modifications: research@nimblebox.ai 2022
 
+from functools import partial
+import json
 import os
 import re
 import inspect
@@ -133,9 +136,13 @@ from nbox.relics import RelicsNBX, RelicLocal
 from nbox.init import nbox_ws_v1
 from nbox.subway import SpecSubway
 
+
 # alias
 DEFAULT_RESOURCE = ospec.DEFAULT_RESOURCE
 FN_IGNORE = ospec.FN_IGNORE
+
+def generic_method(fn, base_url, session, *args, **kwargs):
+  r = session.post(f"{base_url}/forward/{fn}")
 
 
 class Operator():
@@ -438,7 +445,7 @@ class Operator():
 
       # now we can call the function
       data = serving_stub.u(fn)(**_data)
-      
+
       # convert to usable values
       if not data["success"]:
         raise Exception(data["message"])
@@ -456,6 +463,7 @@ class Operator():
     # create the class and override some values to make more sense
     _op = cls()
     _op.__qualname__ = "serving_" + data["name"]
+
     _op.forward = forward
     _op._op_type = ospec.OperatorType.SERVING
     _op._op_spec = ospec._ServingSpec(
@@ -499,6 +507,7 @@ class Operator():
       wrap_obj = obj,
       init_ak = (args, kwargs)
     )
+
     return self
 
   def _fn(self, fn):
@@ -510,6 +519,7 @@ class Operator():
     self.__qualname__ = "fn_" + fn.__name__
     self._op_type = ospec.OperatorType.WRAP_FN
     self._op_spec = ospec._WrapFnSpec(fn_name = fn.__name__, wrap_obj = fn)
+
     return self
 
   # /mixin
@@ -590,6 +600,7 @@ class Operator():
     raise ValueError(f"Operator cannot iterate")
 
   def __contains__(self, key):
+
     if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__contains__", key)
     if self._op_type in [ospec.OperatorType.WRAP_CLS]:
@@ -671,7 +682,6 @@ class Operator():
       self._tracer(self.node)
 
     # if user has enabled _tracking, then we will store the input, output values as well
-    
     return out
 
   def forward(self):
@@ -735,10 +745,11 @@ class Operator():
       deployment_type (str, optional): Defaults to 'serving' if WRAP_CLS else 'job'. The type of deployment to create.
       resource (Resource, optional): The resource to deploy to, uses a reasonable default.
     """
+
     if not workspace_id:
       raise ValueError("Must provide a workspace_id")
 
-    # go over reasonable checks for deployment
+# go over reasonable checks for deployment
     if deployment_type == None:
       if self._op_type in [ospec.OperatorType.WRAP_CLS, ospec.OperatorType.SERVING]:
         deployment_type = "serving"
@@ -761,7 +772,6 @@ class Operator():
     # create a temporary directory to store all the files
     # copy over all the files and wait for it, else the changes below won't be reflected
     # dude damn, how did I not know this: https://dev.to/ackshaey/macos-vs-linux-the-cp-command-will-trip-you-up-2p00
-
     # so basically till now all we know is that `from fp import name` and `name()`. This process can now
     # be used to create a custom `nbx_user.py` file from which `exe.py` can import the three functions
     # and use them the conventional way. the three functions could simply be a router and the real operator
