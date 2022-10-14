@@ -368,7 +368,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str = "")
     i(str): The instance to connect to
     pwd (str): password to connect to that instance.
   """
-  workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id.value)
+  workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id)
   connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)
 
   try:

@@ -22,6 +22,8 @@ from nbox.utils import join, logger
 
 class ConfigString(Enum):
   workspace_id = "config.global.workspace_id"
+  workspace_name = "config.global.workspace_name"
+  cache = "cache"
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -42,19 +44,41 @@ class NBXClient:
         webbrowser.open(_secrets_url)
         access_token = getpass("Access Token: ")
       
+      sess = requests.Session()
+      sess.headers = {"Authorization": f"Bearer {access_token}"}
+      
       # Once we have the access token, we can get the secrets
-      r = requests.get(f"{nbx_url}/api/v1/user/account_details", headers={"Authorization": f"Bearer {access_token}"})
+      _u = f"{nbx_url}/api/v1"
+      r = sess.get(_u+"/user/account_details")
       r.raise_for_status()
       try:
-        username = r.json()["data"]["username"]
-        email = r.json()["data"]["email"]
+        data = r.json()["data"]
+        username = data["username"]
+        email = data["email"]
       except Exception as e:
         logger.error(f"Could not get the username and email from the response")
         logger.error(f"This should not have happened, please contact NimbleBox support.")
         raise e
 
       workspace_id = input("Set the default workspace ID (blank means personal): ").strip()
-      if not workspace_id:
+      workspace_details = {"workspace_name": ""}
+      
+      if workspace_id:
+        # fetch some more data about the workspace
+        r = sess.get(_u+"/workspace")
+        r.raise_for_status()
+        try:
+          data = r.json()["data"]
+          workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, data))
+          if len(workspace_details) == 0:
+            logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
+            raise Exception("Invalid workspace ID")
+          workspace_details = workspace_details[0]
+        except Exception as e:
+          logger.error(f"Could not get the workspace details from the response")
+          logger.error(f"This should not have happened, please contact NimbleBox support.")
+          raise e
+      else:
         workspace_id = "personal"
       logger.info(f"Setting the default workspace ID to: {workspace_id}")
 
@@ -66,8 +90,14 @@ class NBXClient:
         "username": username,
 
         # config values that can be set by the user for convenience
-        ConfigString.workspace_id.value: workspace_id
+        ConfigString.workspace_id.value: workspace_id,
+        ConfigString.workspace_name.value: workspace_details["workspace_name"],
+
+        # now cache the information about this workspace
+        ConfigString.cache.value: {workspace_id: workspace_details},
       }
+      # for k,v in self.secrets.items():
+      #   print(type(k), k, "::", type(v), v)
       with open(self.fp, "w") as f:
         f.write(repr(self))
       os.makedirs(U.join(U.env.NBOX_HOME_DIR(), ".cache"), exist_ok=True)
@@ -81,12 +111,17 @@ class NBXClient:
   def __repr__(self):
     return json.dumps(self.secrets, indent=2)
 
-  def get(self, item, default=None):
-    # with open(self.fp, "r") as f:
-    #   self.secrets = json.load(f)
+  def get(self, item, default=None, reload: bool = False):
+    if item in tuple(ConfigString):
+      item = item.value
+    if reload:
+      with open(self.fp, "r") as f:
+        self.secrets = json.load(f)
     return self.secrets.get(item, default)
 
   def put(self, item, value, persist: bool = False):
+    if item in tuple(ConfigString):
+      item = item.value
     self.secrets[item] = value
     if persist:
       with open(self.fp, "w") as f:

@@ -1,109 +1,104 @@
 """
-``Operators`` is how you write NBX-Jobs. If you are familiar with pytorch, then usage is
+`Operators` is how you write NBX-Jobs. If you are familiar with pytorch, then usage is
 exactly same, for others here's a quick recap:
 
-.. code-block:: python
+```python
+class MyOperator(Operator):
+  def __init__(self, a: int, b: str):
+    super().__init__()
+    self.a: int = a
+    self.b: Operator = MyOtherOperator(b) # nested calling
+  
+  def forward(self, x: int) -> int:
+    y = self.a + x
+    y = self.b(y) + x # nested calling
+    return y
 
-  class MyOperator(Operator):
-    def __init__(self, a: int, b: str):
-      super().__init__()
-      self.a: int = a
-      self.b: Operator = MyOtherOperator(b) # nested calling
-    
-    def forward(self, x: int) -> int:
-      y = self.a + x
-      y = self.b(y) + x # nested calling
-      return y
+job = MyOperator(1, "hello") # define once
+res = job(2)                 # use like python, screw DAGs
+```
 
-  job = MyOperator(1, "hello") # define once
-  res = job(2)                 # use like python, screw DAGs
-
-We always wanted to ensure that there is least developer resistance in the way of using ``Operator``
-so there is a convinient ``operator`` decorator that can wrap any function or class and extend all
-the powerful methods available in the ``Operator`` object, like ``.deploy()``. By default every
+We always wanted to ensure that there is least developer resistance in the way of using `Operator`
+so there is a convinient `operator` decorator that can wrap any function or class and extend all
+the powerful methods available in the `Operator` object, like `.deploy()`. By default every
 wrapped function is run as a Job.
 
-.. code-block:: python
+```python
+@operator()
+def foo(i: float = 4):
+  return i * i
 
-  @operator()
-  def foo(i: float = 4):
-    return i * i
+# to deploy the operator 
+if __name__ == "__main__":
+  # pass deployment_type = "serving" to make an API
+  foo_remote = foo.deploy('workspace-id')
+  assert foo_remote() == foo()
+  assert foo_remote(10) == foo(10)
+```
 
-  # to deploy the operator 
-  if __name__ == "__main__":
-    # pass deployment_type = "serving" to make an API
-    foo_remote = foo.deploy('workspace-id')
-    assert foo_remote() == foo()
-    assert foo_remote(10) == foo(10)
-
-And you can make simple stateful object like classes using ``@operator`` decorator by making it
+And you can make simple stateful object like classes using `@operator` decorator by making it
 an API endpoint.
 
-.. code-block:: python
+```python
+@operator()
+class Bar:
+  def __init__(self, x: int = 1):
+    self.x = x
 
-  @operator()
-  class Bar:
-    def __init__(self, x: int = 1):
-      self.x = x
+  def inc(self):
+    self.x += 1
 
-    def inc(self):
-      self.x += 1
+  def getvalue(self):
+    return self.x
 
-    def getvalue(self):
-      return self.x
+  def __getattr__(self, k: str):
+    # simple echo to demonstrate that underlying python object methods can
+    # also be accessed over the internet
+    return str
 
-    def __getattr__(self, k: str):
-      # simple echo to demonstrate that underlying python object methods can
-      # also be accessed over the internet
-      return str
+if __name__ == "__main__":
+  bar_remote = Bar.deploy('workspace-id')
+  
+  # increment the numbers
+  bar.inc(); bar_remote.inc()
 
-  if __name__ == "__main__":
-    bar_remote = Bar.deploy('workspace-id')
-    
-    # increment the numbers
-    bar.inc(); bar_remote.inc()
+  # directly access the values, no need for futures
+  assert bar.x == bar_remote.x
 
-    # directly access the values, no need for futures
-    assert bar.x == bar_remote.x
+  print(bar.jj_guverner, bar_remote.jj_guverner)
+```
 
-    print(bar.jj_guverner, bar_remote.jj_guverner)
+If you want to use the APIs for deployed jobs and servings (nbox.Jobs)[nbox.jobs.html] is a better documentation.
 
-If you want to use the APIs for deployed jobs and servings `nbox.Jobs <nbox.jobs.html>`_ is a better documentation.
-
-
-Engineering
------------
+## Engineering
 
 Fundamentally operators act as a wrapper on user code, sometime abstracting away functions
-by breaking them into ``__init__``s and ``forward``s. But this is a simpler way to wrap
+by breaking them into `__init__`s and `forward`s. But this is a simpler way to wrap
 user function than letting users wrap their own function. It is easy to get false positives,
-and so we explicitly expand things in two. These operators are like ``torch.nn.Modules``
+and so we explicitly expand things in two. These operators are like `torch.nn.Modules`
 spiritually as well because modules manage the underlying weights and operators manage the
 underlying user logic.
 
 Operators are combination of several subsystems that are all added in the same class, though
 certainly if we come up with that high abstraction we will refactor this:
 
-#. tree: All operators are really treated like a tree meaning that the execution is nested\
-    and the order of execution is determined by the order of the operators in the tree. DAGs\
-    are fundamentally just trees with some nodes spun togeather, to execute only once.
-#. deploy, ...: All the services in NBX-Jobs.
-#. get_nbx_flow: which is the static code analysis system to understand true user intent and\
-    if possible (and permission of the user) optimise the logic.
+- tree: All operators are really treated like a tree meaning that the execution is nested and the order of execution is
+  determined by the order of the operators in the tree. DAGs are fundamentally just trees with some nodes spun together,
+  to execute only once.
+- deploy, ...: All the services in NBX-Jobs.
+- get_nbx_flow: which is the static code analysis system to understand true user intent and if possible (and permission of
+  the user) optimise the logic.
 
+## Tips
 
-Tips
-----
-
-``Operators`` are built to be the abstract equivalent of any computation so code can be easily
+`Operators` are built to be the abstract equivalent of any computation so code can be easily
 run in distributed fashion.
 
-#. Use Operator directly as a function as much as possible, it's the simplest way to use it.
-#. ``@operator`` decorator on your function and it will be run as a job by default, you want that.
-#. ``@operator`` decorator on your class and it will be run as a serving by default, you want that.
+- Use Operator directly as a function as much as possible, it's the simplest way to use it.
+- `@operator` decorator on your function and it will be run as a job by default, you want that.
+- `@operator` decorator on your class and it will be run as a serving by default, you want that.
 
-Documentation
--------------
+## Documentation
 """
 # Some parts of the code are based on the pytorch nn.Module class
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
@@ -163,6 +158,7 @@ class Operator():
   # unless explicitly modified by `chief.machine.Machine`
   _current_resource = None
   _op_to_resource_map = {}
+  _operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
 
   def __init__(self) -> None:
     """Create an operator, which abstracts your code into sharable, bulding blocks which
@@ -197,7 +193,8 @@ class Operator():
       # deploy this as a batch process or API endpoint or API endpoint
       job.deploy() # WIP # WIP
     """
-    self._operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
+    # do not add anything in here, else it will call self.__getattr__ and cause a RecursionError
+    pass
 
   def __remote_init__(self):
     """User can overwrite this function, this will be called only when running on remote.
@@ -268,7 +265,7 @@ class Operator():
   def from_job(cls, job_id_or_name, workspace_id: str = ""):
     """latch an existing job so that it can be called as an operator."""
     # implement this when we have the client-server that allows us to get the metadata for the job
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     if not workspace_id:
       raise DeprecationWarning("Personal workspace does not support serving")
     job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
@@ -535,27 +532,39 @@ class Operator():
   """
 
   def __setattr__(self, key, value: 'Operator'):
-    obj = getattr(self, key, None)
-    if key != "forward" and obj is not None and callable(obj) and not isinstance(value, Operator):
+    if self._op_type in [ospec.OperatorType.SERVING, ospec.OperatorType.JOB]:
+      raise ValueError("Cannot set attributes on a serving or job")
+    elif self._op_type in [ospec.OperatorType.WRAP_CLS, ospec.OperatorType.WRAP_FN]:
+      print("setting attribute", key, value, "to a wrapped object")
+      print(self._op_type)
+      print(self._op_spec)
+      print(self._op_spec.wrap_obj)
+      obj = getattr(self._op_spec.wrap_obj, key, None)
+    else:
+      print("setting attribute", key, value, "to Operator")
+      obj = getattr(self, key, None)
+
+    if key in ["_tracer", "forward"]:
+      pass
+    elif obj is not None and callable(obj) and not isinstance(value, Operator):
       raise AttributeError(f"cannot assign {key} as it is already a method")
+
     if isinstance(value, Operator):
-      if not "_operators" in self.__dict__:
-        raise AttributeError("cannot assign operator before super().__init__() call")
       if key in self.__dict__ and key not in self._operators:
         raise KeyError(f"attribute '{key}' already exists")
       self._operators[key] = value
+      self._op_to_resource_map[key] = self._current_resource # map the operator to the current resource
 
-      # map the operator to the current resource
-      self._op_to_resource_map[key] = self._current_resource
     self.__dict__[key] = value
 
   def __getattr__(self, key):
+    # if you try to access any attribute of self outside the conditionals it will cause a recursion error
     if self._op_type == ospec.OperatorType.SERVING:
       if key in self._op_spec.fn_spec:
         return partial(self.forward, key)
       return self.forward("__getattr__", key)
     elif self._op_type == ospec.OperatorType.WRAP_CLS:
-      return getattr(self._op_wrap, key)
+      return getattr(self._op_spec.wrap_obj, key)
     elif self._op_type == ospec.OperatorType.UNSET and key == "__qualname__":
       return self.__class__.__qualname__
     raise AttributeError(f"{key}")

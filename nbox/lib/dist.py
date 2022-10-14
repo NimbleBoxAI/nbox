@@ -44,17 +44,17 @@ class NBXLet(Operator):
 
   def run(self):
     """Run this as a batch process"""
+    status = Job.Status.ERROR
     try:
       tracer = Tracer()
       if hasattr(self.op._tracer, "job_proto"):
         self.op.thaw(self.op._tracer.job_proto)
       workspace_id = tracer.job_proto.auth_info.workspace_id
-      secret.put(ConfigString.workspace_id.value, workspace_id, True)
+      secret.put(ConfigString.workspace_id, workspace_id, True)
       secret.put("username", tracer.job_proto.auth_info.username)
 
       job_id = tracer.job_id
       self.op.propagate(_tracer = tracer)
-      status = Job.Status.ERROR
 
       # get the user defined tag 
       run_tag = os.getenv("NBOX_RUN_METADATA", "")

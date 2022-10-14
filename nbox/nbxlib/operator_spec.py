@@ -91,8 +91,8 @@ class _WrapClsSpec:
     self.wrap_obj = wrap_obj
     self.init_ak = init_ak
 
-  def ___repr__(self):
-    return f"[{self.type} {self.cls_name}]"
+  def __repr__(self):
+    return f"[{self.type} {self.cls_name} {self.init_ak}]"
 
 
 def get_operator_location(_op):

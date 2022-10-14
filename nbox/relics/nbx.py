@@ -19,7 +19,8 @@ from nbox.sublime.relics_rpc_client import (
   Relic as RelicProto,
   CreateRelicRequest,
   ListRelicFilesRequest,
-  ListRelicsRequest
+  ListRelicsRequest,
+  BucketMetadata
 )
 from nbox.relics.base import BaseStore
 from nbox.auth import ConfigString, secret
@@ -61,11 +62,11 @@ def _get_stub():
 
 def print_relics(workspace_id: str = ""):
   stub = _get_stub()
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   req = ListRelicsRequest(workspace_id = workspace_id,)
   out = stub.list_relics(req)
-  headers = ["relic_name",]
-  rows = [[r.name,] for r in out.relics]
+  headers = ["relic_id", "relic_name",]
+  rows = [[r.id, r.name,] for r in out.relics]
   for l in tabulate.tabulate(rows, headers).splitlines():
     logger.info(l)
 
@@ -73,7 +74,18 @@ def print_relics(workspace_id: str = ""):
 class RelicsNBX(BaseStore):
   list = staticmethod(print_relics)
 
-  def __init__(self, relic_name: str, workspace_id: str = "", create: bool = False, prefix: str = ""):
+  def __init__(
+    self,
+    relic_name: str,
+    workspace_id: str = "",
+    create: bool = False,
+    prefix: str = "",
+    *,
+    bucket_name: str = "",
+    region: str = "",
+    nbx_resource_id: str = "",
+    nbx_integration_token: str = "",
+  ):
     """
     The client for NBX-Relics.
 
@@ -83,7 +95,7 @@ class RelicsNBX(BaseStore):
       create (bool): Create the relic if it does not exist.
       prefix (str): The prefix to use for all files in this relic. If provided all the files are uploaded and downloaded with this prefix.
     """
-    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     self.relic_name = relic_name
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
     self.prefix = prefix.strip("/")
@@ -93,7 +105,17 @@ class RelicsNBX(BaseStore):
     if not _relic and create:
       # this means that a new one will have to be created
       logger.debug(f"Creating new relic {relic_name}")
-      self.relic = self.stub.create_relic(CreateRelicRequest(workspace_id=self.workspace_id, name = relic_name,))
+      self.relic = self.stub.create_relic(CreateRelicRequest(
+        workspace_id=self.workspace_id,
+        name = relic_name,
+        bucket_meta = BucketMetadata(
+          bucket_name = bucket_name,
+          region = region,
+          backend = BucketMetadata.Backend.AWS_S3,
+        ),
+        nbx_resource_id = nbx_resource_id,
+        nbx_integration_token = nbx_integration_token,
+      ))
       logger.debug(f"Created new relic {self.relic}")
     else:
       self.relic = _relic
@@ -112,15 +134,20 @@ class RelicsNBX(BaseStore):
     out = self.stub.create_file(_RelicFile = relic_file,)
     if not out.url:
       raise Exception("Could not get link")
-    
+
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
+    if out.size > 10 ** 7:
+      logger.warning(f"File {local_path} is large ({out.size} bytes), this might take a while")
+
+    # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
+    # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
+    logger.debug(f"URL: {out.url}")
+    logger.debug(f"body: {out.body}")
     r = requests.post(
       url = out.url,
       data = out.body,
-      files={
-        "file": (out.body["key"], open(local_path, "rb"))
-      }
+      files = {"file": (out.body["key"], open(local_path, "rb"))}
     )
     logger.debug(f"Upload status: {r.status_code}")
     r.raise_for_status()
@@ -139,7 +166,7 @@ class RelicsNBX(BaseStore):
     
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
-    # logger.debug(f"URL: {out.url}")
+    logger.debug(f"URL: {out.url}")
     with requests.get(out.url, stream=True) as r:
       r.raise_for_status()
       total_size = 0
@@ -211,8 +238,8 @@ class RelicsNBX(BaseStore):
       logger.error(out.message)
       raise ValueError("Could not delete file")
 
-  def has(self, local_path: str):
-    prefix, file_name = os.path.split(local_path)
+  def has(self, path: str):
+    prefix, file_name = os.path.split(path)
     out = self.stub.list_relic_files(
       ListRelicFilesRequest(
         workspace_id=self.workspace_id,
@@ -222,9 +249,10 @@ class RelicsNBX(BaseStore):
       )
     )
     for f in out.files:
-      if f.name.strip("/") == local_path.strip("/"):
+      if f.name.strip("/") == path.strip("/"):
         return True
     return False
+
 
   """
   There are other convinience methods provided to keep consistency between the different types of relics. Note

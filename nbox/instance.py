@@ -57,7 +57,7 @@ def print_status(fields: List[str] = [], *, workspace_id: str = ""):
   """Print complete status of NBX-Build instances. If ``workspace_id`` is not provided
   personal workspace will be used. Used in CLI"""
   logger.info("Getting NBX-Build details")
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   if not workspace_id:
     stub_projects = nbox_ws_v1.user.projects
   else:
@@ -106,7 +106,7 @@ class Instance():
     # simply add useful keys to the instance
     self.project_id: str = None
     self.project_name: str = None
-    self.workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id.value)
+    self.workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id)
     self.size_used: float = None
     self.size: float = None
     self.state: str = None
@@ -174,7 +174,7 @@ class Instance():
     workspace_id: str = "",
   ) -> 'Instance':
     """Create a new NBX-Build instance."""
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     if not workspace_id:
       stub_all_projects = nbox_ws_v1.user.projects
     else:

@@ -209,7 +209,7 @@ def isthere(*packages, soft = True):
 
 # path/
 
-def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True) -> List[str]:
+def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True, followlinks: bool = False) -> List[str]:
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os
@@ -217,7 +217,7 @@ def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True) -> List[str]
   _all = "*" in ext # wildcard means everything so speed up
 
   folder_abs = os.path.abspath(folder) if abs_path else folder
-  for root,_,files in os.walk(folder_abs):
+  for root,_,files in os.walk(folder_abs, followlinks=followlinks):
     if _all:
       all_paths.extend([join(root, f) for f in files])
       continue

@@ -15,8 +15,6 @@ from nbox import Operator, logger
 import nbox.utils as U
 from nbox.lib.dist import NBXLet
 
-print(os.environ["NBOX_RUN_METADATA"])
-
 @lru_cache(1)
 def get_op(cloud = False, serving: bool = False) -> Operator:
   # The beauty of this function is that it ensures that the operator class is loaded only once
