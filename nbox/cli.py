@@ -36,16 +36,41 @@ from json import dumps
 import nbox.utils as U
 from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
-import nbox.utils as U
-from nbox.jobs import Job, Serve
-from nbox.init import nbox_ws_v1
-from nbox.auth import init_secret
+from nbox.auth import init_secret, ConfigString
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import RelicsNBX
+from nbox.lmao import LmaoCLI
 from nbox.version import __version__ as V
 
 logger = U.get_logger()
+
+def global_config(workspace_id: str = ""):
+  """Set global config for ``nbox``"""
+  secret = init_secret()
+  if workspace_id:
+    secret.put(ConfigString.workspace_id, workspace_id, True)
+    logger.info(f"Global Workspace ID set to {workspace_id}")
+
+    data = secret.get(ConfigString.cache)
+    redo = not data or (workspace_id not in data)
+
+    if redo:
+      workspaces = nbox_ws_v1.workspace()
+      workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
+      if len(workspace_details) == 0:
+        logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
+        raise Exception("Invalid workspace ID")
+      workspace_details = workspace_details[0]
+      workspace_name = workspace_details["workspace_name"]
+      secret.secrets.get(ConfigString.cache.value).update({workspace_id: workspace_details})
+    else:
+      data = data[workspace_id]
+      workspace_name = data["workspace_name"]
+
+    secret.put(ConfigString.workspace_name, workspace_name, True)
+    logger.info(f"Global Workspace: {workspace_name}")
+
 
 def open_home():
   """Open current NBX platform"""
@@ -84,7 +109,7 @@ def version():
 def why():
   print("\nWhy we build NimbleBox?\n")
   print("  * Artificial intelligence will be the most important technology of the 21st century.")
-  print("  * Every single piece of software ever written will need to be upgraded.")
+  print("  * Every major piece of software ever written will need to be upgraded and rewritten.")
   print("  * Energy spent per code token will increase exponentially to handle the bandwidth of AI.")
   print("  * AI is still software and software engineering is hard.")
   print("  * Nimblebox is a general purpose tool to build and manage such operations.")
@@ -94,8 +119,10 @@ def why():
 def main():
   fire.Fire({
     "build"   : Instance,
+    "config"  : global_config,
     "get"     : get,
     "jobs"    : Job,
+    "lmao"    : LmaoCLI,
     "login"   : login,
     "open"    : open_home,
     "relics"  : RelicsNBX,

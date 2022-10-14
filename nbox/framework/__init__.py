@@ -10,24 +10,6 @@ repositories with the logic start with ``on_``, why?
     like Airflow, Prefect, etc.
 #. ``on_functions``: This library contains the code for static parsing of python and\
     creating the NBX-JobFlow
-
-Then there is one main file for auto generating the code
-
-#. ``autogen``: Which contains the compilers for different code generations like ``ml.py``,\
-    there will be more in the future.
-
-Then there are code that is generated:
-
-#. ``ml``: This is the code for all ml frameworks, their exporting and importing using\
-    message-stub format. That is all the user arguments became a dataclass which user has\
-    to implement according to their requirments.
-#. ``*_pb2.py/pyi``: These are the protobuf stubs generated, as of this writing there is only\
-    one proto called ``ModelSpec`` which is like ``JobProto`` but for models.
-
-The ``protos/`` folder contains all the proto definitions. Some of the files in here do not
-have documentation and that is intentionally to hide all the complexities form the user.
-If you are interested, you can read the source code directly from Github.
-
 """
 
 # if you like what you see and want to work on more things like this, reach out research@nimblebox.ai

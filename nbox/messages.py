@@ -28,7 +28,7 @@ from grpc import RpcError
 from google.protobuf import message
 from google.protobuf import wrappers_pb2
 from google.protobuf import field_mask_pb2
-from google.protobuf.timestamp_pb2 import Timestamp
+
 from google.protobuf.json_format import MessageToDict, MessageToJson, ParseDict
 
 from nbox.utils import logger
@@ -107,10 +107,6 @@ def dict_to_message(dict, message):
   ParseDict(dict, message)
   return message
 
-def get_current_timestamp():
-  ts = Timestamp()
-  ts.GetCurrentTime()
-  return ts
 
 def write_string_to_file(message: message.Message, file):
   from google.protobuf.text_format import PrintMessage

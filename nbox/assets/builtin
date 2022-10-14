@@ -1,5 +1,12 @@
+#
 # hash represents comments so you can add yours as well
 # https://github.com/bndr/pipreqs/blob/master/pipreqs/mapping
+#
+# one of the ideas is that we can also have a decent enough mapping for more complicated cases 
+# ex: torch can have many versions:
+#   "cpu": "torch --extra-index-url https://download.pytorch.org/whl/cpu",
+#   "gpu": "torch --extra-index-url https://download.pytorch.org/whl/cu113",
+# 
 abc
 aifc
 argparse

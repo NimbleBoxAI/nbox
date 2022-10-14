@@ -27,7 +27,7 @@ from time import sleep
 from typing import List
 from nbox.utils import logger as nbx_logger, FileLogger
 from nbox import utils as U
-from nbox.auth import secret
+from nbox.auth import secret, ConfigString
 from nbox.instance import Instance
 
 class RSockClient:
@@ -330,7 +330,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
     raise ValueError(f"Ports {', '.join(ports_used)} are already in use")
 
   # check if instance is the correct one
-  instance = Instance(i, workspace_id)
+  instance = Instance(i, workspace_id = workspace_id)
   instance._unopened_error()
 
   # create logging for RSock
@@ -356,7 +356,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   return conman
 
 
-def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
+def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str = ""):
   """the nbox way to SSH into your instance.
 
   Usage:
@@ -368,7 +368,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str):
     i(str): The instance to connect to
     pwd (str): password to connect to that instance.
   """
-  
+  workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id)
   connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)
 
   try:

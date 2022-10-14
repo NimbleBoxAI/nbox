@@ -19,9 +19,11 @@ from nbox.sublime.relics_rpc_client import (
   Relic as RelicProto,
   CreateRelicRequest,
   ListRelicFilesRequest,
-  ListRelicsRequest
+  ListRelicsRequest,
+  BucketMetadata
 )
 from nbox.relics.base import BaseStore
+from nbox.auth import ConfigString, secret
 
 def get_relic_file(fpath: str, username: str, workspace_id: str):
   # assert os.path.exists(fpath), f"File {fpath} does not exist"
@@ -50,37 +52,71 @@ def get_relic_file(fpath: str, username: str, workspace_id: str):
 
 @lru_cache()
 def _get_stub():
-  url = "https://app.nimblebox.ai/relics"
+  # url = "http://0.0.0.0:8081/relics" # debug
+  url = secret.get("nbx_url") + "/relics"
   logger.debug("Connecting to RelicStore at: " + url)
   session = deepcopy(nbox_ws_v1._session)
   stub = RelicStore_Stub(url, session)
   return stub
 
 
-def print_relics(workspace_id: str):
+def print_relics(workspace_id: str = ""):
   stub = _get_stub()
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   req = ListRelicsRequest(workspace_id = workspace_id,)
   out = stub.list_relics(req)
-  headers = ["relic_name",]
-  rows = [[r.name,] for r in out.relics]
+  headers = ["relic_id", "relic_name",]
+  rows = [[r.id, r.name,] for r in out.relics]
   for l in tabulate.tabulate(rows, headers).splitlines():
     logger.info(l)
 
 
 class RelicsNBX(BaseStore):
-  list_relics = staticmethod(print_relics)
+  list = staticmethod(print_relics)
 
-  def __init__(self, relic_name: str, workspace_id: str, create: bool = False):
-    self.workspace_id = workspace_id
+  def __init__(
+    self,
+    relic_name: str,
+    workspace_id: str = "",
+    create: bool = False,
+    prefix: str = "",
+    *,
+    bucket_name: str = "",
+    region: str = "",
+    nbx_resource_id: str = "",
+    nbx_integration_token: str = "",
+  ):
+    """
+    The client for NBX-Relics.
+
+    Args:
+      relic_name (str): The name of the relic.
+      workspace_id (str): The workspace ID, if not provided, will be one in global config.
+      create (bool): Create the relic if it does not exist.
+      prefix (str): The prefix to use for all files in this relic. If provided all the files are uploaded and downloaded with this prefix.
+    """
+    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     self.relic_name = relic_name
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
+    self.prefix = prefix.strip("/")
     self.stub = _get_stub()
-    _relic = self.stub.get_relic_details(RelicProto(workspace_id=workspace_id, name=relic_name,))
-    if  not _relic and create:
+    _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
+    # print("asdfasdfasdfasdf", _relic, not _relic and create)
+    if not _relic and create:
       # this means that a new one will have to be created
-      logger.info(f"Creating new relic {relic_name}")
-      self.relic = self.stub.create_relic(CreateRelicRequest(workspace_id=workspace_id, name = relic_name,))
-      logger.info(f"Created new relic {self.relic}")
+      logger.debug(f"Creating new relic {relic_name}")
+      self.relic = self.stub.create_relic(CreateRelicRequest(
+        workspace_id=self.workspace_id,
+        name = relic_name,
+        bucket_meta = BucketMetadata(
+          bucket_name = bucket_name,
+          region = region,
+          backend = BucketMetadata.Backend.AWS_S3,
+        ),
+        nbx_resource_id = nbx_resource_id,
+        nbx_integration_token = nbx_integration_token,
+      ))
+      logger.debug(f"Created new relic {self.relic}")
     else:
       self.relic = _relic
 
@@ -90,22 +126,28 @@ class RelicsNBX(BaseStore):
   def _upload_relic_file(self, local_path: str, relic_file: RelicFile):
     if not relic_file.relic_name:
       raise ValueError("relic_name not set in RelicFile")
+    if self.prefix:
+      relic_file.name = f"{self.prefix}/{relic_file.name}"
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Uploading {local_path} to {relic_file.name}")
     out = self.stub.create_file(_RelicFile = relic_file,)
     if not out.url:
       raise Exception("Could not get link")
-    
+
     # do not perform merge here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
+    if out.size > 10 ** 7:
+      logger.warning(f"File {local_path} is large ({out.size} bytes), this might take a while")
+
+    # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
+    # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
     logger.debug(f"URL: {out.url}")
+    logger.debug(f"body: {out.body}")
     r = requests.post(
       url = out.url,
       data = out.body,
-      files={
-        "file": (out.body["key"], open(local_path, "rb"))
-      }
+      files = {"file": (out.body["key"], open(local_path, "rb"))}
     )
     logger.debug(f"Upload status: {r.status_code}")
     r.raise_for_status()
@@ -113,6 +155,8 @@ class RelicsNBX(BaseStore):
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
+    if self.prefix:
+      relic_file.name = self.prefix + "/" + relic_file.name
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Downloading {local_path} from S3 ...")
@@ -149,7 +193,7 @@ class RelicsNBX(BaseStore):
     """Put the file at this path into the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Putting file: {local_path}")
+    logger.debug(f"Putting file: {local_path}")
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     self._upload_relic_file(local_path, relic_file)
@@ -157,7 +201,7 @@ class RelicsNBX(BaseStore):
   def put_to(self, local_path: str, remote_path: str) -> None:
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Putting file: {local_path} to {remote_path}")
+    logger.debug(f"Putting file: {local_path} to {remote_path}")
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     relic_file.name = remote_path # override the name
@@ -167,7 +211,7 @@ class RelicsNBX(BaseStore):
     """Get the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Getting file: {local_path}")
+    logger.debug(f"Getting file: {local_path}")
     relic_file = RelicFile(name = local_path.strip("./"),)
     relic_file.relic_name = self.relic_name
     relic_file.workspace_id = self.workspace_id
@@ -176,7 +220,7 @@ class RelicsNBX(BaseStore):
   def get_from(self, local_path: str, remote_path: str) -> None:
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Getting file: {local_path} from {remote_path}")
+    logger.debug(f"Getting file: {local_path} from {remote_path}")
     relic_file = RelicFile(name = remote_path.strip("./"),)
     relic_file.relic_name = self.relic_name
     relic_file.workspace_id = self.workspace_id
@@ -186,7 +230,7 @@ class RelicsNBX(BaseStore):
     """Delete the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Getting file: {local_path}")
+    logger.debug(f"Getting file: {local_path}")
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     out = self.stub.delete_relic_file(relic_file)
@@ -194,8 +238,8 @@ class RelicsNBX(BaseStore):
       logger.error(out.message)
       raise ValueError("Could not delete file")
 
-  def has(self, local_path: str):
-    prefix, file_name = os.path.split(local_path)
+  def has(self, path: str):
+    prefix, file_name = os.path.split(path)
     out = self.stub.list_relic_files(
       ListRelicFilesRequest(
         workspace_id=self.workspace_id,
@@ -205,9 +249,10 @@ class RelicsNBX(BaseStore):
       )
     )
     for f in out.files:
-      if f.name.strip("/") == local_path.strip("/"):
+      if f.name.strip("/") == path.strip("/"):
         return True
     return False
+
 
   """
   There are other convinience methods provided to keep consistency between the different types of relics. Note
@@ -252,7 +297,7 @@ class RelicsNBX(BaseStore):
     """List all the files in the relic at path"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.info(f"Listing files in relic {self.relic_name}")
+    logger.debug(f"Listing files in relic {self.relic_name}")
     out = self.stub.list_relic_files(RelicFile(
       workspace_id = self.workspace_id,
       relic_name = self.relic_name,

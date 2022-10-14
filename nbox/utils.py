@@ -32,8 +32,8 @@ This has a couple of cool things:
 # this file has bunch of functions that are used everywhere
 
 import os
-import io
 import sys
+import json
 import logging
 import hashlib
 import requests
@@ -50,6 +50,7 @@ from datetime import datetime, timezone
 from pythonjsonlogger import jsonlogger
 from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
+from google.protobuf.timestamp_pb2 import Timestamp as Timestamp_pb
 
 class env:
   """
@@ -76,8 +77,15 @@ class env:
   NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
   NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
-  NBOX_LMAO_DISABLE_RELICS = lambda: os.getenv("NBOX_LMAO_DISABLE_RELICS", False)
-  NBOX_LMAO_DISABLE_SYSTEM_METRICS = lambda: os.getenv("NBOX_LMAO_DISABLE_SYSTEM_METRICS", False)
+  NBOX_NO_CHECK_VERSION = lambda: os.getenv("NBOX_NO_CHECK_VERSION", False)
+
+  def set(key, value):
+    os.environ[key] = value
+
+  def get(key, default=None):
+    return os.environ.get(key, default)
+
+# logger /
 
 logger = None
 
@@ -110,6 +118,11 @@ def get_logger():
 
 logger = get_logger() # package wide logger
 
+def log_traceback():
+  f = traceback.format_exc()
+  for _l in f.splitlines():
+    logger.error(_l.rstrip())
+
 
 @contextmanager
 def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
@@ -122,17 +135,6 @@ def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
     logger.warning(f"  replace: {replace_by}")
   if help:
     logger.warning(f"  help: {help}")
-
-
-def load_module_from_path(fn_name, file_path):
-  spec = spec_from_file_location(fn_name, file_path)
-  foo = module_from_spec(spec)
-  mod_name = get_random_name()
-  sys.modules[mod_name] = foo
-  spec.loader.exec_module(foo)
-  fn = getattr(foo, fn_name)
-  return fn
-
 
 class FileLogger:
   """Flush logs to a file, useful when we don't want to mess with current logging"""
@@ -150,13 +152,18 @@ class FileLogger:
     self.f.write(f"[{datetime.now(timezone.utc).isoformat()}] {level}: {message}\n")
     self.f.flush()
 
-
-# def log_and_exit(msg, *args, **kwargs):
-#   # convinience function to avoid tracebacks
-#   logger.error(msg, *args, **kwargs)
-#   sys.exit(1)
+# / logger
 
 # lazy_loading/
+
+def load_module_from_path(fn_name, file_path):
+  spec = spec_from_file_location(fn_name, file_path)
+  foo = module_from_spec(spec)
+  mod_name = get_random_name()
+  sys.modules[mod_name] = foo
+  spec.loader.exec_module(foo)
+  fn = getattr(foo, fn_name)
+  return fn
 
 def isthere(*packages, soft = True):
   """Checks all the packages
@@ -202,7 +209,7 @@ def isthere(*packages, soft = True):
 
 # path/
 
-def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True) -> List[str]:
+def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True, followlinks: bool = False) -> List[str]:
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os
@@ -210,7 +217,7 @@ def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True) -> List[str]
   _all = "*" in ext # wildcard means everything so speed up
 
   folder_abs = os.path.abspath(folder) if abs_path else folder
-  for root,_,files in os.walk(folder_abs):
+  for root,_,files in os.walk(folder_abs, followlinks=followlinks):
     if _all:
       all_paths.extend([join(root, f) for f in files])
       continue
@@ -272,14 +279,6 @@ def hash_(item, fn="md5"):
   """Hash sting of any item"""
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
 
-
-def log_traceback():
-  # f = io.StringIO("")
-  # traceback.print_exception(*sys.exc_info(), file = f)
-  f = traceback.format_exc()
-  for _l in f.splitlines():
-    logger.error(_l.rstrip())
-
 # /misc
 
 # datastore/
@@ -309,36 +308,14 @@ class DBase:
   def __repr__(self):
     return str(self.get_dict())
 
+  def json(self, fp: str = "") -> str:
+    if fp:
+      with open(fp, "w") as f:
+        f.write(json.dumps(self.get_dict()))
+    else:    
+      return json.dumps(self.get_dict())
+
 # /datastore
-
-# model/
-
-@isthere("PIL", soft = False)
-def get_image(file_path_or_url):
-  from PIL import Image
-  if os.path.exists(file_path_or_url):
-    return Image.open(file_path_or_url)
-  else:
-    return Image.open(io.BytesIO(fetch(file_path_or_url)))
-
-def convert_to_list(x):
-  # recursively convert tensors -> list
-  import torch
-  import numpy as np
-
-  x = x.outputs.detach()
-
-  if isinstance(x, list):
-    return x
-  if isinstance(x, dict):
-    return {k: convert_to_list(v) for k, v in x.items()}
-  elif isinstance(x, (torch.Tensor, np.ndarray)):
-    x = np.nan_to_num(x, -1.42069)
-    return x.tolist()
-  else:
-    raise Exception("Unknown type: {}".format(type(x)))
-
-# /model
 
 
 ################################################################################
@@ -357,119 +334,54 @@ def convert_to_list(x):
 
 # pool/
 
-class PoolBranch:
-  def __init__(self, mode = "thread", max_workers = 2, _name: str = None):
-    """Threading is hard, your brain is not wired to handle parallelism. You are a blocking
-    python program. So a blocking function for you. There are some conditions:
-
-
-    Usage:
-
-    .. code-block:: python
-
-      # define some functions
-
-      def add_zero(x):  return x + 0
-      def add_one(x):   return x + 1
-      def add_ten(x):   return x + 10
-      def add_fifty(x): return x + 50
-
-      all_fn = [add_zero, add_one, add_ten, add_fifty]
-
-      # define some arguments
-      args = [(1,), (2,), (3,), (4,),]
-
-      # branching is applying different functions on different inputs
-      branch = PoolBranch("thread")
-      out = branch(all_fn, *args)
-
-      # pooling is applying same functions on different inputs
-      pool = PoolBranch("thread")
-      out = pool(add_zero, *args)
-
-    When using ``mode = "process"`` write your code in a function and ensure that the
-    function is called from ``__main__ == "__name__"``. From the documentation of ``concurrent.futures``:
-
-      The __main__ module must be importable by worker subprocesses. This means that
-      ``ProcessPoolExecutor`` will not work in the interactive interpreter.
-
-    - `StackOverflow <https://stackoverflow.com/questions/27932987/multiprocessing-package-in-interactive-python>`_
-    - `Another <https://stackoverflow.com/questions/24466804/multiprocessing-breaks-in-interactive-mode>`_
-
-    .. code-block:: python
-
-      def multiprocess():
-        print("MultiProcessing")
-
-        branch = PoolBranch("process")
-        out = branch(all_fn, *args)
-
-        pool = PoolBranch("process")
-        out = pool(add_zero, *args)
-
-      if __name__ == "__main__":
-        multiprocess()
-
-    Args:
-      mode (str, optional): There can be multiple pooling strategies across cores, threads,
-        k8s, nbx-instances etc.
-      max_workers (int, optional): Numbers of workers to use
-    """
-    self.mode = mode
-    self.item_id = -1 # because +1 later
-    self.futures = {}
-    self._name = _name or get_random_name(True)
-
-    if mode == "thread":
-      self.executor = ThreadPoolExecutor(
-        max_workers=max_workers,
-        thread_name_prefix=self._name
-      )
-    elif mode == "process":
-      self.executor = ProcessPoolExecutor(
-        max_workers=max_workers,
-      )
-    else:
-      raise Exception(f"Only 'thread/process' modes are supported")
-
-    logger.debug(f"Starting {mode.upper()}-PoolBranch ({self._name}) with {max_workers} workers")
-
-  def __call__(self, fn, *args):
-    """Run any function ``fn`` in parallel, where each argument is a list of arguments to
-    pass to ``fn``. Result is returned in the **same order as the input**.
-
-      ..code-block
-
-        if fn is callable:
-          thread(fn, a) for a in args -> list of results
-        elif fn is list and fn[0] is callable:
-          thread(_fn, a) for _fn, a in (fn args) -> list of results
-    """
-    assert isinstance(args[0], (tuple, list))
-
-    futures = {}
-    if isinstance(fn, (list, tuple)) and callable(fn[0]):
-      assert len(fn) == len(args), f"Number of functions ({len(fn)}) and arguments ({len(args)}) must be same in branching"
-    else:
-      assert callable(fn), "fn must be callable in pooling"
-      fn = [fn for _ in range(len(args))] # convinience
-
-    self.item_id += len(futures)
-    results = {}
-
-    if self.mode in ("thread", "process"):
-      for i, (_fn, x) in enumerate(zip(fn, args)):
-        futures[self.executor.submit(_fn, *x)] = i # insertion index
-      for future in as_completed(futures):
-        try:
-          result = future.result()
-          results[futures[future]] = result # update that index
-        except Exception as e:
-          logger.error(f"{self.mode} error: {e}")
-          raise e
-
-      res = [results[x] for x in range(len(results))]
-
-    return res
+def threaded_map(fn, inputs, wait: bool = True, max_threads = 20, _name: str = None) -> None:
+  """
+  inputs is a list of tuples, each tuple is the input for single invocation of fn. order is preserved.
+  """
+  _name = _name or get_random_name(True)
+  results = [None for _ in range(len(inputs))]
+  with ThreadPoolExecutor(max_workers = max_threads, thread_name_prefix = _name) as exe:
+    _fn = lambda i, x: [i, fn(*x)]
+    futures = {exe.submit(_fn, i, x): i for i, x in enumerate(inputs)}
+    if not wait:
+      return futures
+    for future in as_completed(futures):
+      try:
+        i, res = future.result()
+        results[i] = res
+      except Exception as e:
+        raise e
+  return results
 
 # /pool
+
+def _exit_program(code = 0):
+  # why use os._exit over sys.exit:
+  # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
+  # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
+  # tl;dr: os._exit kills without cleanup and so it's okay on the Pod
+  os._exit(code)
+
+
+class SimplerTimes:
+  tz = timezone.utc
+
+  def get_now_datetime() -> datetime:
+    return datetime.now(SimplerTimes.tz)
+
+  def get_now_float() -> float:
+    return SimplerTimes.get_now_datetime().timestamp()
+
+  def get_now_i64() -> int:
+    return int(SimplerTimes.get_now_datetime().timestamp())
+
+  def get_now_str() -> str:
+    return SimplerTimes.get_now_datetime().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+  def get_now_pb():
+    ts = Timestamp_pb()
+    ts.GetCurrentTime()
+    return ts
+
+  def i64_to_datetime(i64) -> datetime:
+    return datetime.fromtimestamp(i64, SimplerTimes.tz)

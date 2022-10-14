@@ -11,12 +11,20 @@ This file loads first and is responsible for setting up all the global networkin
 """
 
 import grpc
+import json
 import requests
+try:
+  from packaging.version import parse
+except ImportError:
+  from pip._vendor.packaging.version import parse
 
-from nbox.auth import secret
+
+from nbox.auth import secret, ConfigString
 from nbox.utils import logger, env
 from nbox.subway import Sub30
 from nbox.hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
+from nbox.version import __version__
+
 
 def get_stub() -> WSJobServiceStub:
   """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``
@@ -69,8 +77,32 @@ else:
   nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
   nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
 
-# TODO: @yashbonde: raise deprecation warning for version
-# raise_old_version_warning(V._major, V._minor, V._patch)
 
+def nbox_version_update():
+  # https://stackoverflow.com/questions/28774852/pypi-api-how-to-get-stable-package-version
+  def get_version(package):
+    """Return version of package on pypi.python.org using json."""
+    URL_PATTERN = 'https://pypi.python.org/pypi/{package}/json'
+    req = requests.get(URL_PATTERN.format(package=package))
+    version = parse('0')
+    if req.status_code == requests.codes.ok:
+        j = json.loads(req.text.encode(req.encoding))
+        releases = j.get('releases', [])
+        for release in releases:
+            ver = parse(release)
+            if not ver.is_prerelease:
+                version = max(version, ver)
+    return version
 
-# from nbox.sublime._yql.common import set_logger
+  latest_version = get_version("nbox")
+  if latest_version > parse(__version__):
+    logger.warning(
+      f"Your version of nbox ({__version__}) is outdated. Some functionalities might not work.\n"
+      f"Fix: Please update to {latest_version} using pip3 install nbox --upgrade\n"
+      f"Fix: Update all the relevant requirements.txt files with nbox[serving]=={latest_version}"
+    )
+
+if not env.NBOX_NO_CHECK_VERSION():
+  nbox_version_update()
+
+logger.info(f"Current workspace id: {secret.get(ConfigString.workspace_id)} ({secret.get(ConfigString.workspace_name)})")

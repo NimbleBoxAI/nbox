@@ -26,21 +26,3 @@ class Acknowledge(google.protobuf.message.Message):
         ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["message",b"message","success",b"success"]) -> None: ...
 global___Acknowledge = Acknowledge
-
-class AWS_S3(google.protobuf.message.Message):
-    """different cloud vendor things
-
-    Amazon Web Services: Simple Storage Service (S3)
-    """
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    BUCKET_FIELD_NUMBER: builtins.int
-    REGION_FIELD_NUMBER: builtins.int
-    bucket: typing.Text
-    region: typing.Text
-    def __init__(self,
-        *,
-        bucket: typing.Text = ...,
-        region: typing.Text = ...,
-        ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["bucket",b"bucket","region",b"region"]) -> None: ...
-global___AWS_S3 = AWS_S3

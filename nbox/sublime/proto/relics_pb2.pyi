@@ -7,7 +7,6 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
-import proto.common_pb2
 import typing
 import typing_extensions
 
@@ -32,7 +31,7 @@ class Relic(google.protobuf.message.Message):
     STARRED_FIELD_NUMBER: builtins.int
     TAGS_FIELD_NUMBER: builtins.int
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
-    AWS_S3_FIELD_NUMBER: builtins.int
+    BUCKET_META_FIELD_NUMBER: builtins.int
     id: typing.Text
     """these are the primary fields"""
 
@@ -50,7 +49,13 @@ class Relic(google.protobuf.message.Message):
     """this is the workspace id"""
 
     @property
-    def aws_s3(self) -> proto.common_pb2.AWS_S3: ...
+    def bucket_meta(self) -> global___BucketMetadata:
+        """there are other things that may not be needed by the FE, think of this as the 
+        NOTE: these are high index values so they can be expanded in the 1xx range
+        a world with 100 clouds supported, would love to see that day.
+        this can potentially become the metadata of the relic
+        """
+        pass
     def __init__(self,
         *,
         id: typing.Text = ...,
@@ -60,12 +65,70 @@ class Relic(google.protobuf.message.Message):
         starred: builtins.bool = ...,
         tags: typing.Optional[typing.Iterable[typing.Text]] = ...,
         workspace_id: typing.Text = ...,
-        aws_s3: typing.Optional[proto.common_pb2.AWS_S3] = ...,
+        bucket_meta: typing.Optional[global___BucketMetadata] = ...,
         ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","bucket",b"bucket"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","bucket",b"bucket","created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","starred",b"starred","tags",b"tags","workspace_id",b"workspace_id"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["bucket",b"bucket"]) -> typing.Optional[typing_extensions.Literal["aws_s3"]]: ...
+    def HasField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","starred",b"starred","tags",b"tags","workspace_id",b"workspace_id"]) -> None: ...
 global___Relic = Relic
+
+class BucketMetadata(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    class _Backend:
+        ValueType = typing.NewType('ValueType', builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+    class _BackendEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[BucketMetadata._Backend.ValueType], builtins.type):
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        UNSET: BucketMetadata._Backend.ValueType  # 0
+        """leave it to NBX to figure out the backend"""
+
+        AWS_S3: BucketMetadata._Backend.ValueType  # 1
+        GCP_GCS: BucketMetadata._Backend.ValueType  # 2
+        AZURE_BLOB: BucketMetadata._Backend.ValueType  # 3
+        OCI_OB: BucketMetadata._Backend.ValueType  # 4
+        DO_SPACES: BucketMetadata._Backend.ValueType  # 5
+    class Backend(_Backend, metaclass=_BackendEnumTypeWrapper):
+        pass
+
+    UNSET: BucketMetadata.Backend.ValueType  # 0
+    """leave it to NBX to figure out the backend"""
+
+    AWS_S3: BucketMetadata.Backend.ValueType  # 1
+    GCP_GCS: BucketMetadata.Backend.ValueType  # 2
+    AZURE_BLOB: BucketMetadata.Backend.ValueType  # 3
+    OCI_OB: BucketMetadata.Backend.ValueType  # 4
+    DO_SPACES: BucketMetadata.Backend.ValueType  # 5
+
+    class BucketTagsEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: typing.Text
+        value: typing.Text
+        def __init__(self,
+            *,
+            key: typing.Text = ...,
+            value: typing.Text = ...,
+            ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["key",b"key","value",b"value"]) -> None: ...
+
+    BUCKET_NAME_FIELD_NUMBER: builtins.int
+    REGION_FIELD_NUMBER: builtins.int
+    BACKEND_FIELD_NUMBER: builtins.int
+    BUCKET_TAGS_FIELD_NUMBER: builtins.int
+    bucket_name: typing.Text
+    region: typing.Text
+    backend: global___BucketMetadata.Backend.ValueType
+    @property
+    def bucket_tags(self) -> google.protobuf.internal.containers.ScalarMap[typing.Text, typing.Text]: ...
+    def __init__(self,
+        *,
+        bucket_name: typing.Text = ...,
+        region: typing.Text = ...,
+        backend: global___BucketMetadata.Backend.ValueType = ...,
+        bucket_tags: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["backend",b"backend","bucket_name",b"bucket_name","bucket_tags",b"bucket_tags","region",b"region"]) -> None: ...
+global___BucketMetadata = BucketMetadata
 
 class RelicFile(google.protobuf.message.Message):
     """RelicFile is like the individual object on the object store, at the end of
@@ -143,7 +206,6 @@ class RelicFile(google.protobuf.message.Message):
     URL_FIELD_NUMBER: builtins.int
     HEADERS_FIELD_NUMBER: builtins.int
     BODY_FIELD_NUMBER: builtins.int
-    AWS_S3_FIELD_NUMBER: builtins.int
     name: typing.Text
     created_on: builtins.int
     last_modified: builtins.int
@@ -189,8 +251,6 @@ class RelicFile(google.protobuf.message.Message):
     def body(self) -> google.protobuf.internal.containers.ScalarMap[typing.Text, typing.Text]:
         """the body to be used by the client"""
         pass
-    @property
-    def aws_s3(self) -> proto.common_pb2.AWS_S3: ...
     def __init__(self,
         *,
         name: typing.Text = ...,
@@ -208,9 +268,6 @@ class RelicFile(google.protobuf.message.Message):
         url: typing.Text = ...,
         headers: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         body: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
-        aws_s3: typing.Optional[proto.common_pb2.AWS_S3] = ...,
         ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","bucket",b"bucket"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["aws_s3",b"aws_s3","body",b"body","bucket",b"bucket","comment",b"comment","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
-    def WhichOneof(self, oneof_group: typing_extensions.Literal["bucket",b"bucket"]) -> typing.Optional[typing_extensions.Literal["aws_s3"]]: ...
+    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___RelicFile = RelicFile

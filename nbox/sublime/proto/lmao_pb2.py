@@ -12,14 +12,23 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 from nbox.sublime.proto import relics_pb2 as proto_dot_relics__pb2
 from nbox.sublime.proto import common_pb2 as proto_dot_common__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10proto/lmao.proto\x1a\x12proto/relics.proto\x1a\x12proto/common.proto\"\xb8\x01\n\x06Record\x12\x0b\n\x03key\x18\x01 \x01(\t\x12$\n\nvalue_type\x18\x02 \x01(\x0e\x32\x10.Record.DataType\x12\x0c\n\x04step\x18\x03 \x01(\x03\x12\x12\n\nfloat_data\x18\x64 \x03(\x02\x12\x14\n\x0cinteger_data\x18\x65 \x03(\x05\x12\x13\n\x0bstring_data\x18\x66 \x03(\t\".\n\x08\x44\x61taType\x12\t\n\x05\x46LOAT\x10\x00\x12\x0b\n\x07INTEGER\x10\x01\x12\n\n\x06STRING\x10\x02\"\xf5\x01\n\x0cRecordColumn\x12\x0b\n\x03key\x18\x01 \x01(\t\x12*\n\nvalue_type\x18\x02 \x01(\x0e\x32\x16.RecordColumn.DataType\x12%\n\x04rows\x18\x03 \x03(\x0b\x32\x17.RecordColumn.RecordRow\x1aU\n\tRecordRow\x12\t\n\x01x\x18\x01 \x01(\x03\x12\x12\n\nfloat_data\x18\x64 \x01(\x02\x12\x14\n\x0cinteger_data\x18\x65 \x01(\x05\x12\x13\n\x0bstring_data\x18\x66 \x01(\t\".\n\x08\x44\x61taType\x12\t\n\x05\x46LOAT\x10\x00\x12\x0b\n\x07INTEGER\x10\x01\x12\n\n\x06STRING\x10\x02\"\xa0\x01\n\x06RunLog\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x15\n\x04\x64\x61ta\x18\x02 \x03(\x0b\x32\x07.Record\x12\"\n\x0b\x63olumn_data\x18\x03 \x03(\x0b\x32\r.RecordColumn\x12!\n\x08log_type\x18\x04 \x01(\x0e\x32\x0f.RunLog.LogType\"(\n\x07LogType\x12\n\n\x06SYSTEM\x10\x00\x12\x07\n\x03NBX\x10\x01\x12\x08\n\x04USER\x10\x02\"\xd2\x01\n\x0c\x41gentDetails\x12\x1f\n\x04type\x18\x06 \x01(\x0e\x32\x11.AgentDetails.NBX\x12\x14\n\nnbx_job_id\x18\x01 \x01(\tH\x00\x12\x18\n\x0enbx_serving_id\x18\x03 \x01(\tH\x00\x12\x14\n\nnbx_run_id\x18\x02 \x01(\tH\x01\x12\x16\n\x0cnbx_model_id\x18\x04 \x01(\tH\x01\x12\x14\n\x0cworkspace_id\x18\x05 \x01(\t\"\x1b\n\x03NBX\x12\x07\n\x03JOB\x10\x00\x12\x0b\n\x07SERVING\x10\x01\x42\x04\n\x02idB\n\n\x08instance\"\x84\x01\n\x0eInitRunRequest\x12$\n\ragent_details\x18\x01 \x01(\x0b\x32\r.AgentDetails\x12\x12\n\nproject_id\x18\x02 \x01(\t\x12\x12\n\ncreated_at\x18\x03 \x01(\x03\x12\x0e\n\x06\x63onfig\x18\x04 \x01(\t\x12\x14\n\x0cproject_name\x18\x05 \x01(\t\"Z\n\x04\x46ile\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\ncreated_at\x18\x02 \x01(\x03\x12\x10\n\x08is_input\x18\x03 \x01(\x08\x12\x1e\n\nrelic_file\x18\x04 \x01(\x0b\x32\n.RelicFile\"0\n\x08\x46ileList\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x14\n\x05\x66iles\x18\x02 \x03(\x0b\x32\x05.File\"\xa1\x02\n\x03Run\x12\x1c\n\x05\x61gent\x18\x01 \x01(\x0b\x32\r.AgentDetails\x12\x0e\n\x06run_id\x18\x02 \x01(\t\x12\x12\n\ncreated_at\x18\x03 \x01(\x03\x12\x10\n\x08\x65nded_at\x18\x04 \x01(\x03\x12\x11\n\tcompleted\x18\x05 \x01(\x08\x12\x15\n\rsave_location\x18\x06 \x01(\t\x12\x1c\n\tfile_list\x18\x07 \x01(\x0b\x32\t.FileList\x12\x0e\n\x06\x63onfig\x18\x08 \x01(\t\x12\x1b\n\x06status\x18\t \x01(\x0e\x32\x0b.Run.Status\x12\x12\n\nupdated_at\x18\n \x01(\x03\"=\n\x06Status\x12\x0b\n\x07NOT_SET\x10\x00\x12\x0b\n\x07RUNNING\x10\x01\x12\r\n\tCOMPLETED\x10\x02\x12\n\n\x06\x46\x41ILED\x10\x03\"X\n\x13ListProjectsRequest\x12\x14\n\x0cworkspace_id\x18\x01 \x01(\t\x12\x1a\n\x12project_id_or_name\x18\x02 \x01(\t\x12\x0f\n\x07page_no\x18\x03 \x01(\x05\"\xac\x01\n\x14ListProjectsResponse\x12/\n\x08projects\x18\x01 \x03(\x0b\x32\x1d.ListProjectsResponse.Project\x12\x13\n\x0btotal_pages\x18\x02 \x01(\x05\x1aN\n\x07Project\x12\x12\n\nproject_id\x18\x01 \x01(\t\x12\x14\n\x0cproject_name\x18\x02 \x01(\t\x12\x19\n\x11total_experiments\x18\x03 \x01(\x05\"j\n\x0fListRunsRequest\x12\x14\n\x0cworkspace_id\x18\x01 \x01(\t\x12\x12\n\nproject_id\x18\x02 \x01(\t\x12\x0e\n\x06run_id\x18\x03 \x01(\t\x12\x0f\n\x07page_no\x18\x04 \x01(\x05\x12\x0c\n\x04\x64\x65sc\x18\x05 \x01(\x08\"Z\n\x10ListRunsResponse\x12\x0f\n\x07run_ids\x18\x01 \x03(\t\x12\x0c\n\x04keys\x18\x02 \x03(\t\x12\x12\n\ncreated_at\x18\x03 \x03(\x03\x12\x13\n\x0btotal_pages\x18\x04 \x01(\x05\"^\n\rRunLogRequest\x12\x0e\n\x06run_id\x18\x01 \x01(\t\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x0e\n\x06sample\x18\x03 \x01(\x05\x12\x10\n\x08start_at\x18\x04 \x01(\x05\x12\x0e\n\x06\x65nd_at\x18\x05 \x01(\x05\x32\xf0\x02\n\x04LMAO\x12#\n\x08init_run\x12\x0f.InitRunRequest\x1a\x04.Run\"\x00\x12!\n\x06on_log\x12\x07.RunLog\x1a\x0c.Acknowledge\"\x00\x12$\n\x07on_save\x12\t.FileList\x1a\x0c.Acknowledge\"\x00\x12$\n\x0con_train_end\x12\x04.Run\x1a\x0c.Acknowledge\"\x00\x12>\n\rlist_projects\x12\x14.ListProjectsRequest\x1a\x15.ListProjectsResponse\"\x00\x12\x32\n\tlist_runs\x12\x10.ListRunsRequest\x1a\x11.ListRunsResponse\"\x00\x12\x1f\n\x0fget_run_details\x12\x04.Run\x1a\x04.Run\"\x00\x12\x1e\n\x0bget_run_log\x12\x04.Run\x1a\x07.RunLog\"\x00\x12\x1f\n\nlist_files\x12\x04.Run\x1a\t.FileList\"\x00\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10proto/lmao.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x12proto/relics.proto\x1a\x12proto/common.proto\"_\n\tLogBuffer\x12\x13\n\x0b\x61gent_token\x18\x01 \x01(\t\x12\x19\n\x08run_logs\x18\x02 \x03(\x0b\x32\x07.RunLog\x12\"\n\tlive_logs\x18\x03 \x03(\x0b\x32\x0f.ServingHTTPLog\"\x86\x01\n\x0eServingHTTPLog\x12\x0c\n\x04path\x18\x01 \x01(\t\x12\x0e\n\x06method\x18\x02 \x01(\t\x12\x13\n\x0bstatus_code\x18\x03 \x01(\x05\x12\x12\n\nlatency_ms\x18\x04 \x01(\x02\x12-\n\ttimestamp\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"[\n\x16ListDeploymentsRequest\x12\x14\n\x0cworkspace_id\x18\x01 \x01(\t\x12\x1a\n\x12serving_id_or_name\x18\x02 \x01(\t\x12\x0f\n\x07page_no\x18\x03 \x01(\x05\"\xac\x01\n\x17ListDeploymentsResponse\x12\x31\n\x07serving\x18\x01 \x03(\x0b\x32 .ListDeploymentsResponse.Serving\x12\x13\n\x0btotal_pages\x18\x02 \x01(\x05\x1aI\n\x07Serving\x12\x12\n\nserving_id\x18\x01 \x01(\t\x12\x14\n\x0cserving_name\x18\x02 \x01(\t\x12\x14\n\x0ctotal_models\x18\x03 \x01(\x05\"q\n\x13ListServingsRequest\x12\x14\n\x0cworkspace_id\x18\x01 \x01(\t\x12\x15\n\rdeployment_id\x18\x02 \x01(\t\x12\x0e\n\x06run_id\x18\x03 \x01(\t\x12\x0f\n\x07page_no\x18\x04 \x01(\x05\x12\x0c\n\x04\x64\x65sc\x18\x05 \x01(\x08\"`\n\x14ListServingsResponse\x12\x11\n\tmodel_ids\x18\x01 \x03(\t\x12\x0c\n\x04keys\x18\x02 \x03(\t\x12\x12\n\ncreated_at\x18\x03 \x03(\x03\x12\x13\n\x0btotal_pages\x18\x04 \x01(\x05\"\xc8\x01\n\x07Serving\x12\x1c\n\x05\x61gent\x18\x01 \x01(\x0b\x32\r.AgentDetails\x12\x13\n\x0b\x61gent_token\x18\x02 \x01(\t\x12\x12\n\ncreated_at\x18\x03 \x01(\x03\x12\x0e\n\x06\x63onfig\x18\x08 \x01(\t\x12\x1f\n\x06status\x18\t \x01(\x0e\x32\x0f.Serving.Status\x12\x12\n\nupdated_at\x18\n \x01(\x03\"1\n\x06Status\x12\x0b\n\x07NOT_SET\x10\x00\x12\x0b\n\x07RUNNING\x10\x01\x12\r\n\tCOMPLETED\x10\x02\"\xb8\x01\n\x06Record\x12\x0b\n\x03key\x18\x01 \x01(\t\x12$\n\nvalue_type\x18\x02 \x01(\x0e\x32\x10.Record.DataType\x12\x0c\n\x04step\x18\x03 \x01(\x03\x12\x12\n\nfloat_data\x18\x64 \x03(\x02\x12\x14\n\x0cinteger_data\x18\x65 \x03(\x05\x12\x13\n\x0bstring_data\x18\x66 \x03(\t\".\n\x08\x44\x61taType\x12\t\n\x05\x46LOAT\x10\x00\x12\x0b\n\x07INTEGER\x10\x01\x12\n\n\x06STRING\x10\x02\"\xf5\x01\n\x0cRecordColumn\x12\x0b\n\x03key\x18\x01 \x01(\t\x12*\n\nvalue_type\x18\x02 \x01(\x0e\x32\x16.RecordColumn.DataType\x12%\n\x04rows\x18\x03 \x03(\x0b\x32\x17.RecordColumn.RecordRow\x1aU\n\tRecordRow\x12\t\n\x01x\x18\x01 \x01(\x03\x12\x12\n\nfloat_data\x18\x64 \x01(\x02\x12\x14\n\x0cinteger_data\x18\x65 \x01(\x05\x12\x13\n\x0bstring_data\x18\x66 \x01(\t\".\n\x08\x44\x61taType\x12\t\n\x05\x46LOAT\x10\x00\x12\x0b\n\x07INTEGER\x10\x01\x12\n\n\x06STRING\x10\x02\"\xa7\x01\n\x06RunLog\x12\x15\n\rexperiment_id\x18\x01 \x01(\t\x12\x15\n\x04\x64\x61ta\x18\x02 \x03(\x0b\x32\x07.Record\x12\"\n\x0b\x63olumn_data\x18\x03 \x03(\x0b\x32\r.RecordColumn\x12!\n\x08log_type\x18\x04 \x01(\x0e\x32\x0f.RunLog.LogType\"(\n\x07LogType\x12\n\n\x06SYSTEM\x10\x00\x12\x07\n\x03NBX\x10\x01\x12\x08\n\x04USER\x10\x02\"\xd2\x01\n\x0c\x41gentDetails\x12\x1f\n\x04type\x18\x06 \x01(\x0e\x32\x11.AgentDetails.NBX\x12\x14\n\nnbx_job_id\x18\x01 \x01(\tH\x00\x12\x18\n\x0enbx_serving_id\x18\x03 \x01(\tH\x00\x12\x14\n\nnbx_run_id\x18\x02 \x01(\tH\x01\x12\x16\n\x0cnbx_model_id\x18\x04 \x01(\tH\x01\x12\x14\n\x0cworkspace_id\x18\x05 \x01(\t\"\x1b\n\x03NBX\x12\x07\n\x03JOB\x10\x00\x12\x0b\n\x07SERVING\x10\x01\x42\x04\n\x02idB\n\n\x08instance\"\x84\x01\n\x0eInitRunRequest\x12$\n\ragent_details\x18\x01 \x01(\x0b\x32\r.AgentDetails\x12\x12\n\ncreated_at\x18\x03 \x01(\x03\x12\x0e\n\x06\x63onfig\x18\x04 \x01(\t\x12\x12\n\nproject_id\x18\x02 \x01(\t\x12\x14\n\x0cproject_name\x18\x05 \x01(\t\"Z\n\x04\x46ile\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x12\n\ncreated_at\x18\x02 \x01(\x03\x12\x10\n\x08is_input\x18\x03 \x01(\x08\x12\x1e\n\nrelic_file\x18\x04 \x01(\x0b\x32\n.RelicFile\"7\n\x08\x46ileList\x12\x15\n\rexperiment_id\x18\x01 \x01(\t\x12\x14\n\x05\x66iles\x18\x02 \x03(\x0b\x32\x05.File\"\xa8\x02\n\x03Run\x12\x1c\n\x05\x61gent\x18\x01 \x01(\x0b\x32\r.AgentDetails\x12\x15\n\rexperiment_id\x18\x02 \x01(\t\x12\x12\n\ncreated_at\x18\x03 \x01(\x03\x12\x10\n\x08\x65nded_at\x18\x04 \x01(\x03\x12\x11\n\tcompleted\x18\x05 \x01(\x08\x12\x15\n\rsave_location\x18\x06 \x01(\t\x12\x1c\n\tfile_list\x18\x07 \x01(\x0b\x32\t.FileList\x12\x0e\n\x06\x63onfig\x18\x08 \x01(\t\x12\x1b\n\x06status\x18\t \x01(\x0e\x32\x0b.Run.Status\x12\x12\n\nupdated_at\x18\n \x01(\x03\"=\n\x06Status\x12\x0b\n\x07NOT_SET\x10\x00\x12\x0b\n\x07RUNNING\x10\x01\x12\r\n\tCOMPLETED\x10\x02\x12\n\n\x06\x46\x41ILED\x10\x03\"X\n\x13ListProjectsRequest\x12\x14\n\x0cworkspace_id\x18\x01 \x01(\t\x12\x1a\n\x12project_id_or_name\x18\x02 \x01(\t\x12\x0f\n\x07page_no\x18\x03 \x01(\x05\"\xac\x01\n\x14ListProjectsResponse\x12/\n\x08projects\x18\x01 \x03(\x0b\x32\x1d.ListProjectsResponse.Project\x12\x13\n\x0btotal_pages\x18\x02 \x01(\x05\x1aN\n\x07Project\x12\x12\n\nproject_id\x18\x01 \x01(\t\x12\x14\n\x0cproject_name\x18\x02 \x01(\t\x12\x19\n\x11total_experiments\x18\x03 \x01(\x05\"q\n\x0fListRunsRequest\x12\x14\n\x0cworkspace_id\x18\x01 \x01(\t\x12\x12\n\nproject_id\x18\x02 \x01(\t\x12\x15\n\rexperiment_id\x18\x03 \x01(\t\x12\x0f\n\x07page_no\x18\x04 \x01(\x05\x12\x0c\n\x04\x64\x65sc\x18\x05 \x01(\x08\"a\n\x10ListRunsResponse\x12\x16\n\x0e\x65xperiment_ids\x18\x01 \x03(\t\x12\x0c\n\x04keys\x18\x02 \x03(\t\x12\x12\n\ncreated_at\x18\x03 \x03(\x03\x12\x13\n\x0btotal_pages\x18\x04 \x01(\x05\"e\n\rRunLogRequest\x12\x15\n\rexperiment_id\x18\x01 \x01(\t\x12\x0b\n\x03key\x18\x02 \x01(\t\x12\x0e\n\x06sample\x18\x03 \x01(\x05\x12\x10\n\x08start_at\x18\x04 \x01(\x05\x12\x0e\n\x06\x65nd_at\x18\x05 \x01(\x05\x32\x8d\x06\n\x04LMAO\x12#\n\x08init_run\x12\x0f.InitRunRequest\x1a\x04.Run\"\x00\x12)\n\x11update_run_status\x12\x04.Run\x1a\x0c.Acknowledge\"\x00\x12!\n\x06on_log\x12\x07.RunLog\x1a\x0c.Acknowledge\"\x00\x12$\n\x07on_save\x12\t.FileList\x1a\x0c.Acknowledge\"\x00\x12$\n\x0con_train_end\x12\x04.Run\x1a\x0c.Acknowledge\"\x00\x12>\n\rlist_projects\x12\x14.ListProjectsRequest\x1a\x15.ListProjectsResponse\"\x00\x12\x32\n\tlist_runs\x12\x10.ListRunsRequest\x1a\x11.ListRunsResponse\"\x00\x12\x1f\n\x0fget_run_details\x12\x04.Run\x1a\x04.Run\"\x00\x12(\n\x0bget_run_log\x12\x0e.RunLogRequest\x1a\x07.RunLog\"\x00\x12\x1f\n\nlist_files\x12\x04.Run\x1a\t.FileList\"\x00\x12+\n\x0cinit_serving\x12\x0f.InitRunRequest\x1a\x08.Serving\"\x00\x12,\n\x0eon_serving_log\x12\n.LogBuffer\x1a\x0c.Acknowledge\"\x00\x12*\n\x0eon_serving_end\x12\x08.Serving\x1a\x0c.Acknowledge\"\x00\x12G\n\x10list_deployments\x12\x17.ListDeploymentsRequest\x1a\x18.ListDeploymentsResponse\"\x00\x12>\n\rlist_servings\x12\x14.ListServingsRequest\x1a\x15.ListServingsResponse\"\x00\x12+\n\x13get_serving_details\x12\x08.Serving\x1a\x08.Serving\"\x00\x12)\n\x0fget_serving_log\x12\x08.Serving\x1a\n.LogBuffer\"\x00\x62\x06proto3')
 
 
 
+_LOGBUFFER = DESCRIPTOR.message_types_by_name['LogBuffer']
+_SERVINGHTTPLOG = DESCRIPTOR.message_types_by_name['ServingHTTPLog']
+_LISTDEPLOYMENTSREQUEST = DESCRIPTOR.message_types_by_name['ListDeploymentsRequest']
+_LISTDEPLOYMENTSRESPONSE = DESCRIPTOR.message_types_by_name['ListDeploymentsResponse']
+_LISTDEPLOYMENTSRESPONSE_SERVING = _LISTDEPLOYMENTSRESPONSE.nested_types_by_name['Serving']
+_LISTSERVINGSREQUEST = DESCRIPTOR.message_types_by_name['ListServingsRequest']
+_LISTSERVINGSRESPONSE = DESCRIPTOR.message_types_by_name['ListServingsResponse']
+_SERVING = DESCRIPTOR.message_types_by_name['Serving']
 _RECORD = DESCRIPTOR.message_types_by_name['Record']
 _RECORDCOLUMN = DESCRIPTOR.message_types_by_name['RecordColumn']
 _RECORDCOLUMN_RECORDROW = _RECORDCOLUMN.nested_types_by_name['RecordRow']
@@ -35,11 +44,69 @@ _LISTPROJECTSRESPONSE_PROJECT = _LISTPROJECTSRESPONSE.nested_types_by_name['Proj
 _LISTRUNSREQUEST = DESCRIPTOR.message_types_by_name['ListRunsRequest']
 _LISTRUNSRESPONSE = DESCRIPTOR.message_types_by_name['ListRunsResponse']
 _RUNLOGREQUEST = DESCRIPTOR.message_types_by_name['RunLogRequest']
+_SERVING_STATUS = _SERVING.enum_types_by_name['Status']
 _RECORD_DATATYPE = _RECORD.enum_types_by_name['DataType']
 _RECORDCOLUMN_DATATYPE = _RECORDCOLUMN.enum_types_by_name['DataType']
 _RUNLOG_LOGTYPE = _RUNLOG.enum_types_by_name['LogType']
 _AGENTDETAILS_NBX = _AGENTDETAILS.enum_types_by_name['NBX']
 _RUN_STATUS = _RUN.enum_types_by_name['Status']
+LogBuffer = _reflection.GeneratedProtocolMessageType('LogBuffer', (_message.Message,), {
+  'DESCRIPTOR' : _LOGBUFFER,
+  '__module__' : 'proto.lmao_pb2'
+  # @@protoc_insertion_point(class_scope:LogBuffer)
+  })
+_sym_db.RegisterMessage(LogBuffer)
+
+ServingHTTPLog = _reflection.GeneratedProtocolMessageType('ServingHTTPLog', (_message.Message,), {
+  'DESCRIPTOR' : _SERVINGHTTPLOG,
+  '__module__' : 'proto.lmao_pb2'
+  # @@protoc_insertion_point(class_scope:ServingHTTPLog)
+  })
+_sym_db.RegisterMessage(ServingHTTPLog)
+
+ListDeploymentsRequest = _reflection.GeneratedProtocolMessageType('ListDeploymentsRequest', (_message.Message,), {
+  'DESCRIPTOR' : _LISTDEPLOYMENTSREQUEST,
+  '__module__' : 'proto.lmao_pb2'
+  # @@protoc_insertion_point(class_scope:ListDeploymentsRequest)
+  })
+_sym_db.RegisterMessage(ListDeploymentsRequest)
+
+ListDeploymentsResponse = _reflection.GeneratedProtocolMessageType('ListDeploymentsResponse', (_message.Message,), {
+
+  'Serving' : _reflection.GeneratedProtocolMessageType('Serving', (_message.Message,), {
+    'DESCRIPTOR' : _LISTDEPLOYMENTSRESPONSE_SERVING,
+    '__module__' : 'proto.lmao_pb2'
+    # @@protoc_insertion_point(class_scope:ListDeploymentsResponse.Serving)
+    })
+  ,
+  'DESCRIPTOR' : _LISTDEPLOYMENTSRESPONSE,
+  '__module__' : 'proto.lmao_pb2'
+  # @@protoc_insertion_point(class_scope:ListDeploymentsResponse)
+  })
+_sym_db.RegisterMessage(ListDeploymentsResponse)
+_sym_db.RegisterMessage(ListDeploymentsResponse.Serving)
+
+ListServingsRequest = _reflection.GeneratedProtocolMessageType('ListServingsRequest', (_message.Message,), {
+  'DESCRIPTOR' : _LISTSERVINGSREQUEST,
+  '__module__' : 'proto.lmao_pb2'
+  # @@protoc_insertion_point(class_scope:ListServingsRequest)
+  })
+_sym_db.RegisterMessage(ListServingsRequest)
+
+ListServingsResponse = _reflection.GeneratedProtocolMessageType('ListServingsResponse', (_message.Message,), {
+  'DESCRIPTOR' : _LISTSERVINGSRESPONSE,
+  '__module__' : 'proto.lmao_pb2'
+  # @@protoc_insertion_point(class_scope:ListServingsResponse)
+  })
+_sym_db.RegisterMessage(ListServingsResponse)
+
+Serving = _reflection.GeneratedProtocolMessageType('Serving', (_message.Message,), {
+  'DESCRIPTOR' : _SERVING,
+  '__module__' : 'proto.lmao_pb2'
+  # @@protoc_insertion_point(class_scope:Serving)
+  })
+_sym_db.RegisterMessage(Serving)
+
 Record = _reflection.GeneratedProtocolMessageType('Record', (_message.Message,), {
   'DESCRIPTOR' : _RECORD,
   '__module__' : 'proto.lmao_pb2'
@@ -151,46 +218,64 @@ _LMAO = DESCRIPTOR.services_by_name['LMAO']
 if _descriptor._USE_C_DESCRIPTORS == False:
 
   DESCRIPTOR._options = None
-  _RECORD._serialized_start=61
-  _RECORD._serialized_end=245
-  _RECORD_DATATYPE._serialized_start=199
-  _RECORD_DATATYPE._serialized_end=245
-  _RECORDCOLUMN._serialized_start=248
-  _RECORDCOLUMN._serialized_end=493
-  _RECORDCOLUMN_RECORDROW._serialized_start=360
-  _RECORDCOLUMN_RECORDROW._serialized_end=445
-  _RECORDCOLUMN_DATATYPE._serialized_start=199
-  _RECORDCOLUMN_DATATYPE._serialized_end=245
-  _RUNLOG._serialized_start=496
-  _RUNLOG._serialized_end=656
-  _RUNLOG_LOGTYPE._serialized_start=616
-  _RUNLOG_LOGTYPE._serialized_end=656
-  _AGENTDETAILS._serialized_start=659
-  _AGENTDETAILS._serialized_end=869
-  _AGENTDETAILS_NBX._serialized_start=824
-  _AGENTDETAILS_NBX._serialized_end=851
-  _INITRUNREQUEST._serialized_start=872
-  _INITRUNREQUEST._serialized_end=1004
-  _FILE._serialized_start=1006
-  _FILE._serialized_end=1096
-  _FILELIST._serialized_start=1098
-  _FILELIST._serialized_end=1146
-  _RUN._serialized_start=1149
-  _RUN._serialized_end=1438
-  _RUN_STATUS._serialized_start=1377
-  _RUN_STATUS._serialized_end=1438
-  _LISTPROJECTSREQUEST._serialized_start=1440
-  _LISTPROJECTSREQUEST._serialized_end=1528
-  _LISTPROJECTSRESPONSE._serialized_start=1531
-  _LISTPROJECTSRESPONSE._serialized_end=1703
-  _LISTPROJECTSRESPONSE_PROJECT._serialized_start=1625
-  _LISTPROJECTSRESPONSE_PROJECT._serialized_end=1703
-  _LISTRUNSREQUEST._serialized_start=1705
-  _LISTRUNSREQUEST._serialized_end=1811
-  _LISTRUNSRESPONSE._serialized_start=1813
-  _LISTRUNSRESPONSE._serialized_end=1903
-  _RUNLOGREQUEST._serialized_start=1905
-  _RUNLOGREQUEST._serialized_end=1999
-  _LMAO._serialized_start=2002
-  _LMAO._serialized_end=2370
+  _LOGBUFFER._serialized_start=93
+  _LOGBUFFER._serialized_end=188
+  _SERVINGHTTPLOG._serialized_start=191
+  _SERVINGHTTPLOG._serialized_end=325
+  _LISTDEPLOYMENTSREQUEST._serialized_start=327
+  _LISTDEPLOYMENTSREQUEST._serialized_end=418
+  _LISTDEPLOYMENTSRESPONSE._serialized_start=421
+  _LISTDEPLOYMENTSRESPONSE._serialized_end=593
+  _LISTDEPLOYMENTSRESPONSE_SERVING._serialized_start=520
+  _LISTDEPLOYMENTSRESPONSE_SERVING._serialized_end=593
+  _LISTSERVINGSREQUEST._serialized_start=595
+  _LISTSERVINGSREQUEST._serialized_end=708
+  _LISTSERVINGSRESPONSE._serialized_start=710
+  _LISTSERVINGSRESPONSE._serialized_end=806
+  _SERVING._serialized_start=809
+  _SERVING._serialized_end=1009
+  _SERVING_STATUS._serialized_start=960
+  _SERVING_STATUS._serialized_end=1009
+  _RECORD._serialized_start=1012
+  _RECORD._serialized_end=1196
+  _RECORD_DATATYPE._serialized_start=1150
+  _RECORD_DATATYPE._serialized_end=1196
+  _RECORDCOLUMN._serialized_start=1199
+  _RECORDCOLUMN._serialized_end=1444
+  _RECORDCOLUMN_RECORDROW._serialized_start=1311
+  _RECORDCOLUMN_RECORDROW._serialized_end=1396
+  _RECORDCOLUMN_DATATYPE._serialized_start=1150
+  _RECORDCOLUMN_DATATYPE._serialized_end=1196
+  _RUNLOG._serialized_start=1447
+  _RUNLOG._serialized_end=1614
+  _RUNLOG_LOGTYPE._serialized_start=1574
+  _RUNLOG_LOGTYPE._serialized_end=1614
+  _AGENTDETAILS._serialized_start=1617
+  _AGENTDETAILS._serialized_end=1827
+  _AGENTDETAILS_NBX._serialized_start=1782
+  _AGENTDETAILS_NBX._serialized_end=1809
+  _INITRUNREQUEST._serialized_start=1830
+  _INITRUNREQUEST._serialized_end=1962
+  _FILE._serialized_start=1964
+  _FILE._serialized_end=2054
+  _FILELIST._serialized_start=2056
+  _FILELIST._serialized_end=2111
+  _RUN._serialized_start=2114
+  _RUN._serialized_end=2410
+  _RUN_STATUS._serialized_start=2349
+  _RUN_STATUS._serialized_end=2410
+  _LISTPROJECTSREQUEST._serialized_start=2412
+  _LISTPROJECTSREQUEST._serialized_end=2500
+  _LISTPROJECTSRESPONSE._serialized_start=2503
+  _LISTPROJECTSRESPONSE._serialized_end=2675
+  _LISTPROJECTSRESPONSE_PROJECT._serialized_start=2597
+  _LISTPROJECTSRESPONSE_PROJECT._serialized_end=2675
+  _LISTRUNSREQUEST._serialized_start=2677
+  _LISTRUNSREQUEST._serialized_end=2790
+  _LISTRUNSRESPONSE._serialized_start=2792
+  _LISTRUNSRESPONSE._serialized_end=2889
+  _RUNLOGREQUEST._serialized_start=2891
+  _RUNLOGREQUEST._serialized_end=2992
+  _LMAO._serialized_start=2995
+  _LMAO._serialized_end=3776
 # @@protoc_insertion_point(module_scope)

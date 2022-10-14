@@ -1,0 +1,42 @@
+<html>
+  <head>
+    <title>nbox operator map status</title>
+    <style>
+      #Table-1{
+        margin:20px;
+        border-collapse:collapse;
+        font-family:arial;
+        font-size:12px;
+        text-align:center;
+        width:1000px;
+      }
+      #Table-1 th{
+        color:white;
+        background-color:blue;
+      }
+      #Table-1 td{}
+      #Table-1 tr:hover td{}
+    </style>
+  </head>
+  <body>
+    <table id="Table-1">
+    <thead>
+      <tr>
+        {% for header in headers %}<th class="right" scope="col">{{ header }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in data %}<tr>
+      {% for item in row %}<td>{{ item }}</td>
+      {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+    </table>
+  </body>
+  <script>
+    // refresh page every 1 second
+    setTimeout(function(){location.reload()},1000);
+  </script>
+</html>

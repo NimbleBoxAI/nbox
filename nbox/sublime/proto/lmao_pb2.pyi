@@ -7,11 +7,264 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
+import google.protobuf.timestamp_pb2
 import proto.relics_pb2
 import typing
 import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class LogBuffer(google.protobuf.message.Message):
+    """since this is becoming a more serious thing than what we initially were building we need to make it
+    more production ready and the first step is to log a buffer object instead of the individual log object.
+    we create a message called LogBuffer which is nothing but an array of _LogObject which in turn is
+    either a RunLog or a LiveLog object.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    AGENT_TOKEN_FIELD_NUMBER: builtins.int
+    RUN_LOGS_FIELD_NUMBER: builtins.int
+    LIVE_LOGS_FIELD_NUMBER: builtins.int
+    agent_token: typing.Text
+    """this is like the experiment_id in runs where an agent tries to connect and server gives it a
+    one time token with which all the incoming logs will be identified with
+    """
+
+    @property
+    def run_logs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RunLog]:
+        """this can either contain one or the other"""
+        pass
+    @property
+    def live_logs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ServingHTTPLog]: ...
+    def __init__(self,
+        *,
+        agent_token: typing.Text = ...,
+        run_logs: typing.Optional[typing.Iterable[global___RunLog]] = ...,
+        live_logs: typing.Optional[typing.Iterable[global___ServingHTTPLog]] = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["agent_token",b"agent_token","live_logs",b"live_logs","run_logs",b"run_logs"]) -> None: ...
+global___LogBuffer = LogBuffer
+
+class ServingHTTPLog(google.protobuf.message.Message):
+    """LiveLog is an individual call event which is created by the user agent whenever a certain API is called.
+    it contains some basic information as in any other general monitoring solution.
+    """
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    PATH_FIELD_NUMBER: builtins.int
+    METHOD_FIELD_NUMBER: builtins.int
+    STATUS_CODE_FIELD_NUMBER: builtins.int
+    LATENCY_MS_FIELD_NUMBER: builtins.int
+    TIMESTAMP_FIELD_NUMBER: builtins.int
+    path: typing.Text
+    """the endpoint ie. /api/monitoring/"""
+
+    method: typing.Text
+    """the method ie. GET, POST, PUT, DELETE"""
+
+    status_code: builtins.int
+    """the status code ie. 200, 404, 500"""
+
+    latency_ms: builtins.float
+    """the latency in milli-seconds"""
+
+    @property
+    def timestamp(self) -> google.protobuf.timestamp_pb2.Timestamp:
+        """the timestamp when this event was created"""
+        pass
+    def __init__(self,
+        *,
+        path: typing.Text = ...,
+        method: typing.Text = ...,
+        status_code: builtins.int = ...,
+        latency_ms: builtins.float = ...,
+        timestamp: typing.Optional[google.protobuf.timestamp_pb2.Timestamp] = ...,
+        ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["timestamp",b"timestamp"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["latency_ms",b"latency_ms","method",b"method","path",b"path","status_code",b"status_code","timestamp",b"timestamp"]) -> None: ...
+global___ServingHTTPLog = ServingHTTPLog
+
+class ListDeploymentsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    WORKSPACE_ID_FIELD_NUMBER: builtins.int
+    SERVING_ID_OR_NAME_FIELD_NUMBER: builtins.int
+    PAGE_NO_FIELD_NUMBER: builtins.int
+    workspace_id: typing.Text
+    serving_id_or_name: typing.Text
+    """used specifically for searching, if empty, it will return all the projects"""
+
+    page_no: builtins.int
+    def __init__(self,
+        *,
+        workspace_id: typing.Text = ...,
+        serving_id_or_name: typing.Text = ...,
+        page_no: builtins.int = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["page_no",b"page_no","serving_id_or_name",b"serving_id_or_name","workspace_id",b"workspace_id"]) -> None: ...
+global___ListDeploymentsRequest = ListDeploymentsRequest
+
+class ListDeploymentsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    class Serving(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        SERVING_ID_FIELD_NUMBER: builtins.int
+        SERVING_NAME_FIELD_NUMBER: builtins.int
+        TOTAL_MODELS_FIELD_NUMBER: builtins.int
+        serving_id: typing.Text
+        """the unique ID for this serving"""
+
+        serving_name: typing.Text
+        """the usermodifiable name of the serving"""
+
+        total_models: builtins.int
+        """the total number of models in this serving group"""
+
+        def __init__(self,
+            *,
+            serving_id: typing.Text = ...,
+            serving_name: typing.Text = ...,
+            total_models: builtins.int = ...,
+            ) -> None: ...
+        def ClearField(self, field_name: typing_extensions.Literal["serving_id",b"serving_id","serving_name",b"serving_name","total_models",b"total_models"]) -> None: ...
+
+    SERVING_FIELD_NUMBER: builtins.int
+    TOTAL_PAGES_FIELD_NUMBER: builtins.int
+    @property
+    def serving(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ListDeploymentsResponse.Serving]: ...
+    total_pages: builtins.int
+    def __init__(self,
+        *,
+        serving: typing.Optional[typing.Iterable[global___ListDeploymentsResponse.Serving]] = ...,
+        total_pages: builtins.int = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["serving",b"serving","total_pages",b"total_pages"]) -> None: ...
+global___ListDeploymentsResponse = ListDeploymentsResponse
+
+class ListServingsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    WORKSPACE_ID_FIELD_NUMBER: builtins.int
+    DEPLOYMENT_ID_FIELD_NUMBER: builtins.int
+    RUN_ID_FIELD_NUMBER: builtins.int
+    PAGE_NO_FIELD_NUMBER: builtins.int
+    DESC_FIELD_NUMBER: builtins.int
+    workspace_id: typing.Text
+    """the workspace this is part of"""
+
+    deployment_id: typing.Text
+    """the unique ID for this project"""
+
+    run_id: typing.Text
+    """for searching"""
+
+    page_no: builtins.int
+    desc: builtins.bool
+    def __init__(self,
+        *,
+        workspace_id: typing.Text = ...,
+        deployment_id: typing.Text = ...,
+        run_id: typing.Text = ...,
+        page_no: builtins.int = ...,
+        desc: builtins.bool = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["deployment_id",b"deployment_id","desc",b"desc","page_no",b"page_no","run_id",b"run_id","workspace_id",b"workspace_id"]) -> None: ...
+global___ListServingsRequest = ListServingsRequest
+
+class ListServingsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    MODEL_IDS_FIELD_NUMBER: builtins.int
+    KEYS_FIELD_NUMBER: builtins.int
+    CREATED_AT_FIELD_NUMBER: builtins.int
+    TOTAL_PAGES_FIELD_NUMBER: builtins.int
+    @property
+    def model_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
+        """the list of runs in this project"""
+        pass
+    @property
+    def keys(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
+        """the list of chart-keys for this run"""
+        pass
+    @property
+    def created_at(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.int]:
+        """time when these runs were created"""
+        pass
+    total_pages: builtins.int
+    """the total number of pages"""
+
+    def __init__(self,
+        *,
+        model_ids: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        keys: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        created_at: typing.Optional[typing.Iterable[builtins.int]] = ...,
+        total_pages: builtins.int = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["created_at",b"created_at","keys",b"keys","model_ids",b"model_ids","total_pages",b"total_pages"]) -> None: ...
+global___ListServingsResponse = ListServingsResponse
+
+class Serving(google.protobuf.message.Message):
+    """the Big Serving Object"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    class _Status:
+        ValueType = typing.NewType('ValueType', builtins.int)
+        V: typing_extensions.TypeAlias = ValueType
+    class _StatusEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[Serving._Status.ValueType], builtins.type):
+        DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+        NOT_SET: Serving._Status.ValueType  # 0
+        """When created and added to DB but no further action taken"""
+
+        RUNNING: Serving._Status.ValueType  # 1
+        """When the first on_serving_log has been called"""
+
+        COMPLETED: Serving._Status.ValueType  # 2
+        """When there is a graceful exit on_serving_end has been called"""
+
+    class Status(_Status, metaclass=_StatusEnumTypeWrapper):
+        pass
+
+    NOT_SET: Serving.Status.ValueType  # 0
+    """When created and added to DB but no further action taken"""
+
+    RUNNING: Serving.Status.ValueType  # 1
+    """When the first on_serving_log has been called"""
+
+    COMPLETED: Serving.Status.ValueType  # 2
+    """When there is a graceful exit on_serving_end has been called"""
+
+
+    AGENT_FIELD_NUMBER: builtins.int
+    AGENT_TOKEN_FIELD_NUMBER: builtins.int
+    CREATED_AT_FIELD_NUMBER: builtins.int
+    CONFIG_FIELD_NUMBER: builtins.int
+    STATUS_FIELD_NUMBER: builtins.int
+    UPDATED_AT_FIELD_NUMBER: builtins.int
+    @property
+    def agent(self) -> global___AgentDetails:
+        """the agent details"""
+        pass
+    agent_token: typing.Text
+    """the unique ID of this agent from the MongoDB backend"""
+
+    created_at: builtins.int
+    """same as InitRunRequest.created_at"""
+
+    config: typing.Text
+    """the jsonified config string"""
+
+    status: global___Serving.Status.ValueType
+    """the last known status of this run"""
+
+    updated_at: builtins.int
+    """the last time this"""
+
+    def __init__(self,
+        *,
+        agent: typing.Optional[global___AgentDetails] = ...,
+        agent_token: typing.Text = ...,
+        created_at: builtins.int = ...,
+        config: typing.Text = ...,
+        status: global___Serving.Status.ValueType = ...,
+        updated_at: builtins.int = ...,
+        ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["agent",b"agent"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["agent",b"agent","agent_token",b"agent_token","config",b"config","created_at",b"created_at","status",b"status","updated_at",b"updated_at"]) -> None: ...
+global___Serving = Serving
 
 class Record(google.protobuf.message.Message):
     """This is the data that the user will be logging if this"""
@@ -157,11 +410,11 @@ class RunLog(google.protobuf.message.Message):
     """these are the metrics that the user has logged"""
 
 
-    RUN_ID_FIELD_NUMBER: builtins.int
+    EXPERIMENT_ID_FIELD_NUMBER: builtins.int
     DATA_FIELD_NUMBER: builtins.int
     COLUMN_DATA_FIELD_NUMBER: builtins.int
     LOG_TYPE_FIELD_NUMBER: builtins.int
-    run_id: typing.Text
+    experiment_id: typing.Text
     @property
     def data(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Record]: ...
     @property
@@ -173,12 +426,12 @@ class RunLog(google.protobuf.message.Message):
 
     def __init__(self,
         *,
-        run_id: typing.Text = ...,
+        experiment_id: typing.Text = ...,
         data: typing.Optional[typing.Iterable[global___Record]] = ...,
         column_data: typing.Optional[typing.Iterable[global___RecordColumn]] = ...,
         log_type: global___RunLog.LogType.ValueType = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["column_data",b"column_data","data",b"data","log_type",b"log_type","run_id",b"run_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["column_data",b"column_data","data",b"data","experiment_id",b"experiment_id","log_type",b"log_type"]) -> None: ...
 global___RunLog = RunLog
 
 class AgentDetails(google.protobuf.message.Message):
@@ -239,26 +492,28 @@ global___AgentDetails = AgentDetails
 class InitRunRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     AGENT_DETAILS_FIELD_NUMBER: builtins.int
-    PROJECT_ID_FIELD_NUMBER: builtins.int
     CREATED_AT_FIELD_NUMBER: builtins.int
     CONFIG_FIELD_NUMBER: builtins.int
+    PROJECT_ID_FIELD_NUMBER: builtins.int
     PROJECT_NAME_FIELD_NUMBER: builtins.int
     @property
     def agent_details(self) -> global___AgentDetails: ...
-    project_id: typing.Text
     created_at: builtins.int
     """the unix timestamp when this run was created"""
 
     config: typing.Text
     """the jsonified singular config string"""
 
+    project_id: typing.Text
+    """when this is an experiment we will have project details"""
+
     project_name: typing.Text
     def __init__(self,
         *,
         agent_details: typing.Optional[global___AgentDetails] = ...,
-        project_id: typing.Text = ...,
         created_at: builtins.int = ...,
         config: typing.Text = ...,
+        project_id: typing.Text = ...,
         project_name: typing.Text = ...,
         ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["agent_details",b"agent_details"]) -> builtins.bool: ...
@@ -297,9 +552,9 @@ global___File = File
 
 class FileList(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    RUN_ID_FIELD_NUMBER: builtins.int
+    EXPERIMENT_ID_FIELD_NUMBER: builtins.int
     FILES_FIELD_NUMBER: builtins.int
-    run_id: typing.Text
+    experiment_id: typing.Text
     """associated run"""
 
     @property
@@ -308,10 +563,10 @@ class FileList(google.protobuf.message.Message):
         pass
     def __init__(self,
         *,
-        run_id: typing.Text = ...,
+        experiment_id: typing.Text = ...,
         files: typing.Optional[typing.Iterable[global___File]] = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["files",b"files","run_id",b"run_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["experiment_id",b"experiment_id","files",b"files"]) -> None: ...
 global___FileList = FileList
 
 class Run(google.protobuf.message.Message):
@@ -351,7 +606,7 @@ class Run(google.protobuf.message.Message):
 
 
     AGENT_FIELD_NUMBER: builtins.int
-    RUN_ID_FIELD_NUMBER: builtins.int
+    EXPERIMENT_ID_FIELD_NUMBER: builtins.int
     CREATED_AT_FIELD_NUMBER: builtins.int
     ENDED_AT_FIELD_NUMBER: builtins.int
     COMPLETED_FIELD_NUMBER: builtins.int
@@ -364,7 +619,7 @@ class Run(google.protobuf.message.Message):
     def agent(self) -> global___AgentDetails:
         """the agent details"""
         pass
-    run_id: typing.Text
+    experiment_id: typing.Text
     """the unique ID of this run from the MongoDB backend"""
 
     created_at: builtins.int
@@ -395,7 +650,7 @@ class Run(google.protobuf.message.Message):
     def __init__(self,
         *,
         agent: typing.Optional[global___AgentDetails] = ...,
-        run_id: typing.Text = ...,
+        experiment_id: typing.Text = ...,
         created_at: builtins.int = ...,
         ended_at: builtins.int = ...,
         completed: builtins.bool = ...,
@@ -406,7 +661,7 @@ class Run(google.protobuf.message.Message):
         updated_at: builtins.int = ...,
         ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["agent",b"agent","file_list",b"file_list"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["agent",b"agent","completed",b"completed","config",b"config","created_at",b"created_at","ended_at",b"ended_at","file_list",b"file_list","run_id",b"run_id","save_location",b"save_location","status",b"status","updated_at",b"updated_at"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["agent",b"agent","completed",b"completed","config",b"config","created_at",b"created_at","ended_at",b"ended_at","experiment_id",b"experiment_id","file_list",b"file_list","save_location",b"save_location","status",b"status","updated_at",b"updated_at"]) -> None: ...
 global___Run = Run
 
 class ListProjectsRequest(google.protobuf.message.Message):
@@ -482,7 +737,7 @@ class ListRunsRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     PROJECT_ID_FIELD_NUMBER: builtins.int
-    RUN_ID_FIELD_NUMBER: builtins.int
+    EXPERIMENT_ID_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
     DESC_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
@@ -491,7 +746,7 @@ class ListRunsRequest(google.protobuf.message.Message):
     project_id: typing.Text
     """the unique ID for this project"""
 
-    run_id: typing.Text
+    experiment_id: typing.Text
     """for searching"""
 
     page_no: builtins.int
@@ -500,21 +755,21 @@ class ListRunsRequest(google.protobuf.message.Message):
         *,
         workspace_id: typing.Text = ...,
         project_id: typing.Text = ...,
-        run_id: typing.Text = ...,
+        experiment_id: typing.Text = ...,
         page_no: builtins.int = ...,
         desc: builtins.bool = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["desc",b"desc","page_no",b"page_no","project_id",b"project_id","run_id",b"run_id","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["desc",b"desc","experiment_id",b"experiment_id","page_no",b"page_no","project_id",b"project_id","workspace_id",b"workspace_id"]) -> None: ...
 global___ListRunsRequest = ListRunsRequest
 
 class ListRunsResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    RUN_IDS_FIELD_NUMBER: builtins.int
+    EXPERIMENT_IDS_FIELD_NUMBER: builtins.int
     KEYS_FIELD_NUMBER: builtins.int
     CREATED_AT_FIELD_NUMBER: builtins.int
     TOTAL_PAGES_FIELD_NUMBER: builtins.int
     @property
-    def run_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
+    def experiment_ids(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
         """the list of runs in this project"""
         pass
     @property
@@ -530,23 +785,23 @@ class ListRunsResponse(google.protobuf.message.Message):
 
     def __init__(self,
         *,
-        run_ids: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        experiment_ids: typing.Optional[typing.Iterable[typing.Text]] = ...,
         keys: typing.Optional[typing.Iterable[typing.Text]] = ...,
         created_at: typing.Optional[typing.Iterable[builtins.int]] = ...,
         total_pages: builtins.int = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["created_at",b"created_at","keys",b"keys","run_ids",b"run_ids","total_pages",b"total_pages"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["created_at",b"created_at","experiment_ids",b"experiment_ids","keys",b"keys","total_pages",b"total_pages"]) -> None: ...
 global___ListRunsResponse = ListRunsResponse
 
 class RunLogRequest(google.protobuf.message.Message):
     """logs for $app/monitoring/gjj9dk30/experiment/cmk03kt03/"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    RUN_ID_FIELD_NUMBER: builtins.int
+    EXPERIMENT_ID_FIELD_NUMBER: builtins.int
     KEY_FIELD_NUMBER: builtins.int
     SAMPLE_FIELD_NUMBER: builtins.int
     START_AT_FIELD_NUMBER: builtins.int
     END_AT_FIELD_NUMBER: builtins.int
-    run_id: typing.Text
+    experiment_id: typing.Text
     """the unique ID for this run"""
 
     key: typing.Text
@@ -563,11 +818,11 @@ class RunLogRequest(google.protobuf.message.Message):
 
     def __init__(self,
         *,
-        run_id: typing.Text = ...,
+        experiment_id: typing.Text = ...,
         key: typing.Text = ...,
         sample: builtins.int = ...,
         start_at: builtins.int = ...,
         end_at: builtins.int = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["end_at",b"end_at","key",b"key","run_id",b"run_id","sample",b"sample","start_at",b"start_at"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["end_at",b"end_at","experiment_id",b"experiment_id","key",b"key","sample",b"sample","start_at",b"start_at"]) -> None: ...
 global___RunLogRequest = RunLogRequest
