@@ -146,19 +146,12 @@ class Operator():
   # there are some thing that are used to hide the complexity of the entire operation
   # from the user
   _op_type = ospec.OperatorType.UNSET
-  _op_spec: Union[
-    ospec._UnsetSpec,
-    ospec._JobSpec,
-    ospec._ServingSpec,
-    ospec._WrapClsSpec,
-    ospec._WrapFnSpec,
-  ] = ospec._UnsetSpec()
+  _op_spec: Union[ospec._UnsetSpec,ospec._JobSpec,ospec._ServingSpec,ospec._WrapClsSpec,ospec._WrapFnSpec] = ospec._UnsetSpec()
 
   # this is a map from operator to resource, by deafult the values will be None,
   # unless explicitly modified by `chief.machine.Machine`
   _current_resource = None
   _op_to_resource_map = {}
-  _operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
 
   def __init__(self) -> None:
     """Create an operator, which abstracts your code into sharable, bulding blocks which
@@ -194,7 +187,7 @@ class Operator():
       job.deploy() # WIP # WIP
     """
     # do not add anything in here, else it will call self.__getattr__ and cause a RecursionError
-    pass
+    self._operators: Dict[str, 'Operator'] = OrderedDict() # {name: operator}
 
   def __remote_init__(self):
     """User can overwrite this function, this will be called only when running on remote.
@@ -532,29 +525,13 @@ class Operator():
   """
 
   def __setattr__(self, key, value: 'Operator'):
-    if self._op_type in [ospec.OperatorType.SERVING, ospec.OperatorType.JOB]:
-      raise ValueError("Cannot set attributes on a serving or job")
-    elif self._op_type in [ospec.OperatorType.WRAP_CLS, ospec.OperatorType.WRAP_FN]:
-      print("setting attribute", key, value, "to a wrapped object")
-      print(self._op_type)
-      print(self._op_spec)
-      print(self._op_spec.wrap_obj)
-      obj = getattr(self._op_spec.wrap_obj, key, None)
-    else:
-      print("setting attribute", key, value, "to Operator")
-      obj = getattr(self, key, None)
-
-    if key in ["_tracer", "forward"]:
-      pass
-    elif obj is not None and callable(obj) and not isinstance(value, Operator):
-      raise AttributeError(f"cannot assign {key} as it is already a method")
-
-    if isinstance(value, Operator):
-      if key in self.__dict__ and key not in self._operators:
-        raise KeyError(f"attribute '{key}' already exists")
+    if (
+      isinstance(value, Operator) and
+      hasattr(value, "_op_type") and self._op_type == ospec.OperatorType.UNSET and
+      hasattr(self, "_operators")
+    ):
+      # print("Adding:", self.__class__.__qualname__, key, value.__class__.__qualname__, isinstance(value, Operator), id(value), id(self))
       self._operators[key] = value
-      self._op_to_resource_map[key] = self._current_resource # map the operator to the current resource
-
     self.__dict__[key] = value
 
   def __getattr__(self, key):

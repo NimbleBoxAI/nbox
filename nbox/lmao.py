@@ -634,7 +634,7 @@ class LmaoCLI:
     resource_max_retries: int = 2,
 
     # the following arguments are used for the initialisation of lmao class
-    save_to_relic: bool = False,
+    save_to_relic: bool = True,
     enable_system_monitoring: bool = False,
 
     # the following things are needed for the different modules in the process
