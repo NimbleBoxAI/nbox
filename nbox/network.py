@@ -277,7 +277,7 @@ Function related to both NBX-Serving and NBX-Jobs
 
 def zip_to_nbox_folder(init_folder, id, workspace_id, type, **jinja_kwargs):
   # zip all the files folder
-  all_f = U.get_files_in_folder(init_folder, followlinks = True)
+  all_f = U.get_files_in_folder(init_folder, followlinks = False)
 
   # find a .nboxignore file and ignore items in it
   to_ignore_pat = []
