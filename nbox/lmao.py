@@ -216,7 +216,7 @@ class Lmao():
     """``Lmao`` is the client library for using NimbleBox Monitoring. It talks to your monitoring instance running on your build
     and stores the information in the ``project_name`` or ``project_id``. This object inherently doesn't care what you are actually
     logging and rather concerns itself with ensuring storage.
-    
+
     All arguments are optional, if the _lmaoConfig is set"""
 
     self.config = _lmaoConfig.kv
@@ -238,7 +238,7 @@ class Lmao():
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
     self.workspace_id = workspace_id
-    
+
     # now set the supporting keys
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
     self._total_logged_elements = 0 # this variable keeps track for logging
@@ -258,38 +258,31 @@ class Lmao():
       self.system_monitoring.stop()
 
   def _get_name_id(self, project_id: str = None, project_name: str = None):
-    all_projects = self.lmao.list_projects(
+    matching_projects = self.lmao.list_projects(
       _ListProjectsRequest = ListProjectsRequest(
         workspace_id = self.workspace_id,
         project_id_or_name = project_id if project_id else project_name,
       )
     )
-    if not all_projects.projects:
+
+    # case for one matching project
+    if len(matching_projects.projects) == 1:
+      project_name = matching_projects.projects[0].project_name
+      project_id = matching_projects.projects[0].project_id
+    elif len(matching_projects.projects) > 1:
+      if project_id:
+        logger.error(f"Multiple entries for {project_id} found, something went wrong from our side.")
+        raise Exception(f"Database duplicate entry for project_id: {project_id}")
+      else:
+        logger.error(f"Project '{project_name}' found multiple times, please use project_id instead.")
+        raise Exception("Ambiguous project name, please use project_id instead.")
+    else:
+      # case for no matching projects returned
       # means we have to initialise this project first and then we will pull the details after the init_run
       if project_id:
         raise Exception(f"Project with id {project_id} not found, please create a new one with project_name")
       logger.info(f"Project '{project_name}' not found, will create a new one.")
-    
-    if project_id:
-      common = list(filter(lambda x: x.project_id == project_name, all_projects.projects))
-      if len(common) == 1:
-        project_name = common[0].project_name
-        project_id = common[0].project_id
-      elif len(common) > 1:
-        logger.error(f"Multiple entries for {project_id} found, something went wrong from our side.")
-        raise Exception(f"Database duplicate entry for project_id: {project_id}")
-      else:
-        raise Exception(f"Project with id {project_id} not found, please create a new one with project_name")
-    else:
-      common = list(filter(lambda x: x.project_name == project_name, all_projects.projects))
-      if len(common) == 1:
-        project_name = common[0].project_name
-        project_id = common[0].project_id
-      elif len(common) > 1:
-        logger.error(f"Project '{project_name}' found multiple times, please use project_id instead.")
-        raise Exception("Ambiguous project name, please use project_id instead.")
-      else:
-        raise Exception(f"Project with name {project_name} not found, please create a new one with project_name")
+
     return project_id, project_name
 
   def _init(self, project_name, project_id, config: Dict[str, Any] = {}):
@@ -313,10 +306,12 @@ class Lmao():
         project_id, project_name = self._get_name_id(project_id=project_id)
         if not project_id:
           raise Exception(f"Project with id {project_id} not found, please create a new one with project_name")
-      else:
+      elif project_name:
         project_id, project_name = self._get_name_id(project_name=project_name)
         if not project_id:
           logger.info(f"Project '{project_name}' not found, create one from dashboard.")
+      else:
+        raise Exception("provide either `project_id` or `project_name`")
 
     # this is the config value that is used to store data on the plaform, user cannot be allowed to have
     # like a full access to config values
@@ -337,19 +332,20 @@ class Lmao():
       nbx_run_id = self._nbx_run_id or "fake_run",
     )
 
-    run_details = self.lmao.get_run_details(Run(
-      experiment_id = _lmaoConfig.kv["experiment_id"],
-    ))
-    if run_details.experiment_id:
-      # means that this run already exists so we need to make an update call
-      ack = self.lmao.update_run_status(Run(
-        experiment_id = run_details.experiment_id,
-        agent = self._agent_details,
-      ))
-      if not ack.success:
-        raise Exception(f"Failed to update run status!")
+    if "experiment_id" in _lmaoConfig.kv:
+      run_details = self.lmao.get_run_details(Run(experiment_id = _lmaoConfig.kv["experiment_id"]))
+      if not run_details:
+        # TODO: Make a custom exception of this
+        raise Exception("Server Side exception has occurred, Check the log for details")
+      if run_details.experiment_id:
+        # means that this run already exists so we need to make an update call
+        ack = self.lmao.update_run_status(Run(
+          experiment_id = run_details.experiment_id,
+          agent = self._agent_details,
+        ))
+        if not ack.success:
+          raise Exception(f"Failed to update run status!")
     else:
-      # check if there is a lmao run existing for this project_id
       run_details = self.lmao.init_run(
         _InitRunRequest = InitRunRequest(
           agent_details=self._agent_details,
@@ -359,10 +355,6 @@ class Lmao():
           config = dumps(log_config),
         )
       )
-
-    if not run_details:
-      # TODO: Make a custom exception of this
-      raise Exception("Server Side exception has occurred, Check the log for details")
 
     self.project_name = project_name
     self.project_id = project_id
