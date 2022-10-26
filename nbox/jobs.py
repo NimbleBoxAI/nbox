@@ -382,29 +382,20 @@ around the NBX-Jobs gRPC API.
 ################################################################################
 
 @lru_cache(16)
-def _get_job_data(id_or_name, *, workspace_id: str = ""):
-  # get stub
+def _get_job_data(id, *, workspace_id: str = ""):
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   if workspace_id == None:
-    stub_all_jobs = nbox_ws_v1.user.jobs
-  else:
-    stub_all_jobs = nbox_ws_v1.workspace.u(workspace_id).jobs
-
-  # filter and get "id" and "name"
-  all_jobs = stub_all_jobs()
-  jobs = list(filter(lambda x: x["job_id"] == id_or_name or x["name"] == id_or_name, all_jobs))
-  if len(jobs) == 0:
-    job_name =  id_or_name
-    job_id = None
-    logger.info(f"No Job found with ID or name: {job_name}")
-  elif len(jobs) > 1:
-    raise ValueError(f"Multiple jobs found for '{id_or_name}', try passing ID")
-  else:
-    data = jobs[0]
-    job_name = data["name"]
-    job_id = data["job_id"]
-    logger.info(f"Found job with ID '{job_id}' and name '{job_name}'")
-  
+    workspace_id = "personal"
+ 
+  job: JobProto = rpc(
+    nbox_grpc_stub.GetJob,
+    JobInfo(job=JobProto(id=id,auth_info=NBXAuthInfo(workspace_id=workspace_id))),
+    "Could not find job with ID: {}".format(id),
+    raise_on_error = True
+  )
+  job_name = job.name
+  job_id = job.id
+  logger.info(f"Found job with ID '{job_id}' and name '{job_name}'")
   return job_id, job_name
 
 
