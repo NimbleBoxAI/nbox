@@ -116,7 +116,15 @@ nbox[serving]=={__version__} # do not change this
 
   logger.info(f"Created folder: {folder_name}")
 
-def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_id: str = "", _ret: bool = False, **init_kwargs):
+def upload_job_folder(
+  method: str,
+  init_folder: str,
+  id_or_name: str,
+  workspace_id: str = "",
+  _ret: bool = False,
+  trigger: bool = False,
+  **init_kwargs
+):
   """Upload the code for a job or serving to the NBX. if `id_or_name` is not present, it will create a new Job.
   Only the folder in teh 
 
@@ -359,9 +367,10 @@ class Serve:
     self.serving_id = serving_id
     self.serving_name = serving_name
     self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
-    
-  # def change_behaviour(self, new_behaviour: 'Behaviour' = None):
-  #   raise NotImplementedError("Not implemented yet")
+
+    # it will have two stubs
+    # one for the serving group: ServingService
+    # one for the specific model: ModelService
 
   def __repr__(self) -> str:
     x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
@@ -539,11 +548,17 @@ class Job:
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
-  def trigger(self, tag: str = ""):
-    """Manually triger this job"""
+  def trigger(self, _tag: str = ""):
+    """Manually triger this job.
+
+    Args:
+      _tag (str): whatever you pass here will be set as "NBOX_RUN_METADATA" in the job pod, be careful with this and check the
+        list of prefixes that are not in use by NBX systems (generally starting with "NBX") or this can lead to hard to detect
+        bugs. Avoid using this functionality and use some other strategy like writing down an env or json file.
+    """
     logger.debug(f"Triggering job '{self.job_proto.id}'")
-    if tag:
-      self.job_proto.feature_gates.update({"SetRunMetadata": tag})
+    if _tag:
+      self.job_proto.feature_gates.update({"SetRunMetadata": _tag})
     rpc(nbox_grpc_stub.TriggerJob, JobInfo(job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
     logger.info(f"Triggered job '{self.job_proto.id}'")
     self.refresh()
@@ -631,26 +646,26 @@ class Schedule:
 
     Usage:
 
-    .. code-block:: python
+    ```python
+    # 4:20 everyday
+    Schedule(4, 0)
 
-      # 4:20 everyday
-      Schedule(4, 0)
+    # 4:20 every friday
+    Schedule(4, 20, ["fri"])
 
-      # 4:20 every friday
-      Schedule(4, 20, ["fri"])
+    # 4:20 every friday from jan to feb
+    Schedule(4, 20, ["fri"], ["jan", "feb"])
 
-      # 4:20 every friday from jan to feb
-      Schedule(4, 20, ["fri"], ["jan", "feb"])
+    # 4:20 everyday starting in 2 days and runs for 3 days
+    starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
+    Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
 
-      # 4:20 everyday starting in 2 days and runs for 3 days
-      starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
-      Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
+    # Every 1 hour
+    Schedule(1)
 
-      # Every 1 hour
-      Schedule(1)
-
-      # Every 69 minutes
-      Schedule(minute = 69)
+    # Every 69 minutes
+    Schedule(minute = 69)
+    ```
 
     Args:
         hour (int): Hour of the day, if only this value is passed it will run every ``hour``

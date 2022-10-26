@@ -77,6 +77,7 @@ def get_fastapi_routes(op: Operator):
       if p.startswith("__"):
         continue
       fn = getattr(wrap_class, p)
+      # TODO:@yashbonde >>> replace /method_{p} with /pyrpc/{p} and /method_{p}_rest with /rest/{p}
       routes.append((f"/method_{p}", get_fastapi_fn(fn)))
       routes.append((f"/method_{p}_rest", get_fastapi_fn(fn, _rest = True)))
 

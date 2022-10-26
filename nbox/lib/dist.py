@@ -73,6 +73,7 @@ class NBXLet(Operator):
         _lmaoConfig.kv = init_data
         args = _lmaoConfig.kv["args"]
         kwargs = _lmaoConfig.kv["kwargs"]
+        # envs = _lmaoConfig.kv["envs"]
         logger.info(_lmaoConfig.kv)
       else:
         # check if there is a specific relic for this job

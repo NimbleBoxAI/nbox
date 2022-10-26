@@ -246,6 +246,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   if new_job:
     job_proto.feature_gates.update({
       "EnablePipCaching": "", # some string does not honour value
+      "EnableAuthRefresh": "",
     })
     rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job")
 
