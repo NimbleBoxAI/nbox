@@ -22,13 +22,15 @@ from nbox.auth import secret, ConfigString
 from nbox.utils import logger
 from nbox.version import __version__
 from nbox.messages import rpc, streaming_rpc, write_binary_to_file
-from nbox.init import nbox_grpc_stub, nbox_ws_v1
+from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
 from nbox.hyperloop.nbox_ws_pb2 import JobInfo
-from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
 from nbox.hyperloop.dag_pb2 import DAG as DAGProto
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
+from nbox.hyperloop.serve_pb2 import ServingRequest, Serving
+
 
 
 ################################################################################
@@ -290,23 +292,20 @@ the highest levels of consistency with the NBX-Jobs API.
 ################################################################################
 
 def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+  if (not name and not id) or (name and id):
+    raise ValueError("Please pass either name or id")
   # filter and get "id" and "name"
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
-  all_deployments = stub_all_depl()
-  models = list(filter(lambda x: x["deployment_id"] == id_or_name or x["deployment_name"] == id_or_name, all_deployments))
-  if len(models) == 0:
-    logger.info(f"No Job found with ID or name: {id_or_name}, will create a new one")
-    serving_name = id_or_name
-    serving_id = None
-  elif len(models) > 1:
-    raise ValueError(f"Multiple models found for '{id_or_name}', try passing ID")
-  else:
-    logger.info(f"Found deployment with ID or name: {id_or_name}, will update it")
-    data = models[0]
-    serving_name = data["deployment_name"]
-    serving_id = data["deployment_id"]
-  return serving_id, serving_name
+  
+  # get the deployment
+  serving: Serving = rpc(
+    nbox_serving_service_stub.GetServing,
+    ServingRequest(serving=Serving(name=name, id=id),auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    "Could not get deployment",
+    raise_on_error=True
+  )
+
+  return serving.id, serving.name
 
 
 def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
@@ -393,7 +392,7 @@ def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
  
   job: JobProto = rpc(
     nbox_grpc_stub.GetJob,
-    JobInfo(job=JobProto(id=id,auth_info=NBXAuthInfo(workspace_id=workspace_id))),
+    JobInfo(job=JobProto(id=id,name=name,auth_info=NBXAuthInfo(workspace_id=workspace_id))),
     "Could not find job with ID: {}".format(id),
     raise_on_error = True
   )
