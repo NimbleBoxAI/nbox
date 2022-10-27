@@ -209,7 +209,12 @@ def isthere(*packages, soft = True):
 
 # path/
 
-def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True, followlinks: bool = False) -> List[str]:
+def get_files_in_folder(
+  folder,
+  ext = ["*"],
+  abs_path: bool = True,
+  followlinks: bool = False,
+) -> List[str]:
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os

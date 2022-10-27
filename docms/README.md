@@ -14,7 +14,7 @@ src/
     nbox.nbxlib.resource_contants.md
 ```
 
-Will create a `gen/` folder with the exact same structure. All the module code is in `auto/` folder which provides this simple convinience being tucked away in the folder.
+Will create a `gen/` folder with the exact same structure. All the module code is in `autogen/` folder which provides this simple convinience being tucked away in the folder.
 
 This uses the `nbox.nbxlib.astea` module which is a simple human like AST parsing and exploration engine, so using our own code to solve our own problems. Another tricky piece is the src markdown file parsing.
 

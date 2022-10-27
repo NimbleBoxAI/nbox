@@ -6,9 +6,6 @@ from functools import lru_cache
 from typing import List, Set, Union
 from hashlib import sha256 as _hash
 
-from docstring_parser import parse as parse_docstring
-
-
 def sha256(x: str):
   return _hash(x.encode()).hexdigest()
 

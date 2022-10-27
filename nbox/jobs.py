@@ -392,6 +392,10 @@ around the NBX-Jobs gRPC API.
 
 @lru_cache(16)
 def _get_job_data(id_or_name, *, workspace_id: str = ""):
+# def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+#   if (not name and not id) or (name and id):
+#     raise ValueError("Either name or id must be provided")
+
   # get stub
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   if workspace_id == None:

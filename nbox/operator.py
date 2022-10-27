@@ -141,10 +141,6 @@ from nbox.subway import SpecSubway
 DEFAULT_RESOURCE = ospec.DEFAULT_RESOURCE
 FN_IGNORE = ospec.FN_IGNORE
 
-def generic_method(fn, base_url, session, *args, **kwargs):
-  r = session.post(f"{base_url}/forward/{fn}")
-
-
 class Operator():
   node = Node()
   source_edges: List[Node] = None
