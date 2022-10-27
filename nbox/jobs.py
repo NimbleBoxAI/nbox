@@ -26,10 +26,10 @@ from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
 from nbox.hyperloop.nbox_ws_pb2 import JobInfo
-from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto
+from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
 from nbox.hyperloop.dag_pb2 import DAG as DAGProto
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.serve_pb2 import ServingRequest, Serving
+from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest
 
 
 
@@ -313,18 +313,24 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
-  all_deployments = stub_all_depl()
-  sorted_depls = sorted(all_deployments, key = lambda x: x[sort], reverse = sort == "created_on")
-  headers = ["created_on", "id", "name", "pinned_id", "pinned_name", "pinned_last_updated"]
+  all_deployments: ServingListResponse = rpc(
+    nbox_serving_service_stub.ListServings,
+    ServingListRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),limit=10),
+    "Could not get deployments",
+    raise_on_error=True
+  )
+  # sorted_depls = sorted(all_deployments, key = lambda x: x[sort], reverse = sort == "created_on")
+  # headers = ["created_on", "id", "name", "pinned_id", "pinned_name", "pinned_last_updated"]
+  # [TODO] add sort by create time
+  headers = ["id", "name", "pinned_id", "pinned_name", "pinned_last_updated"]
   all_depls = []
-  for depl in sorted_depls:
-    _depl = (_get_time(depl["created_on"]), depl["deployment_id"], depl["deployment_name"],)
-    pinned = depl["pinned_model"]
+  for depl in all_deployments.servings:
+    _depl = (depl.id, depl.name)
+    pinned = depl.models[0] if len(depl.models) else None
     if not pinned:
       _depl += (None, None,)
     else:
-      _depl += (pinned["id"], pinned["name"], _get_time(pinned["last_updated"]),)
+      _depl += (pinned.id, pinned.name, _get_time(pinned.created_at.seconds))
     all_depls.append(_depl)
 
   for l in tabulate.tabulate(all_depls, headers).splitlines():
