@@ -116,7 +116,7 @@ nbox[serving]=={__version__} # do not change this
 
   logger.info(f"Created folder: {folder_name}")
 
-def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_id: str = "", _ret: bool = False, **init_kwargs):
+def upload_job_folder(method: str, init_folder: str, name: str = "", id: str = "", workspace_id: str = "", _ret: bool = False, **init_kwargs):
   """Upload the code for a job or serving to the NBX. if `id_or_name` is not present, it will create a new Job.
   Only the folder in teh 
 
@@ -133,6 +133,8 @@ def upload_job_folder(method: str, init_folder: str, id_or_name: str, workspace_
 
   if method not in OT._valid_deployment_types():
     raise ValueError(f"Invalid method: {method}, should be either {OT._valid_deployment_types()}")
+  if (not name and not id) or (name and id):
+    raise ValueError("Either --name or --id must be present")
   # if trigger and method != OT.JOB:
   #   raise ValueError(f"Trigger can only be used with '{OT.JOB}'")
   if ":" in init_folder:
@@ -252,17 +254,18 @@ get_schedule = lambda: None
   if method == ospec.OperatorType.JOB.value:
     out: Job = deploy_job(
       init_folder = init_folder,
-      job_id_or_name = id_or_name,
+      job_name = name,
       dag = get_dag(),
       workspace_id = workspace_id,
       schedule = get_schedule(),
       resource = get_resource(),
+      job_id = id,
       _unittest = False
     )
   elif method == ospec.OperatorType.SERVING.value:
     out: Serve = deploy_serving(
       init_folder = init_folder,
-      deployment_id_or_name = id_or_name,
+      deployment_id_or_name = name or id,
       workspace_id = workspace_id,
       resource = get_resource(),
       wait_for_deployment = False,
@@ -285,7 +288,7 @@ the highest levels of consistency with the NBX-Jobs API.
 """
 ################################################################################
 
-def _get_deployment_data(id_or_name, *, workspace_id: str = ""):
+def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
   # filter and get "id" and "name"
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
@@ -355,7 +358,7 @@ class Serve:
     if workspace_id is None:
       raise DeprecationWarning("Personal workspace does not support serving")
     else:
-      serving_id, serving_name = _get_deployment_data(self.id, workspace_id = self.workspace_id)
+      serving_id, serving_name = _get_deployment_data(id = self.id, workspace_id = self.workspace_id)
     self.serving_id = serving_id
     self.serving_name = serving_name
     self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
@@ -382,7 +385,9 @@ around the NBX-Jobs gRPC API.
 ################################################################################
 
 @lru_cache(16)
-def _get_job_data(id_or_name, *, workspace_id: str = ""):
+def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+  if (not name and not id) or (name and id):
+    raise ValueError("Please pass either name or id")
   # get stub
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   if workspace_id == None:
@@ -453,7 +458,7 @@ class Job:
   status = staticmethod(get_job_list)
   upload = staticmethod(partial(upload_job_folder, "job"))
 
-  def __init__(self, id, *, workspace_id: str = ""):
+  def __init__(self, name: str = "", id: str = "", *, workspace_id: str = ""):
     """Python wrapper for NBX-Jobs gRPC API
 
     Args:
@@ -461,7 +466,7 @@ class Job:
         workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-    self.id, self.name = _get_job_data(id, workspace_id = workspace_id)
+    self.id, self.name = _get_job_data(name, id, workspace_id = workspace_id)
     self.workspace_id = workspace_id
     self.job_proto = JobProto(id = self.id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
     self.job_info = JobInfo(job = self.job_proto)
@@ -526,7 +531,7 @@ class Job:
     """Refresh Job statistics"""
     logger.debug(f"Updating job '{self.job_proto.id}'")
     if self.id == None:
-      self.id, self.name = _get_job_data(self.id, workspace_id = self.workspace_id)
+      self.id, self.name = _get_job_data(id = self.id, workspace_id = self.workspace_id)
     if self.id == None:
       return
       

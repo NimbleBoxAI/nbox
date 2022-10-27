@@ -41,10 +41,11 @@ Function related to serving of any model.
 
 def deploy_serving(
   init_folder: str,
-  deployment_id_or_name: str,
+  deployment_name: str,
   workspace_id: str = None,
   resource: Resource = None,
   wait_for_deployment: bool = False,
+  deployment_id: str = "",
   *,
   _unittest = False
 ):
@@ -52,13 +53,15 @@ def deploy_serving(
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+  if (not deployment_name or not deployment_id) or (deployment_name and deployment_id):
+    raise ValueError(f"Either deployment_name or deployment_id is required")
 
   if resource is not None:
     logger.warning("Resource is coming in the following release!")
   if wait_for_deployment:
     logger.warning("Wait for deployment is coming in the following release!")
 
-  serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id = workspace_id)
+  serving_id, serving_name = _get_deployment_data(name = deployment_name, id = deployment_id, workspace_id = workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
   if serving_id is None:
@@ -133,11 +136,12 @@ Function related to batch processing of any model.
 
 def deploy_job(
   init_folder: str,
-  job_id_or_name: str,
+  job_name: str,
   dag: DAG,
   workspace_id: str = None,
   schedule: Schedule = None,
   resource: Resource = None,
+  job_id: str = "",
   *,
   _unittest = False
 ) -> None:
@@ -156,8 +160,10 @@ def deploy_job(
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+  if (job_name is None or job_name == "") and job_id == "":
+    raise ValueError("Please specify a job name or ID")
 
-  job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
+  job_id, job_name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
   logger.info(f"Job name: {job_name}")
   logger.info(f"Job ID: {job_id}")
 
