@@ -262,13 +262,15 @@ class Operator():
   # 3. from a function, where we decorate an existing function and convert it to an operator
 
   @classmethod
-  def from_job(cls, job_id_or_name, workspace_id: str = ""):
+  def from_job(cls, job_name: str = "", job_id: str = "", workspace_id: str = ""):
     """latch an existing job so that it can be called as an operator."""
     # implement this when we have the client-server that allows us to get the metadata for the job
+    if (not job_name and not job_id) or (job_name and job_id):
+      raise ValueError("Either job_name or job_id must be specified")
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     if not workspace_id:
       raise DeprecationWarning("Personal workspace does not support serving")
-    job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
+    job_id, job_name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
     if job_id is None:
       raise ValueError(f"No serving found with name {job_name}")
     job = Job(job_id, workspace_id = workspace_id)
