@@ -22,8 +22,9 @@ from nbox.auth import secret
 from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
 from nbox.hyperloop.dag_pb2 import DAG
-from nbox.init import nbox_ws_v1, nbox_grpc_stub
+from nbox.init import nbox_ws_v1, nbox_grpc_stub, nbox_model_service_stub
 from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from nbox.hyperloop.serve_pb2 import ModelRequest, Model
 from nbox.messages import rpc, write_binary_to_file
 from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo, Serve, Job
 from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
@@ -42,10 +43,10 @@ Function related to serving of any model.
 def deploy_serving(
   init_folder: str,
   deployment_name: str,
+  deployment_id: str = None,
   workspace_id: str = None,
   resource: Resource = None,
   wait_for_deployment: bool = False,
-  deployment_id: str = "",
   *,
   _unittest = False
 ):
@@ -53,63 +54,72 @@ def deploy_serving(
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
-  if (not deployment_name or not deployment_id) or (deployment_name and deployment_id):
-    raise ValueError(f"Either deployment_name or deployment_id is required")
 
   if resource is not None:
     logger.warning("Resource is coming in the following release!")
   if wait_for_deployment:
     logger.warning("Wait for deployment is coming in the following release!")
 
+  # [TODO] - keeping this for now, if file can be zip without serving id then we can remove this
   serving_id, serving_name = _get_deployment_data(name = deployment_name, id = deployment_id, workspace_id = workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
-  if serving_id is None:
-    logger.error("Could not find service ID, creating a new one")
-    data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
-    serving_id = data["deployment_id"]
-    logger.info(f"Serving ID: {serving_id}")
+  # if serving_id is None:
+  #   logger.error("Could not find service ID, creating a new one")
+  #   data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
+  #   serving_id = data["deployment_id"]
+  #   logger.info(f"Serving ID: {serving_id}")
   model_name = U.get_random_name().replace("-", "_")
   logger.info(f"Model name: {model_name}")
 
   # zip init folder
   zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name, type = OT.SERVING)
-  return _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
+  return _upload_serving_zip(zip_path, workspace_id, serving_id, model_name)
 
 
-def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name):
+def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   file_size = os.stat(zip_path).st_size # serving in bytes
 
   # get bucket URL and upload the data
-  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
-  out = stub_all_depl.u(serving_id).get_upload_url(
-    _method = "put",
-    convert_args = "",
-    deployment_meta = {},
-    deployment_name = serving_name,
-    deployment_type = "nbox_op", # "nbox" or "ovms2"
-    file_size = str(file_size),
-    file_type = "nbox",
-    model_name = model_name,
-    nbox_meta = {},
+  response: Model = rpc(
+    nbox_model_service_stub.UploadModel,
+    ModelRequest(model=
+      Model(
+        serving_group_id=serving_id, model_name=model_name, 
+        code=JobProto.Code(code_type=JobProto.Code.Type.NBOX, file_size=file_size,),
+        type=Model.ServingType.SERVING_TYPE_NBOX_OP
+        ),
+      auth_info=NBXAuthInfo(workspace_id=workspace_id)
+      ),
+    "Could not get upload URL",
+    raise_on_error=True
   )
-
-  model_id = out["fields"]["x-amz-meta-model_id"]
-  deployment_id = out["fields"]["x-amz-meta-deployment_id"]
+  model_id = response.id
+  deployment_id = response.serving_group_id
   logger.debug(f"model_id: {model_id}")
   logger.debug(f"deployment_id: {deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
   # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
   # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
-  logger.info(f"Uploading model to S3 ... (fs: {file_size/1024/1024:0.3f} MB)")
-  r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(zip_path, "rb"))})
-  status = r.status_code == 204
-  logger.debug(f"Upload status: {status}")
+  s3_url = response.code.s3_url
+  s3_meta = response.code.s3_meta
+  logger.info(f"Uploading model to S3 ... (fs: {response.code.size/1024/1024:0.3f} MB)")
+  r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
+  try:
+    r.raise_for_status()
+  except:
+    logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
+    return
 
-  # checking if file is successfully uploaded on S3 and tell webserver whether upload is completed or not
-  ws_stub_model = stub_all_depl.u(deployment_id).models.u(model_id) # eager create the stub
-  ws_stub_model.update(_method = "post", status = status)
+  # model is uploaded successfully, now we need to deploy it
+  logger.info(f"Model uploaded successfully, deploying ...")
+  response: Model = rpc(
+    nbox_model_service_stub.Deploy,
+    ModelRequest(model=Model(id=model_id,serving_group_id=deployment_id), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    "Could not deploy model",
+    raise_on_error=True
+  )
 
   # write out all the commands for this deployment
   logger.info("API will soon be hosted, here's how you can use it:")
@@ -141,7 +151,6 @@ def deploy_job(
   workspace_id: str = None,
   schedule: Schedule = None,
   resource: Resource = None,
-  job_id: str = "",
   *,
   _unittest = False
 ) -> None:
