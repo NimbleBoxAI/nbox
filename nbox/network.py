@@ -163,7 +163,7 @@ def deploy_job(
   if (job_name is None or job_name == "") and job_id == "":
     raise ValueError("Please specify a job name or ID")
 
-  job_id, job_name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
+  job_id, job_name = _get_job_data(name = job_name, id = job_id, workspace_id = workspace_id)
   logger.info(f"Job name: {job_name}")
   logger.info(f"Job ID: {job_id}")
 

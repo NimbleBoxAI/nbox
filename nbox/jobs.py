@@ -265,10 +265,11 @@ get_schedule = lambda: None
   elif method == ospec.OperatorType.SERVING.value:
     out: Serve = deploy_serving(
       init_folder = init_folder,
-      deployment_id_or_name = name or id,
+      deployment_name = name,
       workspace_id = workspace_id,
       resource = get_resource(),
       wait_for_deployment = False,
+      deployment_id = id,
       _unittest = False
     )
   else:
@@ -329,9 +330,6 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
 
   for l in tabulate.tabulate(all_depls, headers).splitlines():
     logger.info(l)
-
-  with open("requirements.txt", "w") as f:
-    f.write(f"nbox=={__version__}")
 
 # def serving_forward(id_or_name: str, token: str, workspace_id: str = "", **kwargs):
 #   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
