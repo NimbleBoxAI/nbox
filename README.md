@@ -8,7 +8,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 `nbox` provides first class API support for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
 
-# 🤷Why nimblebox
+# 🤷Why NimbleBox
 
 - Write and execute code in Python
 - Document your code that supports mathematical equations
@@ -73,43 +73,50 @@ nbox
    ├── __call__    # Run any command on the instance
    └── mv (WIP)    # Move files to and from NBX-Build
 ```
-### Deploy your machine learning or statistical models:
+
+### Deploy and run any model
+
+Let's take this script as an example
 
 ```python
-from nbox import Model
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+from nbox import operator, Operator
+from nbox.lib.shell import ShellCommand
 
-# define your pre and post processing functions
-def pre(x: Dict):
-  return AutoTokenizer(**x)
+# define your function and wrap it as an operator
+@operator()
+def foo(x: Dict):
+  return "bar"
 
-# load your classifier with functions
-model = AutoModelForSequenceClassification.from_pretrained("distill-bert")
-classifier = Model(model, pre = pre)
-
-# call your model
-classifier(f"Is this a good picture?")
-
-# get full control on exporting it
-spec = classifier.torch_to_onnx(
-  TorchToOnnx(...)
-)
-
-# confident? deploy it your cloud
-url, key = classifier.deploy(
-  spec, deployment_id_or_name = "classification"
-)
-
-# use it anywhere
-pred = requests.post(
-  url,
-  json = {
-    "text": f"Is this a good picture?"
-  },
-  header = {"Authorization": f"Bearer {key}"}
-).json()
+# or use OO to deploy an API
+@operator()
+class Baz():
+  def __init__(self, power: int = 2):
+    # load any model that you want
+    self.model = load_tf_pt_model()
+    self.power = power
+  
+  def forward(self, x: float = 1.0):
+    return {"pred": x ** self.power}    
 ```
+
+Through your CLI:
+
+```bash
+# to deploy a job
+nbx jobs upload file:foo 'my_first_job'
+
+# to deploy an API
+nbx serve upload file:Baz 'my_first_api'
+```
+
 # 🛟 How to get help?
+
+Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our community or engineering team will respond!
+
+## 🔖Read our [Blog](https://nimblebox.ai/blog).
+
+
+# How to get help?
 
 Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our community or engineering team will respond!
 

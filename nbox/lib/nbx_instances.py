@@ -1,73 +1,46 @@
-from nbox import Operator
+"""
+All the Operators that NimbleBox uses are defined in this module.
+"""
+
+import os
+import zipfile
+from datetime import datetime, timezone
+from typing import Iterable
+
+from nbox import Operator, logger
 from nbox.instance import Instance
-from nbox.utils import PoolBranch
 
-class NboxInstanceStartOperator(Operator):
-  def __init__(self, instances):
-    """Starts multiple instances on nbox in a blocking fashion"""
+
+class FilesToInstance(Operator):
+  def __init__(self, i: str, folder_name: str, workspace_id: str = None) -> None:
+    """Transfer any number of files to a NimbleBox Instance at the `folder_name`.
+
+    Args:
+      i (str): Instance ID or Name
+      folder_name (str): folder to transfer the zip object to
+      workspace_id (str): Workspace ID or name, set to `None` for personal workspace
+    """
     super().__init__()
-    if not isinstance(instances, list):
-      instances = [instances]
-    assert instances[0].__class__ == Instance, "instances must be of type nbox.Instance"
-    self.instances = instances
-    self.pool = PoolBranch("thread", len(instances), _name = "instance_starter")
+    self.folder_name = folder_name
+    logger.warn(f"Please ensure that the folder {self.folder_name} exists in '{i}'")
+    self.instance = Instance(i, workspace_id)
 
-  def forward(self):
-    self.pool(
-      lambda instance: instance.start(cpu_only = True),
-      self.instances
-    )
+  def forward(self, files: Iterable[str]):
+    """Args:
+        files (Iterable[str]): List of all the files to be transfered
+    """
+    # if not running, start the instance with the basic configuration, we just need to move the files
+    self.instance.start()
 
-class NboxModelDeployOperator(Operator):
-  def __init__(self, model_name, model_path, model_weights, model_labels):
-    """Simple Operator that wraps the deploy function of ``Model``"""
-    super().__init__()
-    self.model_name = model_name
-    self.model_path = model_path
-    self.model_weights = model_weights
-    self.model_labels = model_labels
+    # pack all the items in a single zip file
+    zip_name = datetime.now(timezone.utc).strftime("%Y-%m-%d-%H-%M") + ".zip"
+    logger.info(f"Packing to path: {zip_name}")
+    with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+      for f in files:
+        zip_file.write(filename = f, arcname = f)
 
-  def forward(self, name):
-    from nbox.model import Model
+    # sanity check for the zip file
+    os_stat = os.stat(zip_name)
+    logger.info(f"Zip file size: {os_stat.st_size}")
 
-    return Model(
-      self.model_name,
-      self.model_path,
-      self.model_weights,
-      self.model_labels,
-    ).deploy(name)
-
-class NboxWaitTillJIDComplete(Operator):
-  def __init__(self, instance, jid):
-    """Blocks threads while a certain PID is complete on Instance"""
-    super().__init__()
-    self.instance = instance
-    self.jid = jid
-
-  def forward(self, poll_interval = 5):
-    status = self.instance(self.jid)
-    if status == "done":
-      return None
-    elif status == "error-done":
-      raise Exception("Job {} failed".format(self.jid))
-    elif status == "running":
-      from time import sleep
-      while status == "running":
-        sleep(poll_interval)
-        status = self.instance(self.jid)
-      if status == "done":
-        return None
-      elif status == "error-done":
-        raise Exception("Job {} failed".format(self.jid))
-
-class NboxInstanceMv(Operator):
-  def __init__(self, i: str, workspace_id: str) -> None:
-    super().__init__()
-    self.build = Instance(i = i, workspace_id = workspace_id)
-    self.start_build = NboxInstanceStartOperator(self.build)
-  
-  def forward(self, src: str, dst: str, force: bool = False) -> None:
-    if not self.build.is_running():
-      self.start_build()
-    resp = self.build.mv(src, dst, force = force)
-    return resp
+    self.instance.mv(zip_name, f"nbx://{self.folder_name}/{zip_name}")

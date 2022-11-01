@@ -1,0 +1,41 @@
+# Auto generated code by 'nbox deploy/serve upload' command
+# created time: {{ created_time }}
+# nbox version: {{ nbox_version }}
+
+import os
+os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
+os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
+
+import fire
+from functools import lru_cache, partial
+from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
+
+from nbox import Operator, logger
+import nbox.utils as U
+from nbox.lib.dist import NBXLet
+
+@lru_cache(1)
+def get_op(cloud = False, serving: bool = False) -> Operator:
+  # The beauty of this function is that it ensures that the operator class is loaded only once
+  try:
+    op: Operator = get_op_user(serving)
+  except Exception as e:
+    U.log_traceback()
+    logger.error(f"Failed to load operator: {e}")
+    U._exit_program(1)
+
+  if cloud:
+    try:
+      op.remote_init()
+    except Exception as e:
+      U.log_traceback()
+      logger.error(f"Failed to remote initialise operator: {e}")
+      U._exit_program(1)
+  return op
+
+if __name__ == "__main__":
+  nbxlet = NBXLet(op = get_op(cloud = True))
+  fire.Fire({
+    "run": nbxlet.run,     # NBX-Jobs
+    "serve": partial(nbxlet.serve, model_name = "{{ model_name }}"), # NBX-Deploy
+  })

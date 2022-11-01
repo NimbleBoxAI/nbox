@@ -1,49 +1,87 @@
-from nbox import Operator
-from nbox.lib.shell import ShellCommand, Python
+"""
+All the operators that are using the demos are provided here. Highly recommend someome to go through
+this when learning how to code your own ``Operator``.
+"""
 
-class YATW(Operator):
+from nbox import Operator, logger
+from nbox.lib.shell import ShellCommand, GitClone
+
+class Intro(Operator):
   # yet another time waster
-  def __init__(self, s=3):
+  def __init__(self):
     super().__init__()
-    self.s = s
 
-  def forward(self, i = ""):
-    import random
-    from time import sleep
-
-    y = self.s + random.random()
-    print(f"Sleeping (YATW-{i}): {y}")
-    sleep(y)
+  def forward(self):
+    logger.info("Welcome to NimbleBox!")
 
 
-def init_function(s=0.1):
-  # this random fuction sleeps for a while and then returns number
-  from random import randint
-  from time import sleep
-
-  y = randint(4, 8) + s
-  print(f"Sleeping (fn): {y}")
-  sleep(y)
-  return y
+class ThingsShellCanDo(Operator):
+  def __init__(self) -> None:
+    super().__init__()
+    self.amar = ShellCommand("echo 'Lana Del Ray'")
+    self.akbar = ShellCommand("echo 'Run any shell command, like read files'")
+    self.anthony = ShellCommand("echo 'Kenrik'")
+  
+  def forward(self):
+    self.amar()
+    self.akbar()
+    self.anthony()
 
 
 class Magic(Operator):
   # named after the Dr.Yellow train that maintains the Shinkansen
-  def __init__(self):
+  def __init__(self, strength = "very"):
     super().__init__()
-    self.init = Python(init_function) # waste time and return something
-    self.foot = YATW() # Oh, my what will happen here?
-    self.cond1 = ShellCommand("echo 'Executing condition {cond}'")
-    self.cond2 = ShellCommand("echo 'This is the {cond} option'")
-    self.cond3 = ShellCommand("echo '{cond} times the charm :P'")
+    self.strength = strength
+    self.intro = Intro()
+    self.shell_demo = ThingsShellCanDo()
+    # self.cloner = GitClone("https://github.com/yashbonde/yQL")
 
   def forward(self):
-    t1 = self.init()
-    self.foot(0)
+    # self.cond1(cond = 1)
+    self.intro()
+    self.shell_demo()
+    # self.cloner()
 
-    if t1 > 6:
-      self.cond1(cond = 1)
-    elif t1 > 10:
-      self.cond2(cond = "second")
+
+class MagicServing(Operator):
+  def __init__(self):
+    super().__init__()
+    self.intro = Intro()
+    self.cities = [
+      "Mumbai",
+      "Delhi",
+      "Banares",
+      "Bangalore",
+      "Chennai",
+      "Kolkata",
+      "Hyderabad",
+      "Ahmedabad",
+      "Pune",
+      "Jaipur",
+      "Surat",
+      "Lucknow",
+      "Kanpur",
+      "Nagpur",
+      "Patna",
+      "Indore",
+      "Vadodara",
+      "Agra",
+      "Siliguri",
+      "Coimbatore",
+    ]
+
+  def __remote_init__(self):
+    logger.info("Running remote init: it will only run at initialisation")
+    logger.info("So you can do things like:")
+    logger.info("    * initialise your model")
+    logger.info("    * connect to databases")
+    logger.info("    * create games!")
+    self.intro()
+
+  def forward(self, x: str = ""):
+    import random
+    if not x:
+      return {"data": f"Hi, I am {random.choice(self.cities)}!"}
     else:
-      self.cond3(cond = "Third")
+      return {"data": f"Echo back: {x}!"}

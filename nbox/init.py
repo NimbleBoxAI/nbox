@@ -11,13 +11,20 @@ This file loads first and is responsible for setting up all the global networkin
 """
 
 import grpc
+import json
 import requests
+try:
+  from packaging.version import parse
+except ImportError:
+  from pip._vendor.packaging.version import parse
 
-from .auth import secret
-from .utils import logger
-from .subway import Sub30
-from .hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
-from . import version as V
+
+from nbox.auth import secret, ConfigString
+from nbox.utils import logger, env
+from nbox.subway import Sub30
+from nbox.hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
+from nbox.version import __version__
+
 
 def get_stub() -> WSJobServiceStub:
   """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``
@@ -29,8 +36,8 @@ def get_stub() -> WSJobServiceStub:
   channel = grpc.secure_channel(secret.get("nbx_url").replace("https://", "dns:/")+":443", creds)
   stub = WSJobServiceStub(channel)
   future = grpc.channel_ready_future(channel)
-  future.add_done_callback(lambda _: logger.info(f"NBX gRPC server is ready"))
-  logger.info(f"Connected using stub: {stub.__class__.__name__}")
+  future.add_done_callback(lambda _: logger.debug(f"NBX gRPC server is ready"))
+  logger.debug(f"Connected using stub: {stub.__class__.__name__}")
   return stub
 
 def create_webserver_subway(version: str = "v1", session: requests.Session = None) -> Sub30:
@@ -52,15 +59,50 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
     logger.error(e)
     return None
   out = Sub30(_version_specific_url, r.json(), session)
-  logger.info(f"Connected to webserver at {out}")
+  logger.debug(f"Connected to webserver at {out}")
   return out
 
 
 # common networking items that will be used everywhere
-nbox_session = requests.Session()
-nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
-nbox_grpc_stub: WSJobServiceStub  = get_stub()
-nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
+if env.NBOX_NO_LOAD_GRPC():
+  nbox_grpc_stub = None
+else:
+  nbox_grpc_stub: WSJobServiceStub  = get_stub()
 
-# TODO: @yashbonde: raise deprecation warning for version
-# raise_old_version_warning(V._major, V._minor, V._patch)
+if env.NBOX_NO_LOAD_WS():
+  nbox_session = None
+  nbox_ws_v1 = None
+else:
+  nbox_session = requests.Session()
+  nbox_session.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
+  nbox_ws_v1: Sub30 = create_webserver_subway(version = "v1", session = nbox_session)
+
+
+def nbox_version_update():
+  # https://stackoverflow.com/questions/28774852/pypi-api-how-to-get-stable-package-version
+  def get_version(package):
+    """Return version of package on pypi.python.org using json."""
+    URL_PATTERN = 'https://pypi.python.org/pypi/{package}/json'
+    req = requests.get(URL_PATTERN.format(package=package))
+    version = parse('0')
+    if req.status_code == requests.codes.ok:
+        j = json.loads(req.text.encode(req.encoding))
+        releases = j.get('releases', [])
+        for release in releases:
+            ver = parse(release)
+            if not ver.is_prerelease:
+                version = max(version, ver)
+    return version
+
+  latest_version = get_version("nbox")
+  if latest_version > parse(__version__):
+    logger.warning(
+      f"Your version of nbox ({__version__}) is outdated. Some functionalities might not work.\n"
+      f"Fix: Please update to {latest_version} using pip3 install nbox --upgrade\n"
+      f"Fix: Update all the relevant requirements.txt files with nbox[serving]=={latest_version}"
+    )
+
+if not env.NBOX_NO_CHECK_VERSION():
+  nbox_version_update()
+
+logger.info(f"Current workspace id: {secret.get(ConfigString.workspace_id)} ({secret.get(ConfigString.workspace_name)})")

@@ -49,20 +49,16 @@ all the APIs you need to know:
 .. code-block::
 
    nbox
-   ├── Model          # Framework agnostic Model
-   │   ├── __call__
-   │   ├── deploy
-   │   ├── train_on_instance (WIP)
-   │   └── train_on_jobs (WIP)
-   ├── Operators      # How jobs are combinations of operators
-   │   ├── __call__
-   │   └── deploy
-   ├── Jobs           # For controlling all your jobs
-   │   ├── logs       # stream logs right on your terminal
-   │   └── trigger    # manually trigger a job
+   ├── Operators         # How jobs are combinations of operators
+   │   ├── from_serving  # latch to an existing deployment
+   │   └── __call__
+   ├── Jobs              # For controlling all your jobs
+   │   ├── logs          # stream logs right on your terminal
+   │   └── trigger       # manually trigger a job
    └── Instance
-      ├── __call__    # Run any command on the instance
-      └── mv (WIP)    # Move files to and from NBX-Build
+      ├── remote         # Run any shell command on the instance
+      ├── ls             # List files in a folder
+      └── mv             # Move files to and from NBX-Build
 
 Though the underlying framework will keep on increasing we already use Protobufs, gRPC along with auto
 generating code files.
@@ -114,9 +110,7 @@ Or you can see the status by making GET calls from CLI along with ``jq``:
 
 If you want to see something be added or found bug, `raise an issue <https://github.com/NimbleBoxAI/nbox/issues/new>`_.
 
-Hope you enjoy this.
-
-**Yash Bonde** (NimbleBox.ai R&D)
+We will contibue expanding more and more services and building blocks for your pipelines. Hope you enjoy this.
 
 
 Index
@@ -127,20 +121,22 @@ Index
    :caption: Tutorials
 
    quick.0
-   quick.jobs
+   jobsdeploy.job
+   jobsdeploy.serving
    nbox.cli
-   nbox.nbxlib.ops
+   nbox.lib
+   nbox.observability
 
 .. toctree::
    :maxdepth: 2
    :caption: Commonly used APIs
 
-   nbox.model
    nbox.operator
    nbox.jobs
    nbox.instance
-   nbox.framework.ml
-   
+   nbox.relics
+   nbox.lmao
+
 
 .. toctree::
    :maxdepth: 2
@@ -157,6 +153,7 @@ Index
    nbox.messages
    nbox.sub_utils.ssh
    nbox.auth.rst
+   nbox.relics
 
 
 * :ref:`genindex`

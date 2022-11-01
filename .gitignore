@@ -160,3 +160,6 @@ yolov4-trainer-nbox
 example_jobs/gperc_model/
 ex_jobs
 hyperloop
+scripts
+konark/
+_modules/
