@@ -1,4 +1,4 @@
 gen/
 autogen/
 nbox_gen/
-nbox_autogen/
+nboxRoutes.json
