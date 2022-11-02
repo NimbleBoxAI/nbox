@@ -151,6 +151,19 @@ class LMAO_Stub:
     _FileList = b64_to_message(echo_resp.base64_string, _FileList)
     return _FileList
 
+  def get_experiment_table(self, GetExperimentTableRequest: GetExperimentTableRequest) -> ExperimentTable:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/get_experiment_table",
+      Echo(message = "GetExperimentTableRequest", base64_string=message_to_b64(GetExperimentTableRequest), rpc_name = "get_experiment_table")
+    )
+    if echo_resp is None:
+      return None
+
+    _ExperimentTable = ExperimentTable() # predefine the output proto
+    _ExperimentTable = b64_to_message(echo_resp.base64_string, _ExperimentTable)
+    return _ExperimentTable
+
   def init_serving(self, _InitRunRequest: InitRunRequest) -> Serving:
     echo_resp: Echo = call_rpc(
       self.session,

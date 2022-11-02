@@ -6,7 +6,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 ## 🧐 What is Nbox?
 
-`nbox` provides first class support API for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
+`nbox` provides first class API support for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
 
 # 🤷Why NimbleBox
 
@@ -20,6 +20,14 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 - Share your projects
 - Collaborate with your team
 
+# 🚀 Startup Program
+
+<a href="https://nimblebox.ai/startup-program"><img width="1281" alt="image" src="https://user-images.githubusercontent.com/89596037/188064820-c372f895-fef1-4a84-bd95-8a9a5c3d13d1.png">
+
+
+#### If you're a new startup with(<$1M raised,<3 years since founded) then you're in luck to be the part of our startup program!
+#### Get *$420k* worth of deals on your favorite tools 
+##### <a href="https://nimblebox.ai/startup-program">Check it out !
 # 🎚 Features
 
 ### 🏗️ Freedom To Build
@@ -30,6 +38,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 ![Jobs Landing Page](https://user-images.githubusercontent.com/89596037/181774553-99120354-72f5-4064-9216-4f8a5aa050be.gif)
 
 
+
 ### 🚀 Intuitive Dashboard
 ![Deploy Landing Page](https://user-images.githubusercontent.com/89596037/181775468-cc342a30-d87e-4576-8bdd-8ffdd75ff759.gif)
 
@@ -37,17 +46,7 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 # 🏁 Get Started
 
 
-**Install the package from pipy:**
-
-```pip install nbox```
-
-
-For convinience you should add nbox to your path by setting up an alias. Throughout the rest of the documentation we will be using nbx as the CLI:
-
-```# go to your .bashrc or .zshrc and add
-alias nbx="python3 -m nbox"
-```
-
+**Install the package from pypi:**
 
 
 When loading nbox for the first time, it will prompt you the username and password and create a secrets file at ```~/.nbx/secrets.json. ``` This file then contains all the information that you don’t have to fetch manually again.
@@ -75,17 +74,9 @@ nbox
    └── mv (WIP)    # Move files to and from NBX-Build
 ```
 
-## NBX-Jobs and NBX-Deploy
+### Deploy and run any model
 
-Create a simple folder:
-
-```
-nbx jobs new moonshot
-```
-
-### Run any Batch Process
-
-Add the following code to `foobar.py`:
+Let's take this script as an example
 
 ```python
 from nbox import operator, Operator
@@ -96,17 +87,34 @@ from nbox.lib.shell import ShellCommand
 def foo(x: Dict):
   return "bar"
 
-# or use OOPs like torch, etc.
-class MyJob(Operator):
-  def __init__(self):
-    super().__init__()
-    self.foo = foo
-    self.shell = ShellCommand("echo 'hello {text}'")
+# or use OO to deploy an API
+@operator()
+class Baz():
+  def __init__(self, power: int = 2):
+    # load any model that you want
+    self.model = load_tf_pt_model()
+    self.power = power
   
-  def forward(self):
-    text = self.foo()
-    self.shell(text = text)
+  def forward(self, x: float = 1.0):
+    return {"pred": x ** self.power}    
 ```
+
+Through your CLI:
+
+```bash
+# to deploy a job
+nbx jobs upload file:foo 'my_first_job'
+
+# to deploy an API
+nbx serve upload file:Baz 'my_first_api'
+```
+
+# 🛟 How to get help?
+
+Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our community or engineering team will respond!
+
+## 🔖Read our [Blog](https://nimblebox.ai/blog).
+
 
 # How to get help?
 
