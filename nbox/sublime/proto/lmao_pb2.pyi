@@ -413,6 +413,7 @@ class RunLog(google.protobuf.message.Message):
     DATA_FIELD_NUMBER: builtins.int
     COLUMN_DATA_FIELD_NUMBER: builtins.int
     LOG_TYPE_FIELD_NUMBER: builtins.int
+    PROJECT_ID_FIELD_NUMBER: builtins.int
     experiment_id: typing.Text
     @property
     def data(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Record]: ...
@@ -423,14 +424,18 @@ class RunLog(google.protobuf.message.Message):
     log_type: global___RunLog.LogType.ValueType
     """type of data"""
 
+    project_id: typing.Text
+    """project id"""
+
     def __init__(self,
         *,
         experiment_id: typing.Text = ...,
         data: typing.Optional[typing.Iterable[global___Record]] = ...,
         column_data: typing.Optional[typing.Iterable[global___RecordColumn]] = ...,
         log_type: global___RunLog.LogType.ValueType = ...,
+        project_id: typing.Text = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["column_data",b"column_data","data",b"data","experiment_id",b"experiment_id","log_type",b"log_type"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["column_data",b"column_data","data",b"data","experiment_id",b"experiment_id","log_type",b"log_type","project_id",b"project_id"]) -> None: ...
 global___RunLog = RunLog
 
 class AgentDetails(google.protobuf.message.Message):

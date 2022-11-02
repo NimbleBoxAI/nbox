@@ -403,7 +403,7 @@ class Lmao():
     step = step if step is not None else SimplerTimes.get_now_i64()
     if step < 0:
       raise Exception("Step must be <= 0")
-    run_log = RunLog(experiment_id = f"{self.project_id}@{self.run.experiment_id}", log_type=log_type)
+    run_log = RunLog(experiment_id = self.run.experiment_id, project_id=self.project_id, log_type=log_type)
     for k,v in y.items():
       record = get_record(k, v)
       record.step = step
