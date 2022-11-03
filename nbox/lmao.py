@@ -17,20 +17,17 @@ NimbleBox LMAO is our general purpose observability tool for any kind of computa
 #     actuals=y_test,
 # )
 
-from functools import lru_cache
 import os
 import re
 import sys
-import time
 import shlex
 import zipfile
-import threading
-from queue import Queue, Empty
 from git import Repo
-from json import dumps, load
+from json import dumps
+from functools import lru_cache
 from requests import Session
-from typing import Dict, Any, List, Optional, Union, Tuple
-from subprocess import Popen, PIPE
+from typing import Dict, Any, List, Optional, Union
+from subprocess import Popen
 from google.protobuf.field_mask_pb2 import FieldMask
 
 try:
@@ -77,7 +74,7 @@ functional components of LMAO
 """
 
 @lru_cache()
-def get_lmao_stub(username: str, workspace_id: str):
+def get_lmao_stub(username: str, workspace_id: str) -> LMAO_Stub:
   # prepare the URL
   id_or_name = f"monitoring-{workspace_id}"
   logger.info(f"Instance id_or_name: {id_or_name}")
@@ -179,6 +176,7 @@ class _lmaoConfig:
     metadata: Dict[str, Any] = {},
     save_to_relic: bool = False,
     enable_system_monitoring: bool = False,
+    store_git_details: bool = True,
     args = (),
     kwargs = {},
   ) -> None:
@@ -190,6 +188,7 @@ class _lmaoConfig:
       "metadata": metadata,
       "save_to_relic": save_to_relic,
       "enable_system_monitoring": enable_system_monitoring,
+      "store_git_details": store_git_details,
       "args": args,
       "kwargs": kwargs,
     }
@@ -211,13 +210,25 @@ class Lmao():
     metadata: Dict[str, Any] = {},
     save_to_relic: bool = False,
     enable_system_monitoring: bool = False,
+    store_git_details: bool = True,
     workspace_id: str = "",
   ) -> None:
-    """``Lmao`` is the client library for using NimbleBox Monitoring. It talks to your monitoring instance running on your build
-    and stores the information in the ``project_name`` or ``project_id``. This object inherently doesn't care what you are actually
+    """`Lmao` is the client library for using NimbleBox Monitoring. It talks to your monitoring instance running on your build
+    and stores the information in the `project_name` or `project_id`. This object inherently doesn't care what you are actually
     logging and rather concerns itself with ensuring storage.
 
-    All arguments are optional, if the _lmaoConfig is set"""
+    **Note**: All arguments are optional, if the _lmaoConfig is set.
+    
+    Args:
+      project_name (str, optional): The name of the project. Defaults to "".
+      project_id (str, optional): The id of the project. Defaults to "".
+      experiment_id (str, optional): The id of the experiment. Defaults to "".
+      metadata (Dict[str, Any], optional): Any metadata that you want to store. Defaults to {}.
+      save_to_relic (bool, optional): Whether to save the data to the relic. Defaults to False.
+      enable_system_monitoring (bool, optional): Whether to enable system monitoring. Defaults to False.
+      store_git_details (bool, optional): Whether to store git details. Defaults to True.
+      workspace_id (str, optional): The id of the workspace. Defaults to "".
+    """
 
     self.config = _lmaoConfig.kv
 
@@ -229,6 +240,7 @@ class Lmao():
       metadata = _lmaoConfig.kv["metadata"]
       save_to_relic = _lmaoConfig.kv["save_to_relic"]
       enable_system_monitoring = _lmaoConfig.kv["enable_system_monitoring"]
+      store_git_details = store_git_details
       workspace_id = _lmaoConfig.kv["workspace_id"]
 
     self.project_name = project_name
@@ -237,8 +249,9 @@ class Lmao():
     self.metadata = metadata
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
-    self.workspace_id = workspace_id
-
+    self.store_git_details = store_git_details
+    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    
     # now set the supporting keys
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
     self._total_logged_elements = 0 # this variable keeps track for logging
@@ -290,10 +303,12 @@ class Lmao():
     self.tracer = Tracer(start_heartbeat=False)
     self._nbx_run_id = self.tracer.run_id
     self._nbx_job_id = self.tracer.job_id
-    if self._nbx_run_id is not None:
-      # update the username since jobs pod does not contain that information
-      secret.put("username", self.tracer.job_proto.auth_info.username)
-      self.username = secret.get("username")
+
+    # this is not the jobs of this class but `nbox.lib.dist.NBXLet.run()`
+    # if self._nbx_run_id is not None:
+    #   # update the username since jobs pod does not contain that information
+    #   secret.put("username", self.tracer.job_proto.auth_info.username)
+    #   self.username = secret.get("username")
 
     self.lmao = get_lmao_stub(self.username, self.workspace_id)
 
@@ -322,14 +337,14 @@ class Lmao():
     # check if the current folder from where this code is being executed has a .git folder
     # NOTE: in case of NBX-Jobs the current folder ("./") is expected to contain git by default
     log_config["git"] = None
-    if os.path.exists(".git"):
+    if os.path.exists(".git") and self.store_git_details:
       log_config["git"] = get_git_details("./")
 
     # continue as before
     self._agent_details = AgentDetails(
       type = AgentDetails.NBX.JOB,
-      nbx_job_id = self._nbx_job_id or "jj_guvernr",
-      nbx_run_id = self._nbx_run_id or "fake_run",
+      nbx_job_id = self._nbx_job_id or "",
+      nbx_run_id = self._nbx_run_id or "",
     )
 
     if "experiment_id" in _lmaoConfig.kv:
@@ -423,8 +438,8 @@ class Lmao():
     Register a file save. User should be aware of some structures that we follow for standardizing the data.
     All the experiments are going to be tracked under the following pattern:
 
-    #. ``relic_name`` is going to be the experiment ID, so any changes to the name will not affect relic storage
-    #. ``{experiment_id}(_{job_id}@{experiment_id})`` is the name of the folder which contains all the artifacts in the experiment.
+    #. `relic_name` is going to be the experiment ID, so any changes to the name will not affect relic storage
+    #. `{experiment_id}(_{job_id}@{experiment_id})` is the name of the folder which contains all the artifacts in the experiment.
 
     If relics is not enabled, this function will simply log to the LMAO DB.
 
@@ -463,7 +478,7 @@ class Lmao():
       return None
 
     logger.info("Ending run")
-    ack = self.lmao.on_train_end(_Run = Run(experiment_id=self.run.experiment_id, project_id=self.project_id))
+    ack = self.lmao.on_train_end(_Run = self.run)
     if not ack.success:
       logger.error("  >> Server Error")
       for l in ack.message.splitlines():
@@ -472,109 +487,6 @@ class Lmao():
     self.completed = True
     if self.enable_system_monitoring:
       self.system_monitoring.stop()
-
-"""
-Code responsible for Monitoring of live servings
-"""
-
-
-def post_buffer(lmao: LMAO_Stub, queue: Queue, bar: threading.Barrier):
-  while True:
-    bar.wait() # rate_limit
-    buff = LogBuffer()
-    while True:
-      try:
-        item = queue.get()
-        buff.logs.append(item)
-      except Empty:
-        break
-    lmao.on_livelog(buff)
-
-
-class LmaoASGIMiddleware():
-
-  def __init__(self, app, workspace_id: str = "") -> None:
-    if starlette is None:
-      raise ValueError("Starlette is not installed. pip install -U nbox\[serving\]")
-    super().__init__(app)
-
-    # rate limiter
-    self._bar = threading.Barrier(2)
-    def _rate_limiter(s = 1.0):
-      while True:
-        self._bar.wait()
-        time.sleep(s)
-    rl = threading.Thread(target=_rate_limiter, daemon=True)
-
-    # create connection and handshake with the lmao server
-    self.workspace_id = workspace_id
-
-    # create a tracer object that will load all the information
-    self.tracer = Tracer(start_heartbeat=False)
-    self._nbx_run_id = self.tracer.run_id
-    self._nbx_job_id = self.tracer.job_id
-    if self._nbx_run_id is not None:
-      # update the username you have
-      secret.put("username", self.tracer.job_proto.auth_info.username)
-      self.username = secret.get("username")
-    self.lmao = LMAO_Stub(self.username, self.workspace_id)
-
-    serving = self.lmao.init_serving(
-      InitRunRequest(
-        agent_details = AgentDetails(
-          type = AgentDetails.NBX.SERVING,
-          nbx_serving_id = self._nbx_job_id or "jj_guvernr",
-          nbx_run_id = self._nbx_run_id or "fake_deploy",
-        ),
-        created_at = SimplerTimes.get_now_i64(),
-        config = dumps({
-          "my_config": "config"
-        })
-      )
-    )
-    self.serving = serving
-    self.buffer = Queue(maxsize = 2 << 14)
-    self.logger_thread = threading.Thread(target = post_buffer, args = (self.lmao, self.buffer, self._bar), daemon = True)
-    rl.start()
-    self.logger_thread.start()
-
-  async def dispatch(self, request, call_next):
-    method = request.method
-    path_template, is_handled_path = self.get_path_template(request)
-    if not is_handled_path:
-      return await call_next(request)
-
-    before_time = time.perf_counter()
-    try:
-      response = await call_next(request)
-    except BaseException as e:
-      status_code = HTTP_500_INTERNAL_SERVER_ERROR
-      raise e from None
-    else:
-      status_code = response.status_code
-      after_time = time.perf_counter()
-
-    path = path_template.strip("/")
-    if path:
-      _log = ServingHTTPLog(
-        path = path,
-        method = method,
-        status_code = status_code,
-        latency_ms = 1e3 * (after_time-before_time),
-        timestamp = SimplerTimes.get_now_pb(),
-      )
-      self.buffer.put_nowait(_log)
-
-    return response
-
-  @staticmethod
-  def get_path_template(request) -> Tuple[str, bool]:
-    for route in request.app.routes:
-      match, child_scope = route.matches(request.scope)
-      if match == Match.FULL:
-        return route.path, True
-    return request.url.path, False
-
 
 """
 For some Experiences you want to have CLI control so this class manages that
@@ -638,8 +550,8 @@ class LmaoCLI:
     """Upload and register a new run for a NBX-LMAO project.
 
     Args:
-      init_path (str): This can be a path to a ``folder`` or can be optionally of the structure ``fp:fn`` where ``fp``
-        is the path to the file and ``fn`` is the function name.
+      init_path (str): This can be a path to a `folder` or can be optionally of the structure `fp:fn` where `fp`
+        is the path to the file and `fn` is the function name.
       project_name_or_id (str): The name or id of the LMAO project.
       workspace_id (str, optional): If nor provided, defaults to global config
       trigger (bool, optional): Defaults to False. If True, will trigger the run after uploading.

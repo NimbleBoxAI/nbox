@@ -1,31 +1,15 @@
 """
-This is CLI for ``nbox``, it is meant to be as simple to use as possible. We using ``python-fire`` for building
-our CLI, which means you can access underlying system with same commands as you use with python. For maximum
-convinience we recommend adding an alias for ``nbx`` as follows:
+This is CLI for `nbox`, it is meant to be as simple to use as possible. We using `python-fire` for building
+our CLI, which means you can access underlying system with same commands as you use with python.
 
-.. code-block:: bash
-  
-  [zshrc]
-  echo "\\nalias nbx='python3 -m nbox'\\n" >> ~/.zshrc
-  source ~/.zshrc
+# SSH into Instances
 
-  [bashrc]
-  echo "\\nalias nbx='python3 -m nbox'\\n" >> ~/.bashrc
-  source ~/.bashrc
-
-
-SSH into Instances
-------------------
-
-You can SSH into your instance with the ``nbx tunnel`` command. This command will create a tunnel
+You can SSH into your instance with the `nbx tunnel` command. This command will create a tunnel
 to your instance and start an SSH session.
 
-.. code-block:: bash
-
-  nbx tunnel 8000 -i "instance-name"
-
-Documentation
--------------
+```bash
+nbx tunnel 8000 -i "instance-name"
+```
 """
 
 import os
@@ -36,7 +20,7 @@ from json import dumps
 import nbox.utils as U
 from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
-from nbox.auth import init_secret, ConfigString
+from nbox.auth import init_secret, ConfigString, secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import RelicsNBX
@@ -45,32 +29,43 @@ from nbox.version import __version__ as V
 
 logger = U.get_logger()
 
-def global_config(workspace_id: str = ""):
-  """Set global config for ``nbox``"""
-  secret = init_secret()
-  if workspace_id:
-    secret.put(ConfigString.workspace_id, workspace_id, True)
-    logger.info(f"Global Workspace ID set to {workspace_id}")
+class Config(object):
+  def update(self, workspace_id: str = ""):
+    """Set global config for `nbox`"""
+    secret = init_secret()
+    if workspace_id:
+      secret.put(ConfigString.workspace_id, workspace_id, True)
+      logger.info(f"Global Workspace ID set to {workspace_id}")
 
-    data = secret.get(ConfigString.cache)
-    redo = not data or (workspace_id not in data)
+      data = secret.get(ConfigString.cache)
+      redo = not data or (workspace_id not in data)
 
-    if redo:
-      workspaces = nbox_ws_v1.workspace()
-      workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
-      if len(workspace_details) == 0:
-        logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
-        raise Exception("Invalid workspace ID")
-      workspace_details = workspace_details[0]
-      workspace_name = workspace_details["workspace_name"]
-      secret.secrets.get(ConfigString.cache.value).update({workspace_id: workspace_details})
-    else:
-      data = data[workspace_id]
-      workspace_name = data["workspace_name"]
+      if redo:
+        workspaces = nbox_ws_v1.workspace()
+        workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
+        if len(workspace_details) == 0:
+          logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
+          raise Exception("Invalid workspace ID")
+        workspace_details = workspace_details[0]
+        workspace_name = workspace_details["workspace_name"]
+        secret.secrets.get(ConfigString.cache.value).update({workspace_id: workspace_details})
+      else:
+        data = data[workspace_id]
+        workspace_name = data["workspace_name"]
 
-    secret.put(ConfigString.workspace_name, workspace_name, True)
-    logger.info(f"Global Workspace: {workspace_name}")
+      secret.put(ConfigString.workspace_name, workspace_name, True)
+      logger.info(f"Global Workspace: {workspace_name}")
 
+  def show(self):
+    """Pretty print global config for `nbox`"""
+    workspace_id = secret.get(ConfigString.workspace_id.value)
+    workspace_name = secret.get(ConfigString.workspace_name.value)
+    logger.info(
+      "\nnbox config:\n" \
+      f"  workspace_id: {workspace_id}\n" \
+      f"  workspace_name: {workspace_name}\n" \
+      f"  nbox version: {V}" \
+    )
 
 def open_home():
   """Open current NBX platform"""
@@ -79,11 +74,12 @@ def open_home():
   webbrowser.open(secret.get("nbx_url"))
 
 
-def get(api_end: str, **kwargs):
-  """Get any command 
+def get(api_end: str, no_pp: bool = False, **kwargs):
+  """GET any API.
 
   Args:
     api_end (str): something like '/v1/api'
+    no_pp (bool, optional): Pretty print. Defaults to False.
   """
   api_end = api_end.strip("/")
   if nbox_ws_v1 == None:
@@ -92,11 +88,13 @@ def get(api_end: str, **kwargs):
   for k in api_end.split("/"):
     out = getattr(out, k)
   res = out(_method = "get", **kwargs)
-  sys.stdout.write(dumps(res))
-  sys.stdout.flush()
+  if not no_pp:
+    logger.info(dumps(res, indent=2))
+  else:
+    return res
 
 def login():
-  """Re authenticate ``nbox``. NOTE: Will remove all added keys to ``secrets``"""
+  """Re authenticate `nbox`. NOTE: Will remove all added keys to `secrets`"""
   fp = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
   os.remove(fp)
   init_secret()
@@ -119,7 +117,7 @@ def why():
 def main():
   fire.Fire({
     "build"   : Instance,
-    "config"  : global_config,
+    "config"  : Config,
     "get"     : get,
     "jobs"    : Job,
     "lmao"    : LmaoCLI,
