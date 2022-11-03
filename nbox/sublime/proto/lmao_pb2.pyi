@@ -318,6 +318,7 @@ class Record(google.protobuf.message.Message):
 global___Record = Record
 
 class RecordColumn(google.protobuf.message.Message):
+    """RecordColumn should be the main key:value(s) thing we are going to use it for both the charts and scalar data."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     class _DataType:
         ValueType = typing.NewType('ValueType', builtins.int)
@@ -369,7 +370,12 @@ class RecordColumn(google.protobuf.message.Message):
 
     value_type: global___RecordColumn.DataType.ValueType
     @property
-    def rows(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordColumn.RecordRow]: ...
+    def rows(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordColumn.RecordRow]:
+        """give me all the values for a given column (key), so in case of table, we can simply say that
+        we are returning only one value for each column ie. len(RecordColumn.rows) == 1
+        this is similar to saying bar chart value, it will be a scalar but wrapped as a array of length one
+        """
+        pass
     def __init__(self,
         *,
         key: typing.Text = ...,
@@ -416,7 +422,9 @@ class RunLog(google.protobuf.message.Message):
     PROJECT_ID_FIELD_NUMBER: builtins.int
     experiment_id: typing.Text
     @property
-    def data(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Record]: ...
+    def data(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___Record]:
+        """TODO: @yashbonde deprecate this"""
+        pass
     @property
     def column_data(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___RecordColumn]:
         """this is the chart wise data"""
@@ -439,7 +447,7 @@ class RunLog(google.protobuf.message.Message):
 global___RunLog = RunLog
 
 class AgentDetails(google.protobuf.message.Message):
-    """all the NBX-Infra details for this specific run"""
+    """all the NBX-Infra details for this specific process"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     class _NBX:
         ValueType = typing.NewType('ValueType', builtins.int)
@@ -593,6 +601,9 @@ class Run(google.protobuf.message.Message):
         FAILED: Run._Status.ValueType  # 3
         """When the NBX-Job failed"""
 
+        DELETED: Run._Status.ValueType  # 4
+        """When the run was deleted"""
+
     class Status(_Status, metaclass=_StatusEnumTypeWrapper):
         pass
 
@@ -608,18 +619,21 @@ class Run(google.protobuf.message.Message):
     FAILED: Run.Status.ValueType  # 3
     """When the NBX-Job failed"""
 
+    DELETED: Run.Status.ValueType  # 4
+    """When the run was deleted"""
+
 
     AGENT_FIELD_NUMBER: builtins.int
     EXPERIMENT_ID_FIELD_NUMBER: builtins.int
     CREATED_AT_FIELD_NUMBER: builtins.int
     ENDED_AT_FIELD_NUMBER: builtins.int
-    COMPLETED_FIELD_NUMBER: builtins.int
     SAVE_LOCATION_FIELD_NUMBER: builtins.int
     FILE_LIST_FIELD_NUMBER: builtins.int
     CONFIG_FIELD_NUMBER: builtins.int
+    PROJECT_ID_FIELD_NUMBER: builtins.int
+    PROJECT_NAME_FIELD_NUMBER: builtins.int
     STATUS_FIELD_NUMBER: builtins.int
     UPDATED_AT_FIELD_NUMBER: builtins.int
-    PROJECT_ID_FIELD_NUMBER: builtins.int
     @property
     def agent(self) -> global___AgentDetails:
         """the agent details"""
@@ -633,9 +647,6 @@ class Run(google.protobuf.message.Message):
     ended_at: builtins.int
     """when was run declared dead, the actual kill can be well before that"""
 
-    completed: builtins.bool
-    """is this run complete"""
-
     save_location: typing.Text
     """this is the location where the Files from this run are stored"""
 
@@ -646,29 +657,34 @@ class Run(google.protobuf.message.Message):
     config: typing.Text
     """the jsonified config string"""
 
+    project_id: typing.Text
+    """the project this run is part of"""
+
+    project_name: typing.Text
+    """the project this run is part of"""
+
     status: global___Run.Status.ValueType
     """the last known status of this run"""
 
     updated_at: builtins.int
     """the last time this run was updated"""
 
-    project_id: typing.Text
     def __init__(self,
         *,
         agent: typing.Optional[global___AgentDetails] = ...,
         experiment_id: typing.Text = ...,
         created_at: builtins.int = ...,
         ended_at: builtins.int = ...,
-        completed: builtins.bool = ...,
         save_location: typing.Text = ...,
         file_list: typing.Optional[global___FileList] = ...,
         config: typing.Text = ...,
+        project_id: typing.Text = ...,
+        project_name: typing.Text = ...,
         status: global___Run.Status.ValueType = ...,
         updated_at: builtins.int = ...,
-        project_id: typing.Text = ...,
         ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["agent",b"agent","file_list",b"file_list"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["agent",b"agent","completed",b"completed","config",b"config","created_at",b"created_at","ended_at",b"ended_at","experiment_id",b"experiment_id","file_list",b"file_list","project_id",b"project_id","save_location",b"save_location","status",b"status","updated_at",b"updated_at"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["agent",b"agent","config",b"config","created_at",b"created_at","ended_at",b"ended_at","experiment_id",b"experiment_id","file_list",b"file_list","project_id",b"project_id","project_name",b"project_name","save_location",b"save_location","status",b"status","updated_at",b"updated_at"]) -> None: ...
 global___Run = Run
 
 class ListProjectsRequest(google.protobuf.message.Message):
@@ -853,37 +869,6 @@ class Acknowledge(google.protobuf.message.Message):
         ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["message",b"message","success",b"success"]) -> None: ...
 global___Acknowledge = Acknowledge
-
-class RelicFile(google.protobuf.message.Message):
-    """TODO: deprecate
-
-    """
-    DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    NAME_FIELD_NUMBER: builtins.int
-    LOCATION_FIELD_NUMBER: builtins.int
-    CREATED_AT_FIELD_NUMBER: builtins.int
-    IS_INPUT_FIELD_NUMBER: builtins.int
-    name: typing.Text
-    """the name of the file"""
-
-    location: typing.Text
-    """the location of the file"""
-
-    created_at: builtins.int
-    """when was this file created"""
-
-    is_input: builtins.bool
-    """was this file there when the run was created or was it created by the run"""
-
-    def __init__(self,
-        *,
-        name: typing.Text = ...,
-        location: typing.Text = ...,
-        created_at: builtins.int = ...,
-        is_input: builtins.bool = ...,
-        ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["created_at",b"created_at","is_input",b"is_input","location",b"location","name",b"name"]) -> None: ...
-global___RelicFile = RelicFile
 
 class GetExperimentTableRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
