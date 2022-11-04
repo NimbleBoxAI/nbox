@@ -13,9 +13,9 @@ nbx tunnel 8000 -i "instance-name"
 """
 
 import os
-import sys
 import fire
 from json import dumps
+from typing import Dict, Any
 
 import nbox.utils as U
 from nbox.jobs import Job, Serve
@@ -114,6 +114,34 @@ def why():
   print("\nIf you like what we are building, come work with us.\n\nWith Love,\nNimbleBox.ai\n")
 
 
+class NBXWS_CLI(object):
+  def get(self, api: str, H: Dict[str, str] = {}):
+    """make a GET call to any `api`, it can either contain '/' or '.'"""
+    if nbox_ws_v1 == None:
+      raise RuntimeError("Not connected to NimbleBox.ai webserver")
+    api = api.strip("/")
+    splitter = '.' if '.' in api else '/'
+    nbox_ws_v1._session.headers.update(H)
+    out = nbox_ws_v1
+    for k in api.split(splitter):
+      out = getattr(out, k)
+    res = out(_method = "get")
+    return res
+
+  def post(self, api: str, d: Dict[str, Any] = {}, H: Dict[str, str] = {}):
+    """make a POST call to any `api`, it can either contain '/' or '.'"""
+    if nbox_ws_v1 == None:
+      raise RuntimeError("Not connected to NimbleBox.ai webserver")
+    api = api.strip("/")
+    splitter = '.' if '.' in api else '/'
+    nbox_ws_v1._session.headers.update(H)
+    out = nbox_ws_v1
+    for k in api.split(splitter):
+      out = getattr(out, k)
+    res = out(_method = "post", data = d)
+    return res
+
+
 def main():
   fire.Fire({
     "build"   : Instance,
@@ -128,6 +156,7 @@ def main():
     "tunnel"  : tunnel,
     "version" : version,
     "why"     : why,
+    "ws"      : NBXWS_CLI
   })
 
 if __name__ == "__main__":
