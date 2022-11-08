@@ -9,7 +9,6 @@ Notes
 
 import os
 import sys
-from typing import Union
 import jinja2
 import tabulate
 from functools import lru_cache, partial
@@ -25,10 +24,11 @@ from nbox.messages import rpc, streaming_rpc, write_binary_to_file
 from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
-from nbox.hyperloop.nbox_ws_pb2 import JobInfo
-from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from nbox.hyperloop.nbox_ws_pb2 import JobRequest
+from nbox.hyperloop.job_pb2 import Job as JobProto
 from nbox.hyperloop.dag_pb2 import DAG as DAGProto
-from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, JobLogsRequest, ListJobsResponse, UpdateJobRequest
+from nbox.hyperloop.common_pb2 import NBXAuthInfo
+from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
 from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest
 
 
@@ -398,7 +398,7 @@ def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
  
   job: JobProto = rpc(
     nbox_grpc_stub.GetJob,
-    JobInfo(job=JobProto(id=id,name=name,auth_info=NBXAuthInfo(workspace_id=workspace_id))),
+    JobRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),job=JobProto(id=id,name=name)),
     "Could not find job with ID: {}".format(id),
     raise_on_error = True
   )
@@ -463,8 +463,8 @@ class Job:
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     self.id, self.name = _get_job_data(name, id, workspace_id = workspace_id)
     self.workspace_id = workspace_id
-    self.job_proto = JobProto(id = self.id, auth_info = NBXAuthInfo(workspace_id = workspace_id))
-    self.job_info = JobInfo(job = self.job_proto)
+    self.auth_info = NBXAuthInfo(workspace_id = workspace_id)
+    self.job_proto = JobProto(id = self.id)
 
     self.run_stub = None
     self.runs = []
@@ -487,7 +487,7 @@ class Job:
     self.job_proto.schedule.MergeFrom(new_schedule.get_message())
     rpc(
       nbox_grpc_stub.UpdateJob,
-      UpdateJobRequest(job=self.job_proto, update_mask=FieldMask(paths=["schedule"])),
+      UpdateJobRequest(auth_info=self.auth_info, job=self.job_proto, update_mask=FieldMask(paths=["schedule"])),
       "Could not update job schedule",
       raise_on_error = True
     )
@@ -507,7 +507,7 @@ class Job:
     logger.debug(f"Streaming logs of job '{self.job_proto.id}'")
     for job_log in streaming_rpc(
       nbox_grpc_stub.GetJobLogs,
-      JobLogsRequest(job = JobInfo(job = self.job_proto)),
+      JobRequest(auth_info=self.auth_info ,job = self.job_proto),
       f"Could not get logs of job {self.job_proto.id}, is your job complete?",
       True
     ):
@@ -518,7 +518,7 @@ class Job:
   def delete(self):
     """Delete this job"""
     logger.info(f"Deleting job '{self.job_proto.id}'")
-    rpc(nbox_grpc_stub.DeleteJob, JobInfo(job = self.job_proto,), "Could not delete job")
+    rpc(nbox_grpc_stub.DeleteJob, JobRequest(auth_info=self.auth_info, job = self.job_proto,), "Could not delete job")
     logger.info(f"Deleted job '{self.job_proto.id}'")
     self.refresh()
 
@@ -531,10 +531,9 @@ class Job:
       return
       
     self.job_proto: JobProto = rpc(
-      nbox_grpc_stub.GetJob, JobInfo(job = self.job_proto), f"Could not get job {self.job_proto.id}"
+      nbox_grpc_stub.GetJob, JobRequest(job = self.job_proto), f"Could not get job {self.job_proto.id}"
     )
-    self.job_proto.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
-    self.job_info.CopyFrom(JobInfo(job = self.job_proto))
+    self.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
     logger.debug(f"Updated job '{self.job_proto.id}'")
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
@@ -544,7 +543,7 @@ class Job:
     logger.debug(f"Triggering job '{self.job_proto.id}'")
     if tag:
       self.job_proto.feature_gates.update({"SetRunMetadata": tag})
-    rpc(nbox_grpc_stub.TriggerJob, JobInfo(job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
+    rpc(nbox_grpc_stub.TriggerJob, JobRequest(auth_info=self.auth_info, job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
     logger.info(f"Triggered job '{self.job_proto.id}'")
     self.refresh()
 
@@ -555,7 +554,7 @@ class Job:
     logger.info(f"Pausing job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.PAUSED
-    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
+    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(auth_info=self.auth_info, job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
     logger.debug(f"Paused job '{self.job_proto.id}'")
     self.refresh()
   
@@ -564,7 +563,7 @@ class Job:
     logger.info(f"Resuming job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.SCHEDULED
-    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
+    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(auth_info=self.auth_info, job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
     logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()
 

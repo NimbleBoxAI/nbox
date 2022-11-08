@@ -23,11 +23,12 @@ from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
 from nbox.hyperloop.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub, nbox_model_service_stub
-from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from nbox.hyperloop.job_pb2 import  Job as JobProto
+from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource, Code
 from nbox.hyperloop.serve_pb2 import ModelRequest, Model
 from nbox.messages import rpc, write_binary_to_file
-from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo, Serve, Job
-from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
+from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, Serve, Job
+from nbox.hyperloop.nbox_ws_pb2 import JobRequest, UpdateJobRequest
 from nbox.nbxlib.operator_spec import OperatorType as OT
 
 
@@ -86,7 +87,7 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
     ModelRequest(model=
       Model(
         serving_group_id=serving_id, model_name=model_name, 
-        code=JobProto.Code(code_type=JobProto.Code.Type.NBOX, file_size=file_size,),
+        code=Code(code_type=Code.Type.NBOX, file_size=file_size,),
         type=Model.ServingType.SERVING_TYPE_NBOX_OP
         ),
       auth_info=NBXAuthInfo(workspace_id=workspace_id)
@@ -187,10 +188,6 @@ def deploy_job(
     id = job_id,
     name = job_name or U.get_random_name(True).split("-")[0],
     created_at = SimplerTimes.get_now_pb(),
-    auth_info = NBXAuthInfo(
-      username = secret.get("username"),
-      workspace_id = workspace_id,
-    ),
     schedule = schedule.get_message() if schedule is not None else None,
     dag = dag,
     resource = resource or Resource(
@@ -207,12 +204,12 @@ def deploy_job(
 
   # zip the entire init folder to zip
   zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id, type = OT.JOB)
-  return _upload_job_zip(zip_path, job_proto)
+  return _upload_job_zip(zip_path, job_proto,workspace_id)
 
-def _upload_job_zip(zip_path: str, job_proto: JobProto):
+def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
-    j: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = job_proto))
+    j: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
     new_job = j.status == JobProto.Status.NOT_SET
   except grpc.RpcError as e:
     if e.code() == grpc.StatusCode.NOT_FOUND:
@@ -243,7 +240,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   # UploadJobCode is responsible for uploading the code of the job
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
-    UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
+    JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)),
     f"Failed to upload job: {job_proto.id} | {job_proto.name}"
   )
   job_proto.MergeFrom(response)
@@ -262,7 +259,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
     job_proto.feature_gates.update({
       "EnablePipCaching": "", # some string does not honour value
     })
-    rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job")
+    rpc(nbox_grpc_stub.CreateJob, JobRequest(job = job_proto,auth_info=NBXAuthInfo(workspace_id=workspace_id)), f"Failed to create job")
 
   # write out all the commands for this job
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
@@ -277,7 +274,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   logger.info(f"See job on page: {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
-  return Job(job_proto.id, workspace_id = job_proto.auth_info.workspace_id)
+  return Job(job_proto.id, workspace_id = workspace_id)
 
 
 #######################################################################################################################
