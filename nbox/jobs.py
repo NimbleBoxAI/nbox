@@ -293,7 +293,8 @@ the highest levels of consistency with the NBX-Jobs API.
 
 def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
   if (not name and not id) or (name and id):
-    raise ValueError("Please pass either name or id")
+    logger.warning("Must provide either name or id")
+    return None, None
   # filter and get "id" and "name"
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   
@@ -348,14 +349,14 @@ class Serve:
   status = staticmethod(print_serving_list)
   upload = staticmethod(partial(upload_job_folder, "serving"))
 
-  def __init__(self, id, model_id: str = None, *, workspace_id: str = "") -> None:
+  def __init__(self, serving_id: str = None, model_id: str = None, *, workspace_id: str = "") -> None:
     """Python wrapper for NBX-Serving gRPC API
 
     Args:
       id (str): Deployment ID
       workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
-    self.id = id
+    self.id = serving_id
     self.model_id = model_id
     self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     if workspace_id is None:
@@ -390,7 +391,8 @@ around the NBX-Jobs gRPC API.
 @lru_cache(16)
 def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
   if (not name and not id) or (name and id):
-    raise ValueError("Please pass either name or id")
+    logger.info(f"Please either pass job_id '{id}' or name '{name}'")
+    return None, None
   # get stub
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   if workspace_id == None:
@@ -398,7 +400,7 @@ def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
  
   job: JobProto = rpc(
     nbox_grpc_stub.GetJob,
-    JobRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),job=JobProto(id=id,name=name)),
+    JobRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),job=JobProto(id=id, name=name)),
     "Could not find job with ID: {}".format(id),
     raise_on_error = True
   )
@@ -422,13 +424,13 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
     "Could not get job list",
   )
 
-  if len(out.Jobs) == 0:
+  if len(out.jobs) == 0:
     logger.info("No jobs found")
     sys.exit(0)
 
   headers = ['created_at', 'id', 'name', 'schedule', 'status']
   try:
-    sorted_jobs = sorted(out.Jobs, key = lambda x: getattr(x, sort))
+    sorted_jobs = sorted(out.jobs, key = lambda x: getattr(x, sort))
   except:
     logger.error(f"Cannot sort on key: {sort}")
   data = []
@@ -453,7 +455,7 @@ class Job:
   status = staticmethod(get_job_list)
   upload = staticmethod(partial(upload_job_folder, "job"))
 
-  def __init__(self, name: str = "", id: str = "", *, workspace_id: str = ""):
+  def __init__(self, job_name: str = "", job_id: str = "", *, workspace_id: str = ""):
     """Python wrapper for NBX-Jobs gRPC API
 
     Args:
@@ -461,7 +463,7 @@ class Job:
         workspace_id (str, optional): If None personal workspace is used. Defaults to None.
     """
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-    self.id, self.name = _get_job_data(name, id, workspace_id = workspace_id)
+    self.id, self.name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
     self.workspace_id = workspace_id
     self.auth_info = NBXAuthInfo(workspace_id = workspace_id)
     self.job_proto = JobProto(id = self.id)
@@ -524,14 +526,14 @@ class Job:
 
   def refresh(self):
     """Refresh Job statistics"""
-    logger.debug(f"Updating job '{self.job_proto.id}'")
+    logger.info(f"Updating job '{self.job_proto.id}'")
     if self.id == None:
       self.id, self.name = _get_job_data(id = self.id, workspace_id = self.workspace_id)
     if self.id == None:
       return
-      
+
     self.job_proto: JobProto = rpc(
-      nbox_grpc_stub.GetJob, JobRequest(job = self.job_proto), f"Could not get job {self.job_proto.id}"
+      nbox_grpc_stub.GetJob, JobRequest(auth_info=self.auth_info, job = self.job_proto), f"Could not get job {self.job_proto.id}"
     )
     self.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
     logger.debug(f"Updated job '{self.job_proto.id}'")
