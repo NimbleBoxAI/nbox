@@ -86,8 +86,8 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
     nbox_model_service_stub.UploadModel,
     ModelRequest(model=
       Model(
-        serving_group_id=serving_id, model_name=model_name, 
-        code=Code(code_type=Code.Type.NBOX, file_size=file_size,),
+        serving_group_id=serving_id, name=model_name, 
+        code=Code(type=Code.Type.ZIP, size=int(max(file_size/(1024*1024), 1)),), # MBs
         type=Model.ServingType.SERVING_TYPE_NBOX_OP
         ),
       auth_info=NBXAuthInfo(workspace_id=workspace_id)
