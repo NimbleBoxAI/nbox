@@ -127,7 +127,8 @@ from nbox.version import __version__
 from nbox.sub_utils.latency import log_latency
 from nbox.framework.on_functions import get_nbx_flow
 from nbox.framework import AirflowMixin, PrefectMixin
-from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
+from nbox.hyperloop.job_pb2 import Job as JobProto
+from nbox.hyperloop.common_pb2 import Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
 from nbox.network import _get_job_data
 from nbox.jobs import Schedule, Job, Serve

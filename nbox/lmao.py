@@ -51,7 +51,8 @@ from nbox.utils import logger, SimplerTimes
 from nbox.auth import secret, ConfigString
 from nbox.nbxlib.tracer import Tracer
 from nbox.relics import RelicsNBX
-from nbox.jobs import Job, Resource
+from nbox.jobs import Job
+from nbox.hyperloop.common_pb2 import Resource
 from nbox.init import nbox_grpc_stub
 from nbox.messages import message_to_dict
 from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest

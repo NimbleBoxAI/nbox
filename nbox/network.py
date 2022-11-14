@@ -86,8 +86,8 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
     nbox_model_service_stub.UploadModel,
     ModelRequest(model=
       Model(
-        serving_group_id=serving_id, model_name=model_name, 
-        code=Code(code_type=Code.Type.NBOX, file_size=file_size,),
+        serving_group_id=serving_id, name=model_name, 
+        code=Code(type=Code.Type.ZIP, size=int(max(file_size/(1024*1024), 1)),), # MBs
         type=Model.ServingType.SERVING_TYPE_NBOX_OP
         ),
       auth_info=NBXAuthInfo(workspace_id=workspace_id)
@@ -152,6 +152,7 @@ def deploy_job(
   workspace_id: str = None,
   schedule: Schedule = None,
   resource: Resource = None,
+  job_id: str = None,
   *,
   _unittest = False
 ) -> None:
@@ -220,7 +221,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   if not new_job:
     # incase an old job exists, we need to update few things with the new information
     logger.debug("Found existing job, checking for update masks")
-    old_job_proto = Job(job_proto.id, workspace_id = job_proto.auth_info.workspace_id).job_proto
+    old_job_proto = Job(job_id=job_proto.id, workspace_id = workspace_id).job_proto
     paths = []
     if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
       paths.append("resource")
@@ -228,13 +229,13 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
       paths.append("schedule.cron")
     logger.debug(f"Updating fields: {paths}")
     nbox_grpc_stub.UpdateJob(
-      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths)),
+      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
     )
 
   # update the JobProto with file sizes
-  job_proto.code.MergeFrom(JobProto.Code(
+  job_proto.code.MergeFrom(Code(
     size = max(int(os.stat(zip_path).st_size / (1024 ** 2)), 1), # jobs in MiB
-    type = JobProto.Code.Type.ZIP,
+    type = Code.Type.ZIP,
   ))
 
   # UploadJobCode is responsible for uploading the code of the job
@@ -264,17 +265,17 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # write out all the commands for this job
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
-  # _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
+  _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
   # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
-  _webpage = f"{secret.get('nbx_url')}/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
+  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/jobs/{job_proto.id}"
   # logger.info(f" [python] - {_api}")
-  # logger.info(f"    [CLI] - {_cli}")
+  logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   # logger.info(f"   [page] - {_webpage}")
   logger.info(f"See job on page: {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
-  return Job(job_proto.id, workspace_id = workspace_id)
+  return Job(job_id = job_proto.id, workspace_id = workspace_id)
 
 
 #######################################################################################################################
