@@ -43,19 +43,30 @@ class Subway():
   def __repr__(self):
     return f"<Subway ({self._url})>"
 
-  def __getattr__(self, attr):
+  def __getattr__(self, attr: str):
     return Subway(f"{self._url}/{attr}", self._session)
 
-  def __call__(self, method = "get", trailing = "", data = None, _verbose = False):
+  def u(self, attr: str):
+    return getattr(self, attr)
+
+  def __call__(self, method = "get", trailing = "", json = {}, data = None, _verbose = False):
     fn = getattr(self._session, method)
     url = f"{self._url}{trailing}"
     if _verbose:
       logger.debug(f"Calling {url}")
-    r = fn(url, json = data)
+    items = {}
+    if json:
+      items["json"] = json
+    if data:
+      items["data"] = data
+    r = fn(url, **items)
     if _verbose:
       logger.debug(r.content.decode())
     r.raise_for_status() # good when server is good
-    return r.json()
+    try:
+      return r.json()
+    except:
+      return r.content.decode()
 
 
 @lru_cache
