@@ -258,7 +258,8 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # if this is the first time this is being created
   if new_job:
     job_proto.feature_gates.update({
-      "EnablePipCaching": "", # some string does not honour value
+      "UsePipCaching": "", # some string does not honour value
+      "EnableAuthRefresh": ""
     })
     rpc(nbox_grpc_stub.CreateJob, JobRequest(job = job_proto,auth_info=NBXAuthInfo(workspace_id=workspace_id)), f"Failed to create job")
 
