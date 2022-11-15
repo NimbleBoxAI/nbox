@@ -29,6 +29,77 @@ from nbox.version import __version__ as V
 
 logger = U.get_logger()
 
+
+def More(contents: str, out):
+  """Run a user specified pager or fall back to the internal pager.
+
+  Args:
+    contents: The entire contents of the text lines to page.
+    out: The output stream.
+    prompt: The page break prompt.
+    check_pager: Checks the PAGER env var and uses it if True.
+  """
+  import signal, subprocess
+
+  pager = encoding.GetEncodedValue(os.environ, 'PAGER', None)
+  if pager == '-':
+    # Use the fallback Pager.
+    pager = None
+  elif not pager:
+    # Search for a pager that handles ANSI escapes.
+    for command in ('less', 'pager'):
+      if files.FindExecutableOnPath(command):
+        pager = command
+        break
+  if pager:
+    # If the pager is less(1) then instruct it to display raw ANSI escape
+    # sequences to enable colors and font embellishments.
+    less_orig = encoding.GetEncodedValue(os.environ, 'LESS', None)
+    less = '-R' + (less_orig or '')
+    encoding.SetEncodedValue(os.environ, 'LESS', less)
+    # Ignore SIGINT while the pager is running.
+    # We don't want to terminate the parent while the child is still alive.
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    p = subprocess.Popen(pager, stdin=subprocess.PIPE, shell=True)
+    enc = console_attr.GetConsoleAttr().GetEncoding()
+    p.communicate(input=contents.encode(enc))
+    p.wait()
+    # Start using default signal handling for SIGINT again.
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    if less_orig is None:
+      encoding.SetEncodedValue(os.environ, 'LESS', None)
+    return
+  else:
+    out.write(contents)
+
+
+class TC:
+  HEADER = '\033[95m'
+  OKBLUE = '\033[94m'
+  OKCYAN = '\033[96m'
+  OKGREEN = '\033[92m'
+  WARNING = '\033[93m'
+  FAIL = '\033[91m'
+  ENDC = '\033[0m'
+  BOLD = '\033[1m'
+  UNDERLINE = '\033[4m'
+
+class NBXFire:
+  """This is the CLI function for bespoke designed for nbox. Names after the legendary `python-fire` command which served
+  us well for many years before we ended up here."""
+  def __init__(self, component):
+    # print(os.path.basename(sys.argv[0]))
+    args = sys.argv[1:]
+    service_level = args[0]
+    if service_level not in component or service_level == '--help':
+      lines = [
+        f"{TC.BOLD}{TC.FAIL}ERROR:{TC.ENDC} Could not find command: '{args[0]}'. Available commands are:\n"
+      ] + [f"  {x}" for x in tuple(component.keys())]
+
+    text = '\n'.join(lines) + '\n\n'
+    More(text, out=sys.stderr)
+    # print(text)
+
 class Config(object):
   def update(self, workspace_id: str = ""):
     """Set global config for `nbox`"""
@@ -115,7 +186,7 @@ def why():
 
 
 def main():
-  fire.Fire({
+  component = {
     "build"   : Instance,
     "config"  : Config,
     "get"     : get,
@@ -128,7 +199,9 @@ def main():
     "tunnel"  : tunnel,
     "version" : version,
     "why"     : why,
-  })
+  }
+  fire.Fire(component)
+  # NBXFire(component)
 
 if __name__ == "__main__":
   main()
