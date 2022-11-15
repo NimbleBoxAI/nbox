@@ -22,11 +22,13 @@ from nbox.auth import secret
 from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
 from nbox.hyperloop.dag_pb2 import DAG
-from nbox.init import nbox_ws_v1, nbox_grpc_stub
-from nbox.hyperloop.job_pb2 import NBXAuthInfo, Job as JobProto, Resource
+from nbox.init import nbox_ws_v1, nbox_grpc_stub, nbox_model_service_stub
+from nbox.hyperloop.job_pb2 import  Job as JobProto
+from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource, Code
+from nbox.hyperloop.serve_pb2 import ModelRequest, Model
 from nbox.messages import rpc, write_binary_to_file
-from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, JobInfo, Serve, Job
-from nbox.hyperloop.nbox_ws_pb2 import UploadCodeRequest, CreateJobRequest, UpdateJobRequest
+from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, Serve, Job
+from nbox.hyperloop.nbox_ws_pb2 import JobRequest, UpdateJobRequest
 from nbox.nbxlib.operator_spec import OperatorType as OT
 
 
@@ -41,7 +43,8 @@ Function related to serving of any model.
 
 def deploy_serving(
   init_folder: str,
-  deployment_id_or_name: str,
+  deployment_name: str,
+  deployment_id: str = None,
   workspace_id: str = None,
   resource: Resource = None,
   wait_for_deployment: bool = False,
@@ -58,55 +61,66 @@ def deploy_serving(
   if wait_for_deployment:
     logger.warning("Wait for deployment is coming in the following release!")
 
-  serving_id, serving_name = _get_deployment_data(deployment_id_or_name, workspace_id = workspace_id)
+  # [TODO] - keeping this for now, if file can be zip without serving id then we can remove this
+  serving_id, serving_name = _get_deployment_data(name = deployment_name, id = deployment_id, workspace_id = workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
-  if serving_id is None:
-    logger.error("Could not find service ID, creating a new one")
-    data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
-    serving_id = data["deployment_id"]
-    logger.info(f"Serving ID: {serving_id}")
+  # if serving_id is None:
+  #   logger.error("Could not find service ID, creating a new one")
+  #   data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
+  #   serving_id = data["deployment_id"]
+  #   logger.info(f"Serving ID: {serving_id}")
   model_name = U.get_random_name().replace("-", "_")
   logger.info(f"Model name: {model_name}")
 
   # zip init folder
   zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name, type = OT.SERVING)
-  return _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name)
+  return _upload_serving_zip(zip_path, workspace_id, serving_id, model_name)
 
 
-def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_name):
+def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   file_size = os.stat(zip_path).st_size # serving in bytes
 
   # get bucket URL and upload the data
-  stub_all_depl = nbox_ws_v1.workspace.u(workspace_id).deployments
-  out = stub_all_depl.u(serving_id).get_upload_url(
-    _method = "put",
-    convert_args = "",
-    deployment_meta = {},
-    deployment_name = serving_name,
-    deployment_type = "nbox_op", # "nbox" or "ovms2"
-    file_size = str(file_size),
-    file_type = "nbox",
-    model_name = model_name,
-    nbox_meta = {},
+  response: Model = rpc(
+    nbox_model_service_stub.UploadModel,
+    ModelRequest(model=
+      Model(
+        serving_group_id=serving_id, name=model_name,
+        code=Code(type=Code.Type.ZIP, size=int(max(file_size/(1024*1024), 1)),), # MBs
+        type=Model.ServingType.SERVING_TYPE_NBOX_OP
+        ),
+      auth_info=NBXAuthInfo(workspace_id=workspace_id)
+      ),
+    "Could not get upload URL",
+    raise_on_error=True
   )
-
-  model_id = out["fields"]["x-amz-meta-model_id"]
-  deployment_id = out["fields"]["x-amz-meta-deployment_id"]
+  model_id = response.id
+  deployment_id = response.serving_group_id
   logger.debug(f"model_id: {model_id}")
   logger.debug(f"deployment_id: {deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
   # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
   # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
-  logger.info(f"Uploading model to S3 ... (fs: {file_size/1024/1024:0.3f} MB)")
-  r = requests.post(url=out["url"], data=out["fields"], files={"file": (out["fields"]["key"], open(zip_path, "rb"))})
-  status = r.status_code == 204
-  logger.debug(f"Upload status: {status}")
+  s3_url = response.code.s3_url
+  s3_meta = response.code.s3_meta
+  logger.info(f"Uploading model to S3 ... (fs: {response.code.size/1024/1024:0.3f} MB)")
+  r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
+  try:
+    r.raise_for_status()
+  except:
+    logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
+    return
 
-  # checking if file is successfully uploaded on S3 and tell webserver whether upload is completed or not
-  ws_stub_model = stub_all_depl.u(deployment_id).models.u(model_id) # eager create the stub
-  ws_stub_model.update(_method = "post", status = status)
+  # model is uploaded successfully, now we need to deploy it
+  logger.info(f"Model uploaded successfully, deploying ...")
+  response: Model = rpc(
+    nbox_model_service_stub.Deploy,
+    ModelRequest(model=Model(id=model_id,serving_group_id=deployment_id), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    "Could not deploy model",
+    raise_on_error=True
+  )
 
   # write out all the commands for this deployment
   logger.info("API will soon be hosted, here's how you can use it:")
@@ -119,7 +133,7 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, serving_name, model_
   # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   logger.info(f"  [page] - {_webpage}")
 
-  return Serve(id = serving_id, model_id = model_id, workspace_id = workspace_id)
+  return Serve(serving_id = serving_id, model_id = model_id, workspace_id = workspace_id)
 
 
 #######################################################################################################################
@@ -133,11 +147,12 @@ Function related to batch processing of any model.
 
 def deploy_job(
   init_folder: str,
-  job_id_or_name: str,
+  job_name: str,
   dag: DAG,
   workspace_id: str = None,
   schedule: Schedule = None,
   resource: Resource = None,
+  job_id: str = None,
   *,
   _unittest = False
 ) -> None:
@@ -156,8 +171,10 @@ def deploy_job(
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+  if (job_name is None or job_name == "") and job_id == "":
+    raise ValueError("Please specify a job name or ID")
 
-  job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
+  job_id, job_name = _get_job_data(name = job_name, id = job_id, workspace_id = workspace_id)
   logger.info(f"Job name: {job_name}")
   logger.info(f"Job ID: {job_id}")
 
@@ -172,10 +189,6 @@ def deploy_job(
     id = job_id,
     name = job_name or U.get_random_name(True).split("-")[0],
     created_at = SimplerTimes.get_now_pb(),
-    auth_info = NBXAuthInfo(
-      username = secret.get("username"),
-      workspace_id = workspace_id,
-    ),
     schedule = schedule.get_message() if schedule is not None else None,
     dag = dag,
     resource = resource or Resource(
@@ -192,12 +205,12 @@ def deploy_job(
 
   # zip the entire init folder to zip
   zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id, type = OT.JOB)
-  return _upload_job_zip(zip_path, job_proto)
+  return _upload_job_zip(zip_path, job_proto,workspace_id)
 
-def _upload_job_zip(zip_path: str, job_proto: JobProto):
+def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
-    j: JobProto = nbox_grpc_stub.GetJob(JobInfo(job = job_proto))
+    j: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
     new_job = j.status == JobProto.Status.NOT_SET
   except grpc.RpcError as e:
     if e.code() == grpc.StatusCode.NOT_FOUND:
@@ -208,7 +221,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   if not new_job:
     # incase an old job exists, we need to update few things with the new information
     logger.debug("Found existing job, checking for update masks")
-    old_job_proto = Job(job_proto.id, workspace_id = job_proto.auth_info.workspace_id).job_proto
+    old_job_proto = Job(job_id=job_proto.id, workspace_id = workspace_id).job_proto
     paths = []
     if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
       paths.append("resource")
@@ -216,19 +229,19 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
       paths.append("schedule.cron")
     logger.debug(f"Updating fields: {paths}")
     nbox_grpc_stub.UpdateJob(
-      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths)),
+      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
     )
 
   # update the JobProto with file sizes
-  job_proto.code.MergeFrom(JobProto.Code(
+  job_proto.code.MergeFrom(Code(
     size = max(int(os.stat(zip_path).st_size / (1024 ** 2)), 1), # jobs in MiB
-    type = JobProto.Code.Type.ZIP,
+    type = Code.Type.ZIP,
   ))
 
   # UploadJobCode is responsible for uploading the code of the job
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
-    UploadCodeRequest(job = job_proto, auth = job_proto.auth_info),
+    JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)),
     f"Failed to upload job: {job_proto.id} | {job_proto.name}"
   )
   job_proto.MergeFrom(response)
@@ -245,24 +258,25 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto):
   # if this is the first time this is being created
   if new_job:
     job_proto.feature_gates.update({
-      "EnablePipCaching": "", # some string does not honour value
+      "UsePipCaching": "", # some string does not honour value
+      "EnableAuthRefresh": ""
     })
-    rpc(nbox_grpc_stub.CreateJob, CreateJobRequest(job = job_proto), f"Failed to create job")
+    rpc(nbox_grpc_stub.CreateJob, JobRequest(job = job_proto,auth_info=NBXAuthInfo(workspace_id=workspace_id)), f"Failed to create job")
 
   # write out all the commands for this job
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
-  # _cli = f"python3 -m nbox jobs --id {job_proto.id} --workspace_id {job_proto.auth_info.workspace_id} trigger"
+  _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
   # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
-  _webpage = f"{secret.get('nbx_url')}/workspace/{job_proto.auth_info.workspace_id}/jobs/{job_proto.id}"
+  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/jobs/{job_proto.id}"
   # logger.info(f" [python] - {_api}")
-  # logger.info(f"    [CLI] - {_cli}")
+  logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   # logger.info(f"   [page] - {_webpage}")
   logger.info(f"See job on page: {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
-  return Job(job_proto.id, workspace_id = job_proto.auth_info.workspace_id)
+  return Job(job_id = job_proto.id, workspace_id = workspace_id)
 
 
 #######################################################################################################################
