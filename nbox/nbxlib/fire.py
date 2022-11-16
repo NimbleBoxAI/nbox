@@ -13,6 +13,9 @@ class TC:
   UNDERLINE = '\033[4m'
 
 
+def colored(st, color):
+  return f"\u001b[{30+['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'].index(color)}m{st}\u001b[0m"
+
 class NBXFire:
   """This is the CLI function for bespoke designed for nbox. Names after the legendary `python-fire` command which served
   us well for many years before we ended up here.

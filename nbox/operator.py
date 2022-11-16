@@ -130,8 +130,8 @@ from nbox.framework import AirflowMixin, PrefectMixin
 from nbox.hyperloop.job_pb2 import Job as JobProto
 from nbox.hyperloop.common_pb2 import Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
-from nbox.network import _get_job_data
-from nbox.jobs import Schedule, Job, Serve
+
+from nbox.jobs import Schedule, Job, Serve, _get_job_data
 from nbox.messages import write_binary_to_file
 from nbox.relics import RelicsNBX, RelicLocal
 from nbox.init import nbox_ws_v1
