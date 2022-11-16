@@ -27,7 +27,7 @@ from nbox.hyperloop.job_pb2 import  Job as JobProto
 from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource, Code
 from nbox.hyperloop.serve_pb2 import ModelRequest, Model
 from nbox.messages import rpc, write_binary_to_file
-from nbox.jobs import Schedule, _get_job_data, _get_deployment_data, Serve, Job
+from nbox.jobs import Schedule, Serve, Job
 from nbox.hyperloop.nbox_ws_pb2 import JobRequest, UpdateJobRequest
 from nbox.nbxlib.operator_spec import OperatorType as OT
 
@@ -43,8 +43,8 @@ Function related to serving of any model.
 
 def deploy_serving(
   init_folder: str,
-  deployment_name: str,
-  deployment_id: str = None,
+  serving_name: str,
+  serving_id: str = None,
   workspace_id: str = None,
   resource: Resource = None,
   wait_for_deployment: bool = False,
@@ -62,7 +62,6 @@ def deploy_serving(
     logger.warning("Wait for deployment is coming in the following release!")
 
   # [TODO] - keeping this for now, if file can be zip without serving id then we can remove this
-  serving_id, serving_name = _get_deployment_data(name = deployment_name, id = deployment_id, workspace_id = workspace_id)
   logger.info(f"Serving name: {serving_name}")
   logger.info(f"Serving ID: {serving_id}")
   # if serving_id is None:
@@ -174,7 +173,9 @@ def deploy_job(
   if (job_name is None or job_name == "") and job_id == "":
     raise ValueError("Please specify a job name or ID")
 
-  job_id, job_name = _get_job_data(name = job_name, id = job_id, workspace_id = workspace_id)
+  # logger.debug(f"deploy_job:\n  init_folder: {init_folder}\n  name: {job_name}\n  id: {job_id}")
+
+  # job_id, job_name = _get_job_data(name = job_name, id = job_id, workspace_id = workspace_id)
   logger.info(f"Job name: {job_name}")
   logger.info(f"Job ID: {job_id}")
 

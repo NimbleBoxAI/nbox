@@ -28,14 +28,14 @@ from nbox.hyperloop.serve_pb2_grpc import ServingServiceStub, ModelServiceStub
 from nbox.version import __version__
 
 
-def __create_channel() -> grpc.Channel:
+def __create_channel(channel_name) -> grpc.Channel:
   """Create a gRPC channel with the Webserver, this will return ``webserver_channel`` with credentials and ssl."""
   token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
   ssl_creds = grpc.ssl_channel_credentials()
   creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
   channel = grpc.secure_channel(secret.get("nbx_url").replace("https://", "dns:/") + ":443", creds)
   future = grpc.channel_ready_future(channel)
-  future.add_done_callback(lambda _: logger.debug(f"NBX gRPC server is ready"))
+  future.add_done_callback(lambda _: logger.debug(f"NBX '{channel_name}' gRPC stub is ready!"))
 
   return channel
 
@@ -43,7 +43,7 @@ def get_job_stub() -> WSJobServiceStub:
   """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``
   object which is globally accesible as ``nbox.nbox_grpc_stub``. If you find yourself
   using this function, you might want to reconsider your design."""
-  channel = __create_channel()
+  channel = __create_channel("WSJobServiceStub")
   stub = WSJobServiceStub(channel)
   logger.debug(f"Connected using stub: {stub.__class__.__name__}")
   return stub
@@ -53,7 +53,7 @@ def get_serving_stub() -> ServingServiceStub:
   """Create a gRPC stub with the NBX Serving, this will initialise ``nbox_serving_grpc_stub``
   object which is globally accesible as ``nbox.nbox_serving_grpc_stub``. If you find yourself
   using this function, you might want to reconsider your design."""
-  channel = __create_channel()
+  channel = __create_channel("ServingServiceStub")
   stub = ServingServiceStub(channel)
   logger.debug(f"Connected using stub: {stub.__class__.__name__}")
   return stub
@@ -63,7 +63,7 @@ def get_model_stub() -> ModelServiceStub:
   """Create a gRPC stub with the NBX Serving, this will initialise ``nbox_model_grpc_stub``
   object which is globally accesible as ``nbox.nbox_model_grpc_stub``. If you find yourself
   using this function, you might want to reconsider your design."""
-  channel = __create_channel()
+  channel = __create_channel("ModelServiceStub")
   stub = ModelServiceStub(channel)
   logger.debug(f"Connected using stub: {stub.__class__.__name__}")
   return stub
