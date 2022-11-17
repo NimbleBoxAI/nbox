@@ -16,14 +16,14 @@ import nbox.utils as U
 from nbox.auth import secret, ConfigString
 from nbox.utils import logger
 from nbox.version import __version__
-from nbox.messages import rpc, streaming_rpc, write_binary_to_file
+from nbox.messages import rpc, streaming_rpc
 from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
 from nbox.hyperloop.nbox_ws_pb2 import JobRequest
 from nbox.hyperloop.job_pb2 import Job as JobProto
 from nbox.hyperloop.dag_pb2 import DAG as DAGProto
-from nbox.hyperloop.common_pb2 import NBXAuthInfo
+from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
 from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest
 
@@ -65,12 +65,12 @@ class Schedule:
       Schedule(minute = 69)
 
     Args:
-        hour (int): Hour of the day, if only this value is passed it will run every ``hour``
-        minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
-        days (str/list, optional): List of days (first three chars) of the week, if not passed it will run every day.
-        months (str/list, optional): List of months (first three chars) of the year, if not passed it will run every month.
-        starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
-        ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
+      hour (int): Hour of the day, if only this value is passed it will run every ``hour``
+      minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
+      days (str/list, optional): List of days (first three chars) of the week, if not passed it will run every day.
+      months (str/list, optional): List of months (first three chars) of the year, if not passed it will run every month.
+      starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
+      ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
     """
     self.hour = hour
     self.minute = minute
@@ -150,17 +150,42 @@ def upload_job_folder(
   init_folder: str,
   name: str = "",
   id: str = "",
+  trigger: bool = False,
+
+  # all the things for resources
+  resource_cpu: str = "100m",
+  resource_memory: str = "128Mi",
+  resource_disk_size: str = "3Gi",
+  resource_gpu: str = "none",
+  resource_gpu_count: str = "0",
+  resource_timeout: int = 120_000,
+  resource_max_retries: int = 2,
+
+  # for scheduling
+  cron: str = "",
+
+  # there's no more need to pass the workspace_id anymore
   workspace_id: str = "",
   **init_kwargs
 ):
   """Upload the code for a job or serving to the NBX. if `id_or_name` is not present, it will create a new Job.
-  Only the folder in teh
 
   Args:
-    init_folder (str): folder with all the relevant files or ``file_path:fn_name`` pair so you can
-    id_or_name (str): ID or name
+    method (str): The method to use, either "job" or "serving"
+    init_folder (str): folder with all the relevant files or ``file_path:fn_name`` pair so you can use it as the entrypoint.
+    name (str, optional): Name of the job. Defaults to "".
+    id (str, optional): ID of the job. Defaults to "".
+    trigger (bool, optional): If uploading a "job" trigger the job after uploading. Defaults to False.
+    resource_cpu (str, optional): CPU resource. Defaults to "100m".
+    resource_memory (str, optional): Memory resource. Defaults to "128Mi".
+    resource_disk_size (str, optional): Disk size resource. Defaults to "3Gi".
+    resource_gpu (str, optional): GPU resource. Defaults to "none".
+    resource_gpu_count (str, optional): GPU count resource. Defaults to "0".
+    resource_timeout (int, optional): Timeout resource. Defaults to 120_000.
+    resource_max_retries (int, optional): Max retries resource. Defaults to 2.
+    cron (str, optional): Cron string for scheduling. Defaults to "".
     workspace_id (str, optional): Workspace ID, if None uses the one from config. Defaults to "".
-    init_kwargs (dict): kwargs to pass to the `init` function, if possible
+    init_kwargs (dict): kwargs to pass to the `init` function / class, if possible
   """
   from nbox.network import deploy_job, deploy_serving
   import nbox.nbxlib.operator_spec as ospec
@@ -170,8 +195,8 @@ def upload_job_folder(
     raise ValueError(f"Invalid method: {method}, should be either {OT._valid_deployment_types()}")
   if (not name and not id) or (name and id):
     raise ValueError("Either --name or --id must be present")
-  # if trigger and method != OT.JOB:
-  #   raise ValueError(f"Trigger can only be used with '{OT.JOB}'")
+  if trigger and method != OT.JOB.value:
+    raise ValueError(f"Trigger can only be used with '{OT.JOB}'")
 
   if ":" not in init_folder:
     # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
@@ -179,7 +204,7 @@ def upload_job_folder(
     # everything installed locally. This was a legacy method before 0.10.0
     logger.error(
       'Old method of having a manual nbx_user.py file is not deprecated\n'
-      f'  Fix: nbx {method} upload file_path:fn_cls_name'
+      f'  Fix: nbx {method} upload file_path:fn_cls_name --id "id"'
     )
     raise ValueError("Old style upload is not supported anymore")
 
@@ -199,6 +224,7 @@ def upload_job_folder(
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   logger.info(f"Uploading code from folder: {init_folder}:{file_name}:{fn_name}")
 
+  # build an Astea and analyse it for getting the computation that is going to be run
   tea = Astea(fn_file+".py")
   items = tea.find(fn_name, [IT.CLASS, IT.FUNCTION])
   if len(items) > 1:
@@ -222,21 +248,12 @@ def upload_job_folder(
     init_code = f"{fn_name}({init_comm})"
     logger.info(f"Starting with init code:\n  {init_code}")
 
-  with open("nbx_user.py", "w") as f:
-    f.write(f'''# Autogenerated for .deploy() call
-
-from nbox.messages import read_file_to_binary
-from nbox.hyperloop.job_pb2 import Resource
-
-def get_op(*_, **__):
-  # takes no input since programtically generated returns the exact object
-  from {file_name} import {fn_name}
-  out = {init_code}
-  return out
-
-get_resource = lambda: read_file_to_binary('.nbx_core/resource.pb', message = Resource())
-get_schedule = lambda: None
-''')
+  # load up the things that are to be passed to the exe.py file
+  exe_jinja_kwargs = {
+    "file_name": file_name,
+    "fn_name": fn_name,
+    "init_code": init_code,
+  }
 
   # create a requirements.txt file if it doesn't exist with the latest nbox version
   if not os.path.exists(U.join(".", "requirements.txt")):
@@ -251,20 +268,20 @@ get_schedule = lambda: None
   else:
     with open(U.join(".", ".nboxignore"), "r") as f:
       _igp = _igp.union(set(f.read().splitlines()))
+    _igp = sorted(list(_igp)) # sort it so it doesn't keep creating diffs in the git
     with open(U.join(".", ".nboxignore"), "w") as f:
       f.write("\n".join(_igp))
 
   # just create a resource.pb, if it's empty protobuf will work it out
-  nbx_folder = U.join(".", ".nbx_core")
-  os.makedirs(nbx_folder, exist_ok = True)
-  write_binary_to_file(ospec.DEFAULT_RESOURCE, file = U.join(nbx_folder, "resource.pb"))
-
-  # we cannot use the traditional _deploy_nbx_user because we cannot execute anything locally
-  # ie. we cannot import any file. we just need to provide dummy functions
-  get_resource = lambda *_, **__: None
-  if method == OT.JOB.value:
-    get_schedule = lambda: None
-    get_dag = lambda: DAGProto()
+  resource = Resource(
+    cpu = resource_cpu,
+    memory = resource_memory,
+    disk_size = resource_disk_size,
+    gpu = resource_gpu,
+    gpu_count = resource_gpu_count,
+    timeout = resource_timeout,
+    max_retries = resource_max_retries,
+  )
 
   # common to both, kept out here because these two will eventually merge
   if method == ospec.OperatorType.JOB.value:
@@ -273,12 +290,18 @@ get_schedule = lambda: None
       init_folder = init_folder,
       job_id = job_id,
       job_name = job_name,
-      dag = get_dag(),
+      dag = DAGProto(),
       workspace_id = workspace_id,
-      schedule = get_schedule(),
-      resource = get_resource(),
-      _unittest = False
+      schedule = JobProto.Schedule(cron = cron),
+      resource = resource,
+      exe_jinja_kwargs = exe_jinja_kwargs,
     )
+
+    if trigger:
+      # trigger the job
+      logger.info(f"Triggering job: {job_name} ({job_id})")
+      out = out.trigger()
+
   elif method == ospec.OperatorType.SERVING.value:
     serving_id, serving_name = _get_deployment_data(name = name, id = id, workspace_id = workspace_id)
     out: Serve = deploy_serving(
@@ -286,9 +309,9 @@ get_schedule = lambda: None
       serving_id = serving_id,
       serving_name = serving_name,
       workspace_id = workspace_id,
-      resource = get_resource(),
+      resource = resource,
       wait_for_deployment = False,
-      _unittest = False
+      exe_jinja_kwargs = exe_jinja_kwargs,
     )
   else:
     raise ValueError(f"Unknown method: {method}")
@@ -454,6 +477,7 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
     data.append(_row)
   for l in tabulate.tabulate(data, headers).splitlines():
     logger.info(l)
+
 
 class Job:
   status = staticmethod(get_job_list)

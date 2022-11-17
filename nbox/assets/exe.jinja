@@ -8,7 +8,8 @@ os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 
 import fire
 from functools import lru_cache, partial
-from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
+# from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
+from {{ file_name }} import {{ fn_name }}
 
 from nbox import Operator, logger
 import nbox.utils as U
@@ -18,7 +19,8 @@ from nbox.lib.dist import NBXLet
 def get_op(cloud = False, serving: bool = False) -> Operator:
   # The beauty of this function is that it ensures that the operator class is loaded only once
   try:
-    op: Operator = get_op_user(serving)
+    # op: Operator = get_op_user(serving)
+    op: Operator = {{ init_code }}
   except Exception as e:
     U.log_traceback()
     logger.error(f"Failed to load operator: {e}")

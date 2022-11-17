@@ -50,7 +50,7 @@ class Config(object):
           raise Exception("Invalid workspace ID")
         workspace_details = workspace_details[0]
         workspace_name = workspace_details["workspace_name"]
-        secret.secrets.get(ConfigString.cache.value).update({workspace_id: workspace_details})
+        secret.secrets.get(ConfigString.cache).update({workspace_id: workspace_details})
       else:
         data = data[workspace_id]
         workspace_name = data["workspace_name"]
@@ -60,8 +60,8 @@ class Config(object):
 
   def show(self):
     """Pretty print global config for `nbox`"""
-    workspace_id = secret.get(ConfigString.workspace_id.value)
-    workspace_name = secret.get(ConfigString.workspace_name.value)
+    workspace_id = secret.get(ConfigString.workspace_id)
+    workspace_name = secret.get(ConfigString.workspace_name)
     logger.info(
       "\nnbox config:\n" \
       f"  workspace_id: {workspace_id}\n" \

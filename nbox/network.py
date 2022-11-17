@@ -48,6 +48,7 @@ def deploy_serving(
   workspace_id: str = None,
   resource: Resource = None,
   wait_for_deployment: bool = False,
+  exe_jinja_kwargs = {},
   *,
   _unittest = False
 ):
@@ -73,7 +74,16 @@ def deploy_serving(
   logger.info(f"Model name: {model_name}")
 
   # zip init folder
-  zip_path = zip_to_nbox_folder(init_folder, serving_id, workspace_id, model_name = model_name, type = OT.SERVING)
+  zip_path = zip_to_nbox_folder(
+    init_folder = init_folder,
+    id = serving_id,
+    workspace_id = workspace_id,
+    type = OT.SERVING,
+
+    # jinja kwargs
+    model_name = model_name,
+    **exe_jinja_kwargs,
+  )
   return _upload_serving_zip(zip_path, workspace_id, serving_id, model_name)
 
 
@@ -126,10 +136,10 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   # _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
   # _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
   # _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
-  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
   # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
+  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
   logger.info(f"  [page] - {_webpage}")
 
   return Serve(serving_id = serving_id, model_id = model_id, workspace_id = workspace_id)
@@ -152,6 +162,7 @@ def deploy_job(
   schedule: Schedule = None,
   resource: Resource = None,
   job_id: str = None,
+  exe_jinja_kwargs = {},
   *,
   _unittest = False
 ) -> None:
@@ -205,7 +216,13 @@ def deploy_job(
     return job_proto
 
   # zip the entire init folder to zip
-  zip_path = zip_to_nbox_folder(init_folder, job_id, workspace_id, type = OT.JOB)
+  zip_path = zip_to_nbox_folder(
+    init_folder = init_folder,
+    id = job_id,
+    workspace_id = workspace_id,
+    type = OT.JOB,
+    **exe_jinja_kwargs,
+  )
   return _upload_job_zip(zip_path, job_proto,workspace_id)
 
 def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
@@ -262,7 +279,14 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
       "UsePipCaching": "", # some string does not honour value
       "EnableAuthRefresh": ""
     })
-    rpc(nbox_grpc_stub.CreateJob, JobRequest(job = job_proto,auth_info=NBXAuthInfo(workspace_id=workspace_id)), f"Failed to create job")
+    rpc(
+      nbox_grpc_stub.CreateJob,
+      JobRequest(
+        job = job_proto,
+        auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get("username"))
+      ),
+      f"Failed to create job"
+    )
 
   # write out all the commands for this job
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")

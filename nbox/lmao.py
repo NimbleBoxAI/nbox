@@ -30,18 +30,6 @@ from typing import Dict, Any, List, Optional, Union
 from subprocess import Popen
 from google.protobuf.field_mask_pb2 import FieldMask
 
-try:
-  import starlette
-  from starlette.requests import Request
-  from starlette.responses import Response
-  from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-  from starlette.routing import Match
-  from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
-  from starlette.types import ASGIApp
-except ImportError:
-  starlette = None
-
-
 import nbox.utils as U
 from nbox import Instance
 from nbox.utils import logger, SimplerTimes
@@ -56,19 +44,14 @@ from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
 from nbox.hyperloop.job_pb2 import Job as JobProto
 
 # all the sublime -> hyperloop stuff
-from nbox.sublime.lmao_client import LMAO_Stub # main stub class
 from nbox.sublime.lmao_client import (
-  Record, File, FileList, AgentDetails, RunLog, Run, InitRunRequest, ListProjectsRequest, RelicFile
-)
-from nbox.sublime.lmao_client import (
+  LMAO_Stub, # main stub class
+  Record, File, FileList, AgentDetails, RunLog,
+  Run, InitRunRequest, ListProjectsRequest, RelicFile,
   Serving, LogBuffer, ServingHTTPLog
 )
-
-
 from nbox.observability.system import SystemMetricsLogger
 
-DEBUG_LOG_EVERY = 100
-INFO_LOG_EVERY = 100
 
 """
 functional components of LMAO
@@ -251,7 +234,7 @@ class Lmao():
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
     self.store_git_details = store_git_details
-    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id.value)
+    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     
     # now set the supporting keys
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
@@ -410,11 +393,6 @@ class Lmao():
     information that is being logged, it just logs it to the platform."""
     if self.completed:
       raise Exception("Run already completed, cannot log more data!")
-
-    # if self._total_logged_elements % DEBUG_LOG_EVERY == 0:
-    #   logger.debug(f"Logging: {y.keys()} | {self._total_logged_elements}")
-    # if self._total_logged_elements % INFO_LOG_EVERY == 0:
-    #   logger.info(f"Logging: {y.keys()} | {self._total_logged_elements}")
 
     step = step if step is not None else SimplerTimes.get_now_i64()
     if step < 0:

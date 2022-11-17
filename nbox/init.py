@@ -139,4 +139,3 @@ def nbox_version_update():
 if not env.NBOX_NO_CHECK_VERSION():
   nbox_version_update()
 
-logger.info(f"Current workspace id: {secret.get(ConfigString.workspace_id)} ({secret.get(ConfigString.workspace_name)})")

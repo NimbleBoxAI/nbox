@@ -13,6 +13,7 @@ from nbox.auth import secret
 from nbox.hyperloop.job_pb2 import Job as JobProto
 from nbox.hyperloop.dag_pb2 import Node
 from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
+from nbox.hyperloop.common_pb2 import NBXAuthInfo
 from nbox.messages import rpc, read_file_to_binary, read_file_to_string, message_to_dict
 
 class Tracer:
@@ -77,13 +78,12 @@ class Tracer:
     self.job_id = run_data.get("job_id", None)
     self.run_id = run_data.get("token", None)
     self.job_proto.id = self.job_id # because when creating a new job, client does not know the ID
-    self.workspace_id = self.job_proto.auth_info.workspace_id
+    self.workspace_id = secret.get("workspace_id")
     self.network_tracer = True
     
-    logger.debug(f"Username: {self.job_proto.auth_info.username}")
-    logger.debug(f"Job Id: {self.job_proto.id}")
-    logger.debug(f"Run Id: {self.run_id}")
-    logger.debug(f"Workspace Id: {self.job_proto.auth_info.workspace_id}")
+    # logger.debug(f"Username: {self.job_proto.auth_info.username}")
+    logger.debug(f"Job Id (Run Id): {self.job_id} ({self.run_id})")
+    logger.debug(f"Workspace Id: {self.workspace_id}")
     self.job_proto.status = JobProto.Status.ACTIVE # automatically first run will
 
     # start heartbeat in a different thread
@@ -98,29 +98,29 @@ class Tracer:
   def __repr__(self) -> str:
     return f"Tracer() for job {self.job_id}"
 
+  def _rpc(self, message: str = ""):
+      rpc(
+        nbox_grpc_stub.UpdateRun,
+        UpdateRunRequest(
+          token = self.run_id,
+          job = self.job_proto,
+          updated_at = SimplerTimes.get_now_pb(),
+          auth_info = NBXAuthInfo(workspace_id = self.workspace_id)
+        ),
+        message or f"Could not update job {self.job_proto.id}",
+        raise_on_error = False
+      )
+
   def __call__(self, node: Node, verbose: bool = False):
     if self.network_tracer:
       self.job_proto.dag.flowchart.nodes[node.id].CopyFrom(node) # even if fails we can keep caching this
-      updated_at = node.run_status.start if node.run_status.end != None else node.run_status.end
-      if verbose:
-        logger.info(f"[NodeID: {node.id}] UpdateTime: {updated_at.ToDatetime()}")
-      rpc(
-        nbox_grpc_stub.UpdateRun,
-        UpdateRunRequest(token = self.run_id, job = self.job_proto, updated_at = updated_at),
-        f"Could not update job {self.job_proto.id}",
-        raise_on_error = False
-      )
+      self._rpc()
     else:
       self.trace_file.write(dumps(message_to_dict(node)) + "\n")    
 
   def hearbeat_thread_worker(self):
     while True:
-      rpc(
-        nbox_grpc_stub.UpdateRun,
-        UpdateRunRequest(token = self.run_id, job = self.job_proto, updated_at = SimplerTimes.get_now_pb()),
-        "Heartbeat failed",
-        raise_on_error = False
-      )
+      self._rpc()
       sleep(self.heartbeat_every)
 
   def stop(self):
