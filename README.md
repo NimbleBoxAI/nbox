@@ -116,13 +116,6 @@ Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our community
 ## 🔖Read our [Blog](https://nimblebox.ai/blog).
 
 
-# How to get help?
-
-Join our [discord](https://discord.gg/qYZHxMaCsE) and someone from our community or engineering team will respond!
-
-## 🔖Read our [Blog](https://nimblebox.ai/blog).
-
-
 # 🧩 License
 
 The code in thist repo is licensed as [Apache License 2.0](./LICENSE). Please check for individual repositories for licenses.
