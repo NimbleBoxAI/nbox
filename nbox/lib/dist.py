@@ -124,3 +124,6 @@ class NBXLet(Operator):
       U.log_traceback()
       logger.error(f"Failed to serve operator: {e}")
       U._exit_program()
+
+  def serve_fastapi(self):
+    pass

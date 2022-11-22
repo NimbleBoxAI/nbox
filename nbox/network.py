@@ -158,9 +158,9 @@ def deploy_job(
   init_folder: str,
   job_name: str,
   dag: DAG,
+  schedule: Schedule,
+  resource: Resource,
   workspace_id: str = None,
-  schedule: Schedule = None,
-  resource: Resource = None,
   job_id: str = None,
   exe_jinja_kwargs = {},
   *,
@@ -203,12 +203,7 @@ def deploy_job(
     created_at = SimplerTimes.get_now_pb(),
     schedule = schedule.get_message() if schedule is not None else None,
     dag = dag,
-    resource = resource or Resource(
-      cpu = "100m",         # 100mCPU
-      memory = "200Mi",     # MiB
-      disk_size = "1Gi",    # GiB
-      max_retries = 2,      # 2 retries
-    )
+    resource = resource
   )
   write_binary_to_file(job_proto, U.join(init_folder, "job_proto.msg"))
 

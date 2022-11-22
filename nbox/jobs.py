@@ -161,14 +161,22 @@ def upload_job_folder(
   resource_timeout: int = 120_000,
   resource_max_retries: int = 2,
 
-  # for scheduling
-  cron: str = "",
+  # X-type
+  serving_type: str = "nbox",
 
   # there's no more need to pass the workspace_id anymore
   workspace_id: str = "",
   **init_kwargs
 ):
   """Upload the code for a job or serving to the NBX. if `id_or_name` is not present, it will create a new Job.
+
+  ### Engineer's Note
+
+  This function is supposed to be exposed via CLI, you can of course make a programtic call to this as well. This is a reason
+  why this function can keep on taking many arguments. However with greatm number of arguments comes great responsibility, ie.
+  lots of if/else conditions. Broadly speaking this should manage all the complexity and pass along simple reduced intstructions
+  to the underlying methods. Currently the arguments that are required in Jinja templates are packed as `exe_jinja_kwargs` and
+  we call the `deploy_job` and `deploy_serving`.
 
   Args:
     method (str): The method to use, either "job" or "serving"
@@ -224,35 +232,50 @@ def upload_job_folder(
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   logger.info(f"Uploading code from folder: {init_folder}:{file_name}:{fn_name}")
 
-  # build an Astea and analyse it for getting the computation that is going to be run
-  tea = Astea(fn_file+".py")
-  items = tea.find(fn_name, [IT.CLASS, IT.FUNCTION])
-  if len(items) > 1:
-    raise ModuleNotFoundError(f"Multiple {fn_name} found in {fn_file}.py")
-  elif len(items) == 0:
-    logger.error(f"Could not find function or class type: '{fn_name}'")
-    raise ModuleNotFoundError(f"Could not find function or class type: '{fn_name}'")
-  fn = items[0]
-  if fn.type == IT.FUNCTION:
-    # does not require initialisation
-    if len(init_kwargs):
-      logger.error(
-        f"Cannot pass kwargs to a function: '{fn_name}'\n"
-        f"  Fix: you cannot pass kwargs {set(init_kwargs.keys())} to a function"
-      )
-      raise ValueError("Function does not require initialisation")
-    init_code = f"{fn_name}"
-  elif fn.type == IT.CLASS:
-    # requires initialisation, in this case we will store the relevant to things in a Relic
-    init_comm = ",".join([f"{k}={v}" for k, v in init_kwargs.items()])
-    init_code = f"{fn_name}({init_comm})"
-    logger.info(f"Starting with init code:\n  {init_code}")
+  # Now that we have the init_folder and function name, we can throw relevant errors
+  perform_tea = True
+  if method == OT.SERVING.value:
+    if serving_type not in ["nbox", "fastapi"]:
+      raise ValueError(f"Invalid serving_type: {serving_type}, should be either 'nbox' or 'fastapi'")
+    
+    if serving_type == "fastapi":
+      logger.warning(f"You have selected serving_type='fastapi', this assumes the object: {fn_name} is a FastAPI app")
+      init_code = fn_name
+      perform_tea = False
+      load_operator = False
+
+  if perform_tea:
+    # build an Astea and analyse it for getting the computation that is going to be run
+    load_operator = True
+    tea = Astea(fn_file+".py")
+    items = tea.find(fn_name, [IT.CLASS, IT.FUNCTION])
+    if len(items) > 1:
+      raise ModuleNotFoundError(f"Multiple {fn_name} found in {fn_file}.py")
+    elif len(items) == 0:
+      logger.error(f"Could not find function or class type: '{fn_name}'")
+      raise ModuleNotFoundError(f"Could not find function or class type: '{fn_name}'")
+    fn = items[0]
+    if fn.type == IT.FUNCTION:
+      # does not require initialisation
+      if len(init_kwargs):
+        logger.error(
+          f"Cannot pass kwargs to a function: '{fn_name}'\n"
+          f"  Fix: you cannot pass kwargs {set(init_kwargs.keys())} to a function"
+        )
+        raise ValueError("Function does not require initialisation")
+      init_code = fn_name
+    elif fn.type == IT.CLASS:
+      # requires initialisation, in this case we will store the relevant to things in a Relic
+      init_comm = ",".join([f"{k}={v}" for k, v in init_kwargs.items()])    
+      init_code = f"{fn_name}({init_comm})"
+      logger.info(f"Starting with init code:\n  {init_code}")
 
   # load up the things that are to be passed to the exe.py file
   exe_jinja_kwargs = {
     "file_name": file_name,
     "fn_name": fn_name,
     "init_code": init_code,
+    "load_operator": load_operator
   }
 
   # create a requirements.txt file if it doesn't exist with the latest nbox version
@@ -292,7 +315,7 @@ def upload_job_folder(
       job_name = job_name,
       dag = DAGProto(),
       workspace_id = workspace_id,
-      schedule = JobProto.Schedule(cron = cron),
+      schedule = None,
       resource = resource,
       exe_jinja_kwargs = exe_jinja_kwargs,
     )

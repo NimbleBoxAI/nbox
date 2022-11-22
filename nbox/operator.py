@@ -513,6 +513,21 @@ class Operator():
 
     return self
 
+  @classmethod
+  def from_class(cls, obj):
+    """Wraps an initialised class as an operator, so you can use all the same methods as Operator"""
+    op = cls()
+    op.__file__ = inspect.getfile(obj.__class__)
+    op.__doc__ = obj.__doc__
+    op.__qualname__ = "cls_" + obj.__class__.__qualname__
+    op._op_type = ospec.OperatorType.WRAP_CLS
+    op._op_spec = ospec._WrapClsSpec(
+      cls_name = obj.__class__.__qualname__,
+      wrap_obj = obj,
+      init_ak = ((), {})
+    )
+    return op
+
   def _fn(self, fn):
     """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a function as an operator"""
     self.forward = fn # override the forward function
@@ -524,6 +539,14 @@ class Operator():
     self._op_spec = ospec._WrapFnSpec(fn_name = fn.__name__, wrap_obj = fn)
 
     return self
+
+  @classmethod
+  def from_fn(cls, fn):
+    """Wraps a function as an operator, so you can use all the same methods as Operator"""
+    op = cls()
+    op = op._fn(fn)
+    return op
+    
 
   # /mixin
 

@@ -4,7 +4,7 @@ try:
   from pydantic import create_model
   import uvicorn
 
-  from fastapi import FastAPI
+  from fastapi import FastAPI, APIRouter
   from fastapi.responses import JSONResponse, Response
   from fastapi.middleware.cors import CORSMiddleware
 except ImportError:
@@ -21,7 +21,7 @@ from nbox.nbxlib.operator_spec import OperatorType
 from nbox.utils import py_from_bs64, py_to_bs64, logger
 
 def serve_operator(
-  op: Operator,
+  op_or_app: Operator,
   host: str = "0.0.0.0",
   port: int = 8000,
   *,
@@ -29,6 +29,8 @@ def serve_operator(
   log_user_io: bool = False,
   model_name: str = ""
 ):
+  # TODO: @yashbonde server can behave like a proxy to a different running server so it can be flask app or anything
+  # https://stackoverflow.com/questions/70610266/proxy-an-external-website-using-python-fast-api-not-supporting-query-params
   if FastAPI is None:
     logger.error("To run servers you will need to install the relevant dependencies:")
     logger.error("  pip install -U nbox[serving]")
@@ -53,18 +55,20 @@ def serve_operator(
     return {"metadata": {"name": model_name}}
   app.add_api_route("/metadata", metadata, methods=["GET"], response_class=JSONResponse)
 
-  # a special route for Operators to communicate with each other
-  async def who_are_you():
-    return {"name": op.__qualname__, "nbox_version": __version__}
-  app.add_api_route("/who_are_you", who_are_you, methods=["GET"], response_class=JSONResponse)
+  if type(op_or_app) == Operator:
+    # a special route for Operators to communicate with each other
+    async def who_are_you():
+      return {"name": op_or_app.__qualname__, "nbox_version": __version__, "rest_api_style": "rest_{p}"}
+    app.add_api_route("/who_are_you", who_are_you, methods=["GET"], response_class=JSONResponse)
 
-  for route, fn in get_fastapi_routes(op):
-    app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
-
-  # if log_system_metrics:
-  #   app.add_middleware(LmaoASGIMiddleware)
+    for route, fn in get_fastapi_routes(op_or_app):
+      app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
+  
+  elif type(op_or_app) == FastAPI:
+    app.mount("/x", op_or_app)
 
   uvicorn.run(app, host = host, port = port)
+
 
 def get_fastapi_routes(op: Operator):
   """To keep seperation of responsibility the paths are scoped out like all the functions are
@@ -74,11 +78,13 @@ def get_fastapi_routes(op: Operator):
     # add functions that the user has exposed
     wrap_class = op._op_spec.wrap_obj
     for p in dir(wrap_class.__class__):
-      if p.startswith("__"):
+      if p.startswith("_"):
+        # we will forever ignore the functions that start with _ to provide like a private functions, just like how
+        # python would disallow you from "__" functions, this networking layer does that for "_"
         continue
       fn = getattr(wrap_class, p)
       routes.append((f"/method_{p}", get_fastapi_fn(fn)))
-      routes.append((f"/method_{p}_rest", get_fastapi_fn(fn, _rest = True)))
+      routes.append((f"/rest_{p}", get_fastapi_fn(fn, _rest = True)))
 
     # add functions that the python itself can support
     routes.append((f"/nbx_py_rpc", nbx_py_rpc(op)))
@@ -95,7 +101,7 @@ def get_fastapi_routes(op: Operator):
 # builder method is used to progrmatically generate api routes related information for the fastapi app
 def get_fastapi_fn(fn, _rest = False):
   from pydantic import create_model
-  
+
   # we use inspect signature instead of writing our own ast thing
   signature = inspect.signature(fn)
   data_dict = {}
@@ -157,7 +163,7 @@ def get_fastapi_fn(fn, _rest = False):
 def nbx_py_rpc(op: Operator):
   base_model = create_model("nbx_py_rpc", rpc_name = (str, ""), key = (str, ""), value = (str, ""),)
   _nbx_py_rpc = NbxPyRpc(op)
-  
+
   async def forward(req: base_model, response: Response):
     # no need to add serialisation because the NbPyRpc class will handle it
     data = req.dict()
@@ -240,15 +246,17 @@ class NbxPyRpc(Operator):
     except Exception as e:
       response.status_code = 500
       return {"success": False, "message": str(e)}
-  
+
   def fn_getattr(self, key):
+    if key.startswith("_"):
+      return {"success": False, "message": f"cannot access private attributes starting with '_'"}
     out = getattr(self.wrapped_cls._op_wrap, key)
     return {"success": True, "value": py_to_bs64(out)}
 
   def fn_getitem(self, key):
     out = self.wrapped_cls._op_wrap[key]
     return {"success": True, "value": py_to_bs64(out)}
-  
+
   def fn_setitem(self, key, value):
     self.wrapped_cls._op_wrap[key] = value
     return {"success": True}

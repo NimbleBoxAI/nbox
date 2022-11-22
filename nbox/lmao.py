@@ -36,19 +36,19 @@ from nbox.utils import logger, SimplerTimes
 from nbox.auth import secret, ConfigString
 from nbox.nbxlib.tracer import Tracer
 from nbox.relics import RelicsNBX
-from nbox.jobs import Job
+from nbox.jobs import Job, upload_job_folder
 from nbox.hyperloop.common_pb2 import Resource
 from nbox.init import nbox_grpc_stub
 from nbox.messages import message_to_dict
 from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
 from nbox.hyperloop.job_pb2 import Job as JobProto
+from nbox.hyperloop.common_pb2 import NBXAuthInfo
 
 # all the sublime -> hyperloop stuff
-from nbox.sublime.lmao_client import (
+from nbox.sublime.lmao_rpc_client import (
   LMAO_Stub, # main stub class
   Record, File, FileList, AgentDetails, RunLog,
-  Run, InitRunRequest, ListProjectsRequest, RelicFile,
-  Serving, LogBuffer, ServingHTTPLog
+  Run, InitRunRequest, ListProjectsRequest
 )
 from nbox.observability.system import SystemMetricsLogger
 
@@ -256,7 +256,7 @@ class Lmao():
 
   def _get_name_id(self, project_id: str = None, project_name: str = None):
     matching_projects = self.lmao.list_projects(
-      _ListProjectsRequest = ListProjectsRequest(
+      ListProjectsRequest(
         workspace_id = self.workspace_id,
         project_id_or_name = project_id if project_id else project_name,
       )
@@ -346,7 +346,7 @@ class Lmao():
           raise Exception(f"Failed to update run status!")
     else:
       run_details = self.lmao.init_run(
-        _InitRunRequest = InitRunRequest(
+        InitRunRequest(
           agent_details=self._agent_details,
           created_at = SimplerTimes.get_now_i64(),
           project_name = project_name,
@@ -403,7 +403,7 @@ class Lmao():
       record.step = step
       run_log.data.append(record)
 
-    ack = self.lmao.on_log(_RunLog = run_log)
+    ack = self.lmao.on_log(run_log)
     if not ack.success:
       logger.error("  >> Server Error")
       for l in ack.message.splitlines():
@@ -443,10 +443,11 @@ class Lmao():
       for f in all_files:
         relic.put(f)
 
-    # log the files in the LMAO DB for sanity
-    fl = FileList(experiment_id = self.run.experiment_id)
-    fl.files.extend([File(relic_file = RelicFile(name = x)) for x in all_files])
-    self.lmao.on_save(_FileList = fl)
+    # TODO: @yashbonde log the files in the LMAO DB for sanity, currently this is a no-op, keeping it here so one day
+    # when we add something cool we can use this
+    # fl = FileList(experiment_id = self.run.experiment_id)
+    # fl.files.extend([File(relic_file = RelicFile(name = x)) for x in all_files])
+    # self.lmao.on_save(fl)
 
   def end(self):
     """End the run to declare it complete. This is more of a convinience function than anything else. For example when you
@@ -457,7 +458,7 @@ class Lmao():
       return None
 
     logger.info("Ending run")
-    ack = self.lmao.on_train_end(_Run = self.run)
+    ack = self.lmao.on_train_end(self.run)
     if not ack.success:
       logger.error("  >> Server Error")
       for l in ack.message.splitlines():
@@ -569,6 +570,10 @@ class LmaoCLI:
     if enable_system_monitoring:
       reconstructed_cli_comm += " --enable_system_monitoring"
 
+    if resource_max_retries < 1:
+      logger.error(f"max_retries must be >= 1. Got: {resource_max_retries}\n  Fix: set --max_retries=2")
+      raise ValueError()
+
     # uncommenting these since it can contain sensitive information, kept just in case for taking dictionaries as input
     # if relics_kwargs:
     #   rks = str(relics_kwargs).replace("'", "")
@@ -586,19 +591,6 @@ class LmaoCLI:
     if untracked_no_limit and not untracked:
       logger.debug("untracked_no_limit is True but untracked is False. Setting untracked to True")
       untracked = True
-    resource = Resource(
-      cpu = resource_cpu,
-      memory = resource_memory,
-      disk_size = resource_disk_size,
-      gpu = resource_gpu,
-      gpu_count = resource_gpu_count,
-      timeout = resource_timeout,
-      max_retries = resource_max_retries,
-    )
-
-    if resource.max_retries < 1:
-      logger.error(f"max_retries must be >= 1. Got: {resource.max_retries}\n  Fix: set --max_retries=2")
-      raise ValueError()
 
     # first step is to get all the relevant information from the DB
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
@@ -612,10 +604,24 @@ class LmaoCLI:
       git_det = get_git_details(init_folder)
     else:
       git_det = {}
+
+
+    job_name = "nbxj_" + project_name[:15]
+    job = Job(job_name = job_name, workspace_id = workspace_id)
+    lmao_stub = get_lmao_stub(secret.get("username"), workspace_id)
+
     _metadata = {
       "user_config": run_kwargs,
       "git": git_det,
-      "resource": message_to_dict(resource),
+      "resource": message_to_dict(Resource(
+        cpu = resource_cpu,
+        memory = resource_memory,
+        disk_size = resource_disk_size,
+        gpu = resource_gpu,
+        gpu_count = resource_gpu_count,
+        timeout = resource_timeout,
+        max_retries = resource_max_retries,
+      )),
       "cli": reconstructed_cli_comm,
       "lmao": {
         "save_to_relic": save_to_relic,
@@ -623,8 +629,6 @@ class LmaoCLI:
       }
     }
 
-    job = Job("nbxj_" + project_name[:15], workspace_id = workspace_id)
-    lmao_stub = get_lmao_stub(secret.get("username"), workspace_id)
     run = lmao_stub.init_run(InitRunRequest(
       agent_details = AgentDetails(
         type = AgentDetails.NBX.JOB,
@@ -661,7 +665,8 @@ class LmaoCLI:
           for f in untracked_files:
             if os.path.getsize(f) > 1e7 and not untracked_no_limit:
               logger.warning(f"File: {f} is larger than 10MB and will not be available in sync")
-              logger.warning("  Fix: use git to track the file, avoid large files")
+              logger.warning("  Fix: use git to track small files, avoid large files")
+              logger.warning("  Fix: nbox.Relics can be used to store large files")
               logger.warning("  Fix: use --untracked-no-limit to upload all files")
               continue
             zip_file.write(f, arcname = f)
@@ -670,13 +675,19 @@ class LmaoCLI:
       os.remove(patch_file)
 
     # tell the server that this run is being scheduled so atleast the information is visible on the dashboard
-    job: Job = Job.upload(init_path, id_or_name = "nbxj_" + project_name[:15], _ret = True) # keep only 20 chars
-    job.job_proto.resource.CopyFrom(resource)
-    job_proto: JobProto = nbox_grpc_stub.UpdateJob(
-      UpdateJobRequest(
-        job = job.job_proto,
-        update_mask = FieldMask(paths = ["resource"]),
-      )
+    upload_job_folder(
+      "job",
+      init_folder = init_path,
+      name = "nbxj_" + project_name[:15], # keep only 20 chars
+
+      # pass along the resource requirements
+      resource_cpu = resource_cpu,
+      resource_memory = resource_memory,
+      resource_disk_size = resource_disk_size,
+      resource_gpu = resource_gpu,
+      resource_gpu_count = resource_gpu_count,
+      resource_timeout = resource_timeout,
+      resource_max_retries = resource_max_retries,
     )
 
     if trigger:

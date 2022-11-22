@@ -266,5 +266,70 @@ class LMAO_Stub:
     _lmao_LogBuffer = b64_to_message(echo_resp.base64_string, _lmao_LogBuffer)
     return _lmao_LogBuffer
 
+  def create_rule(self, _lmao_Rule: Rule) -> Rule:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/create_rule",
+      Echo(message = "Rule", base64_string=message_to_b64(_lmao_Rule), rpc_name = "create_rule")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_Rule = Rule() # predefine the output proto
+    _lmao_Rule = b64_to_message(echo_resp.base64_string, _lmao_Rule)
+    return _lmao_Rule
+
+  def list_rules(self, _lmao_ListRules: ListRules) -> ListRules:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/list_rules",
+      Echo(message = "ListRules", base64_string=message_to_b64(_lmao_ListRules), rpc_name = "list_rules")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_ListRules = ListRules() # predefine the output proto
+    _lmao_ListRules = b64_to_message(echo_resp.base64_string, _lmao_ListRules)
+    return _lmao_ListRules
+
+  def delete_rule(self, _lmao_Rule: Rule) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/delete_rule",
+      Echo(message = "Rule", base64_string=message_to_b64(_lmao_Rule), rpc_name = "delete_rule")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
+    return _lmao_Acknowledge
+
+  def update_rule(self, _lmao_Rule: Rule) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/update_rule",
+      Echo(message = "Rule", base64_string=message_to_b64(_lmao_Rule), rpc_name = "update_rule")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
+    return _lmao_Acknowledge
+
+  def get_rule_builder(self, _lmao_RuleBuilder: RuleBuilder) -> RuleBuilder:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/get_rule_builder",
+      Echo(message = "RuleBuilder", base64_string=message_to_b64(_lmao_RuleBuilder), rpc_name = "get_rule_builder")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_RuleBuilder = RuleBuilder() # predefine the output proto
+    _lmao_RuleBuilder = b64_to_message(echo_resp.base64_string, _lmao_RuleBuilder)
+    return _lmao_RuleBuilder
+
 
 # ------ End Stub ------ #
