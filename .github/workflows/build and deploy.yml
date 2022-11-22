@@ -1,8 +1,7 @@
 name: Build and Deploy nbox
 on:
   push:
-    branches: 
-      - [v1, master]
+    branches: [v1, master]
 jobs:
   build:
     name: Push with new version
