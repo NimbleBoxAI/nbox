@@ -4,7 +4,7 @@ on:
     branches: [v1, master]
 jobs:
   build:
-    name: Push with new version
+    name: Build and Deploy
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the files
@@ -13,9 +13,8 @@ jobs:
           submodules: true
           token: ${{ secrets.GH_SUBMODULE_TOKEN }}
       
-      # - name: Install poetry
-      # - run: | 
-      #     pipx install poetry==1.2.2
+      - name: Install poetry
+        run: pipx install poetry==1.2.2
       
       - name: Push
         run: poetry publish --build -u ${{secrets.NBX_PYPI_USERNAME}} -p ${{secrets.NBX_PYPI_PWD}}
