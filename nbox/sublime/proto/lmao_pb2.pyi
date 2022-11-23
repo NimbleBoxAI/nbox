@@ -897,11 +897,13 @@ class GetExperimentTableRequest(google.protobuf.message.Message):
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     PROJECT_ID_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
+    EXPERIMENT_ID_FIELD_NUMBER: builtins.int
     START_FIELD_NUMBER: builtins.int
     END_FIELD_NUMBER: builtins.int
     workspace_id: builtins.str
     project_id: builtins.str
     page_no: builtins.int
+    experiment_id: builtins.str
     start: builtins.int
     """these two things will simply run the command => runs.experiment_ids[start:end]
     start: on this page start from here
@@ -914,10 +916,11 @@ class GetExperimentTableRequest(google.protobuf.message.Message):
         workspace_id: builtins.str = ...,
         project_id: builtins.str = ...,
         page_no: builtins.int = ...,
+        experiment_id: builtins.str = ...,
         start: builtins.int = ...,
         end: builtins.int = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["end", b"end", "page_no", b"page_no", "project_id", b"project_id", "start", b"start", "workspace_id", b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["end", b"end", "experiment_id", b"experiment_id", "page_no", b"page_no", "project_id", b"project_id", "start", b"start", "workspace_id", b"workspace_id"]) -> None: ...
 
 global___GetExperimentTableRequest = GetExperimentTableRequest
 
@@ -975,6 +978,9 @@ class Rule(google.protobuf.message.Message):
     LOGIC_FIELD_NUMBER: builtins.int
     EMAIL_IDS_FIELD_NUMBER: builtins.int
     ALERT_MESSAGE_FIELD_NUMBER: builtins.int
+    TRUE_COUNT_FIELD_NUMBER: builtins.int
+    LOGIC_VERSION_FIELD_NUMBER: builtins.int
+    MAX_RANGE_FIELD_NUMBER: builtins.int
     UPDATE_KEYS_FIELD_NUMBER: builtins.int
     workspace_id: builtins.str
     project_id: builtins.str
@@ -991,6 +997,18 @@ class Rule(google.protobuf.message.Message):
         """the list of email ids to send the alert to"""
     alert_message: builtins.str
     """the message to send to the email ids"""
+    true_count: builtins.int
+    """this tells the number of times this rule has been broken"""
+    logic_version: builtins.int
+    """this tells the version number of the logic format that we are using, here's some
+    details about them:
+    0: the variables in functions have to be shifted by one
+    1: the variables can be consume directly as they come
+    """
+    max_range: builtins.int
+    """this is the number for maximum range from all the rules, this will be used to
+    conviniently get the data from the tables
+    """
     @property
     def update_keys(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
         """now we create a special thing which will be populated and sent during updates"""
@@ -1006,9 +1024,12 @@ class Rule(google.protobuf.message.Message):
         logic: builtins.str = ...,
         email_ids: collections.abc.Iterable[builtins.str] | None = ...,
         alert_message: builtins.str = ...,
+        true_count: builtins.int = ...,
+        logic_version: builtins.int = ...,
+        max_range: builtins.int = ...,
         update_keys: collections.abc.Iterable[builtins.str] | None = ...,
     ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["alert_message", b"alert_message", "created_at", b"created_at", "email_ids", b"email_ids", "is_deactivated", b"is_deactivated", "is_deleted", b"is_deleted", "logic", b"logic", "project_id", b"project_id", "rule_name", b"rule_name", "update_keys", b"update_keys", "workspace_id", b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["alert_message", b"alert_message", "created_at", b"created_at", "email_ids", b"email_ids", "is_deactivated", b"is_deactivated", "is_deleted", b"is_deleted", "logic", b"logic", "logic_version", b"logic_version", "max_range", b"max_range", "project_id", b"project_id", "rule_name", b"rule_name", "true_count", b"true_count", "update_keys", b"update_keys", "workspace_id", b"workspace_id"]) -> None: ...
 
 global___Rule = Rule
 

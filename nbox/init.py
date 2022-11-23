@@ -10,6 +10,7 @@ This file loads first and is responsible for setting up all the global networkin
   is typical for any powerful tool: magic or a headache depending on the day and the task.
 """
 
+import os
 import grpc
 import json
 import requests
@@ -87,7 +88,12 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
     logger.error(f"Could not connect to webserver at {secret.get('nbx_url')}")
     logger.error(e)
     return None
-  out = Sub30(_version_specific_url, r.json(), session)
+
+  spec = r.json()
+  secret.put("openapi_spec", spec, True)
+  # with open(os.path.join(env.NBOX_HOME_DIR(), "openapi.json"), "w") as f:
+  #   f.write(json.dumps(spec, indent=2))
+  out = Sub30(_version_specific_url, spec, session)
   logger.debug(f"Connected to webserver at {out}")
   return out
 

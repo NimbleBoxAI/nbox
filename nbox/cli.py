@@ -14,6 +14,9 @@ nbx tunnel 8000 -i "instance-name"
 
 import os
 import fire
+import jinja2
+import tempfile
+import webbrowser
 from json import dumps
 from typing import Dict, Any
 
@@ -142,6 +145,18 @@ class NBXWS_CLI(object):
       out = getattr(out, k)
     res = out(_method = "post", data = d)
     return res
+
+  # def rapidoc(self):
+  #   openapi = secret.get("openapi_spec", None)
+  #   if openapi == None:
+  #     raise RuntimeError("Not connected to NimbleBox.ai webserver")
+  #   fp = U.join(U.folder(__file__), "assets", "rapidoc.html")
+  #   with open(fp, "r") as f:
+  #     temp = jinja2.Template(f.read())
+  #   with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix=".html") as f:
+  #     f.write(temp.render(openapi = dumps(openapi)))
+  #     print(f.name)
+  #     webbrowser.open(f"file://{f.name}")
 
 
 def main():
