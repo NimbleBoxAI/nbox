@@ -196,8 +196,11 @@ class Astea:
         
         # if this node is a class and node 'n' is a staticmethod then assign is considered
         elif type(n) == A.Assign and (type(self.node) == A.ClassDef or type(self.node) == A.Module):
-          tea = Astea(name=n.targets[0].id, type=IndexTypes.ASSIGN, node=n, code_lines=self.code_lines, order_index=i)
-          items.add(tea)
+          try:
+            tea = Astea(name=n.targets[0].id, type=IndexTypes.ASSIGN, node=n, code_lines=self.code_lines, order_index=i)
+            items.add(tea)
+          except:
+            pass
         else:
           continue
     items = sorted(list(items), key=lambda x: x.order_index)

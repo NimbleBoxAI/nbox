@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nbox"
-version = "0.11.0c0"
+version = "0.11.0c15"
 description = "ML Inference 🥶"
 authors = [
   "NBX Research <research@nimblebox.ai>",
@@ -35,13 +35,8 @@ uvicorn = {version = "^0.18.2", optional = true}
 numpy = {version = "1.22.3", optional = true}
 redis = {version = "4.3.4", optional = true}
 
-[tool.poetry.dev-dependencies]
-pytest = "^5.2"
-
 [tool.poetry.extras]
 serving = ["fastapi", "uvicorn"]
-compute-basic = ["numpy", "redis"]
-full = ["fastapi", "uvicorn", "numpy", "redis"]
 
 [tool.poetry.scripts]
 nbx = "nbox.cli:main"

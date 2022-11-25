@@ -2,6 +2,7 @@
 This is the code for NBX-Relics which is a simple file system for your organisation.
 """
 import os
+import time
 import cloudpickle
 import requests
 import tabulate
@@ -240,14 +241,19 @@ class RelicsNBX(BaseStore):
 
   def has(self, path: str):
     prefix, file_name = os.path.split(path)
-    out = self.stub.list_relic_files(
-      ListRelicFilesRequest(
-        workspace_id=self.workspace_id,
-        relic_name=self.relic_name,
-        prefix=prefix,
-        file_name=file_name
+    for _ in range(2):
+      out = self.stub.list_relic_files(
+        ListRelicFilesRequest(
+          workspace_id=self.workspace_id,
+          relic_name=self.relic_name,
+          prefix=prefix,
+          file_name=file_name
+        )
       )
-    )
+      if out != None:
+        break
+      time.sleep(1)
+
     for f in out.files:
       if f.name.strip("/") == path.strip("/"):
         return True

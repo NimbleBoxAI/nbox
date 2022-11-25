@@ -297,11 +297,11 @@ def upload_job_folder(
 
   # just create a resource.pb, if it's empty protobuf will work it out
   resource = Resource(
-    cpu = resource_cpu,
-    memory = resource_memory,
-    disk_size = resource_disk_size,
-    gpu = resource_gpu,
-    gpu_count = resource_gpu_count,
+    cpu = str(resource_cpu),
+    memory = str(resource_memory),
+    disk_size = str(resource_disk_size),
+    gpu = str(resource_gpu),
+    gpu_count = str(resource_gpu_count),
     timeout = resource_timeout,
     max_retries = resource_max_retries,
   )
