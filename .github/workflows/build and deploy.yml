@@ -2,6 +2,8 @@ name: Build and Deploy nbox
 on:
   push:
     branches: [v1, master]
+    paths:
+      -"pyproject.toml"
 jobs:
   build:
     name: Build and Deploy
