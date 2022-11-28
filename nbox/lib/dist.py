@@ -9,13 +9,8 @@ import nbox.utils as U
 from nbox import RelicsNBX
 from nbox.auth import secret, ConfigString
 from nbox import Operator, logger
-from nbox.utils import SimplerTimes
 from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.job_pb2 import Job
-from nbox.hyperloop.common_pb2 import NBXAuthInfo
-from nbox import Operator, nbox_grpc_stub
-from nbox.messages import rpc
-from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 from nbox.nbxlib.serving import serve_operator
 
 
@@ -56,7 +51,7 @@ class NBXLet(Operator):
       # this is important since nbox uses ConfigString.workspace_id place to get workspace_id from while the init_container
       # might place it at a different place. as of this writing, init_container -> "workspace_id" and nbox -> "config.global.workspace_id"
       secret.put(ConfigString.workspace_id, workspace_id, True) 
-      # secret.put("username", tracer)
+      # secret.put("username", tracer.job_proto.auth_info.username)
 
       job_id = tracer.job_id
       self.op.propagate(_tracer = tracer)
@@ -124,6 +119,3 @@ class NBXLet(Operator):
       U.log_traceback()
       logger.error(f"Failed to serve operator: {e}")
       U._exit_program()
-
-  def serve_fastapi(self):
-    pass
