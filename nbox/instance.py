@@ -121,20 +121,26 @@ class Instance():
     if self.workspace_id == None:
       stub_projects = stub_ws_instance.user.projects
     else:
-      stub_projects = stub_ws_instance.workspace.u(self.workspace_id).projects
+      stub_projects = stub_ws_instance.workspace.u(self.workspace_id).instances
 
     # filter and get the data
     project_details = stub_projects()["project_details"]
+    # print(project_details)
     if i not in project_details:
-      by_name = list(filter(lambda x: x['project_name'] == i, list(project_details.values())))
+      by_name = list(filter(lambda x: x[1]['project_name'] == i, list(project_details.items())))
       if len(by_name) == 0:
         raise ValueError(f"Instance '{i}' not found")
       elif len(by_name) > 1:
         raise ValueError(f"Multiple instances with name '{i}' found")
       data = by_name[0]
+      project_id = data[0]
+      data = data[1]
     else:
       data = project_details[i]
+      project_id = i
+    data["project_id"] = project_id
     logger.info(f"Found instance '{data['project_name']}' ({data['project_id']})")
+    # print(data)
     for x in self.useful_keys:
       setattr(self, x, data[x])
     
