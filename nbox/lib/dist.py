@@ -56,7 +56,7 @@ class NBXLet(Operator):
       # this is important since nbox uses ConfigString.workspace_id place to get workspace_id from while the init_container
       # might place it at a different place. as of this writing, init_container -> "workspace_id" and nbox -> "config.global.workspace_id"
       secret.put(ConfigString.workspace_id, workspace_id, True) 
-      # secret.put("username", tracer.job_proto.auth_info.username)
+      # secret.put("username", tracer)
 
       job_id = tracer.job_id
       self.op.propagate(_tracer = tracer)

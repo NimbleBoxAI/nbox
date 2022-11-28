@@ -90,9 +90,9 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
     return None
 
   spec = r.json()
-  secret.put("openapi_spec", spec, True)
-  with open(os.path.join(env.NBOX_HOME_DIR(), "openapi.json"), "w") as f:
-    f.write(json.dumps(spec, indent=2))
+  # secret.put("openapi_spec", spec, True)
+  # with open(os.path.join(env.NBOX_HOME_DIR(), "openapi.json"), "w") as f:
+  #   f.write(json.dumps(spec, indent=2))
   out = Sub30(_version_specific_url, spec, session)
   logger.debug(f"Connected to webserver at {out}")
   return out
