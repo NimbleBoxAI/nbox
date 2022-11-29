@@ -224,7 +224,7 @@ class Lmao():
       metadata = _lmaoConfig.kv["metadata"]
       save_to_relic = _lmaoConfig.kv["save_to_relic"]
       enable_system_monitoring = _lmaoConfig.kv["enable_system_monitoring"]
-      store_git_details = store_git_details
+      store_git_details = _lmaoConfig.kv["store_git_details"]
       workspace_id = _lmaoConfig.kv["workspace_id"]
 
     self.project_name = project_name
@@ -325,8 +325,8 @@ class Lmao():
       nbx_run_id = self._nbx_run_id or "",
     )
 
-    if "experiment_id" in _lmaoConfig.kv:
-      run_details = self.lmao.get_run_details(Run(experiment_id = _lmaoConfig.kv["experiment_id"], project_id=project_id))
+    if self.experiment_id:
+      run_details = self.lmao.get_run_details(Run(experiment_id = self.experiment_id, project_id=project_id))
       if not run_details:
         # TODO: Make a custom exception of this
         raise Exception("Server Side exception has occurred, Check the log for details")
@@ -336,9 +336,10 @@ class Lmao():
           project_id = project_id,
           experiment_id = run_details.experiment_id,
           agent = self._agent_details,
+          update_keys = ["agent"],
         ))
         if not ack.success:
-          raise Exception(f"Failed to update run status!")
+          raise Exception(f"Failed to update run status! {ack.message}")
     else:
       run_details = self.lmao.init_run(
         InitRunRequest(
