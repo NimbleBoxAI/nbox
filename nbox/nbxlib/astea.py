@@ -41,6 +41,29 @@ class IndexTypes(Enum):
       IndexTypes.FILE
     ]
 
+
+def get_code_section(node: A.AST, code_lines: List[str]):
+  """generic function to return the code section for a node"""
+  if type(code_lines) == str:
+    code_lines = code_lines.splitlines()
+  else:
+    assert type(code_lines) == list and type(code_lines[0]) == str
+  sl, so, el, eo = node.lineno, node.col_offset, node.end_lineno, node.end_col_offset
+  code = ""
+  if sl == el:
+    code = code_lines[sl-1][so:eo]
+  else:
+    for i in range(sl - 1, el, 1):
+      if i == sl - 1:
+        code += code_lines[i][so:]
+      elif i == el - 1:
+        code += "\n" + code_lines[i][:eo]
+      else:
+        code += "\n" + code_lines[i]
+  return code
+
+
+
 class Astea:
   """### Engineer's Note
   
@@ -53,6 +76,7 @@ class Astea:
   def __init__(
     self,
     fname: str = "",
+    code: str = "",
     *,
     name: str = "",
     type: IndexTypes = None,
@@ -70,6 +94,7 @@ class Astea:
 
     Args:
       fname (str): the file name to parse. If this is not provided, then all other values must be provided.
+      code (str): the code text can be provided instead of the 
       name (str, optional): The name of the node. Defaults to "".
       type (IndexTypes, optional): The type of the node. Defaults to None.
       node (A.AST, optional): The AST node. Defaults to None.
@@ -87,10 +112,15 @@ class Astea:
         node: A.Module = A.parse(code)
       code_lines = code.splitlines()
       name = fname
+    elif code:
+      type = IndexTypes.FILE
+      node: A.Module = A.parse(code)
+      code_lines = code.splitlines()
+      name = "0"
     elif name:
       pass
     else:
-      raise ValueError("Must provide either fname or name")
+      raise ValueError("Must provide either fname/code or name")
 
     self.name = name
     self.type = type
@@ -99,18 +129,7 @@ class Astea:
     self.order_index = order_index
 
     if hasattr(node, "lineno"):
-      sl, so, el, eo = self.node.lineno, self.node.col_offset, self.node.end_lineno, self.node.end_col_offset
-      code = ""
-      if sl == el:
-        code = self.code_lines[sl-1][so:eo]
-      for i in range(sl - 1, el, 1):
-        if i == sl - 1:
-          code += self.code_lines[i][so:]
-        elif i == el - 1:
-          code += "\n" + self.code_lines[i][:eo]
-        else:
-          code += "\n" + self.code_lines[i]
-      self._code = code
+      self._code = get_code_section(node, code_lines)
     else:
       self._code = "\n".join(self.code_lines)
     self._sha256 = sha256(self._code)
@@ -177,8 +196,11 @@ class Astea:
         
         # if this node is a class and node 'n' is a staticmethod then assign is considered
         elif type(n) == A.Assign and (type(self.node) == A.ClassDef or type(self.node) == A.Module):
-          tea = Astea(name=n.targets[0].id, type=IndexTypes.ASSIGN, node=n, code_lines=self.code_lines, order_index=i)
-          items.add(tea)
+          try:
+            tea = Astea(name=n.targets[0].id, type=IndexTypes.ASSIGN, node=n, code_lines=self.code_lines, order_index=i)
+            items.add(tea)
+          except:
+            pass
         else:
           continue
     items = sorted(list(items), key=lambda x: x.order_index)

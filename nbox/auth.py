@@ -20,10 +20,13 @@ import nbox.utils as U
 from nbox.utils import join, logger
 
 
-class ConfigString(Enum):
+class ConfigString():
   workspace_id = "config.global.workspace_id"
   workspace_name = "config.global.workspace_name"
   cache = "cache"
+
+  def items():
+    return [ConfigString.workspace_id, ConfigString.workspace_name, ConfigString.cache]
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -90,11 +93,11 @@ class NBXClient:
         "username": username,
 
         # config values that can be set by the user for convenience
-        ConfigString.workspace_id.value: workspace_id,
-        ConfigString.workspace_name.value: workspace_details["workspace_name"],
+        ConfigString.workspace_id: workspace_id,
+        ConfigString.workspace_name: workspace_details["workspace_name"],
 
         # now cache the information about this workspace
-        ConfigString.cache.value: {workspace_id: workspace_details},
+        ConfigString.cache: {workspace_id: workspace_details},
       }
       # for k,v in self.secrets.items():
       #   print(type(k), k, "::", type(v), v)
@@ -112,16 +115,12 @@ class NBXClient:
     return json.dumps(self.secrets, indent=2)
 
   def get(self, item, default=None, reload: bool = False):
-    if item in tuple(ConfigString):
-      item = item.value
     if reload:
       with open(self.fp, "r") as f:
         self.secrets = json.load(f)
     return self.secrets.get(item, default)
 
   def put(self, item, value, persist: bool = False):
-    if item in tuple(ConfigString):
-      item = item.value
     self.secrets[item] = value
     if persist:
       with open(self.fp, "w") as f:
@@ -131,7 +130,11 @@ class NBXClient:
 def init_secret():
   # add any logic here for creating secrets
   if not U.env.NBOX_NO_AUTH(False):
-    return NBXClient()
+    secret = NBXClient()
+    logger.info(f"Current workspace id: {secret.get(ConfigString.workspace_id)} ({secret.get(ConfigString.workspace_name)})")
+    return secret
+  else:
+    logger.info(f"Skipping authentication as NBOX_NO_AUTH is set to True")
   return None
 
 secret = init_secret()

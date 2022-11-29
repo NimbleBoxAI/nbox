@@ -7,18 +7,32 @@ os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do
 os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 
 import fire
+import inspect
 from functools import lru_cache, partial
-from nbx_user import get_op as get_op_user # << nbox imported here, fill all envs before this
+from {{ file_name }} import {{ fn_name }}
 
 from nbox import Operator, logger
 import nbox.utils as U
 from nbox.lib.dist import NBXLet
 
 @lru_cache(1)
-def get_op(cloud = False, serving: bool = False) -> Operator:
+def get_op(cloud = False) -> Operator:
   # The beauty of this function is that it ensures that the operator class is loaded only once
   try:
-    op: Operator = get_op_user(serving)
+    obj = {{ init_code }}
+    if not type(obj) == Operator and {{ load_operator }}:
+      # there is an initial level of precaution that we use during deployment, but we are adding simple
+      # checks here as well. If it is a class, initialise it and pass it to the Operator, if function
+      # just wrap it
+      if inspect.isclass({{ fn_name }}):
+        obj = Operator.from_class(obj)
+      elif inspect.isfunction({{ fn_name }}):
+        obj = Operator.from_fn(obj)
+      else:
+        raise ValueError("{{ fn_name }} is not an Operator or class or function")
+
+    # at this point there is a guarantee that obj is an Operator
+    op: Operator = obj
   except Exception as e:
     U.log_traceback()
     logger.error(f"Failed to load operator: {e}")
@@ -26,7 +40,9 @@ def get_op(cloud = False, serving: bool = False) -> Operator:
 
   if cloud:
     try:
-      op.remote_init()
+      # loads only things that are Operators
+      if {{ load_operator }}:
+        op.remote_init()
     except Exception as e:
       U.log_traceback()
       logger.error(f"Failed to remote initialise operator: {e}")

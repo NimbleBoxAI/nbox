@@ -17,33 +17,18 @@ NimbleBox LMAO is our general purpose observability tool for any kind of computa
 #     actuals=y_test,
 # )
 
-from functools import lru_cache
 import os
 import re
 import sys
-import time
 import shlex
 import zipfile
-import threading
-from queue import Queue, Empty
 from git import Repo
-from json import dumps, load
+from json import dumps
+from functools import lru_cache
 from requests import Session
-from typing import Dict, Any, List, Optional, Union, Tuple
-from subprocess import Popen, PIPE
+from typing import Dict, Any, List, Optional, Union
+from subprocess import Popen
 from google.protobuf.field_mask_pb2 import FieldMask
-
-try:
-  import starlette
-  from starlette.requests import Request
-  from starlette.responses import Response
-  from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-  from starlette.routing import Match
-  from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
-  from starlette.types import ASGIApp
-except ImportError:
-  starlette = None
-
 
 import nbox.utils as U
 from nbox import Instance
@@ -51,33 +36,29 @@ from nbox.utils import logger, SimplerTimes
 from nbox.auth import secret, ConfigString
 from nbox.nbxlib.tracer import Tracer
 from nbox.relics import RelicsNBX
-from nbox.jobs import Job, Resource
+from nbox.jobs import Job, upload_job_folder
+from nbox.hyperloop.common_pb2 import Resource
 from nbox.init import nbox_grpc_stub
 from nbox.messages import message_to_dict
 from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
 from nbox.hyperloop.job_pb2 import Job as JobProto
+from nbox.hyperloop.common_pb2 import NBXAuthInfo
 
 # all the sublime -> hyperloop stuff
-from nbox.sublime.lmao_client import LMAO_Stub # main stub class
-from nbox.sublime.lmao_client import (
-  Record, File, FileList, AgentDetails, RunLog, Run, InitRunRequest, ListProjectsRequest, RelicFile
+from nbox.sublime.lmao_rpc_client import (
+  LMAO_Stub, # main stub class
+  Record, File, FileList, AgentDetails, RunLog,
+  Run, InitRunRequest, ListProjectsRequest
 )
-from nbox.sublime.lmao_client import (
-  Serving, LogBuffer, ServingHTTPLog
-)
-
-
 from nbox.observability.system import SystemMetricsLogger
 
-DEBUG_LOG_EVERY = 100
-INFO_LOG_EVERY = 100
 
 """
 functional components of LMAO
 """
 
 @lru_cache()
-def get_lmao_stub(username: str, workspace_id: str):
+def get_lmao_stub(username: str, workspace_id: str) -> LMAO_Stub:
   # prepare the URL
   id_or_name = f"monitoring-{workspace_id}"
   logger.info(f"Instance id_or_name: {id_or_name}")
@@ -179,6 +160,7 @@ class _lmaoConfig:
     metadata: Dict[str, Any] = {},
     save_to_relic: bool = False,
     enable_system_monitoring: bool = False,
+    store_git_details: bool = True,
     args = (),
     kwargs = {},
   ) -> None:
@@ -190,6 +172,7 @@ class _lmaoConfig:
       "metadata": metadata,
       "save_to_relic": save_to_relic,
       "enable_system_monitoring": enable_system_monitoring,
+      "store_git_details": store_git_details,
       "args": args,
       "kwargs": kwargs,
     }
@@ -211,13 +194,25 @@ class Lmao():
     metadata: Dict[str, Any] = {},
     save_to_relic: bool = False,
     enable_system_monitoring: bool = False,
+    store_git_details: bool = True,
     workspace_id: str = "",
   ) -> None:
-    """``Lmao`` is the client library for using NimbleBox Monitoring. It talks to your monitoring instance running on your build
-    and stores the information in the ``project_name`` or ``project_id``. This object inherently doesn't care what you are actually
+    """`Lmao` is the client library for using NimbleBox Monitoring. It talks to your monitoring instance running on your build
+    and stores the information in the `project_name` or `project_id`. This object inherently doesn't care what you are actually
     logging and rather concerns itself with ensuring storage.
+
+    **Note**: All arguments are optional, if the _lmaoConfig is set.
     
-    All arguments are optional, if the _lmaoConfig is set"""
+    Args:
+      project_name (str, optional): The name of the project. Defaults to "".
+      project_id (str, optional): The id of the project. Defaults to "".
+      experiment_id (str, optional): The id of the experiment. Defaults to "".
+      metadata (Dict[str, Any], optional): Any metadata that you want to store. Defaults to {}.
+      save_to_relic (bool, optional): Whether to save the data to the relic. Defaults to False.
+      enable_system_monitoring (bool, optional): Whether to enable system monitoring. Defaults to False.
+      store_git_details (bool, optional): Whether to store git details. Defaults to True.
+      workspace_id (str, optional): The id of the workspace. Defaults to "".
+    """
 
     self.config = _lmaoConfig.kv
 
@@ -229,6 +224,7 @@ class Lmao():
       metadata = _lmaoConfig.kv["metadata"]
       save_to_relic = _lmaoConfig.kv["save_to_relic"]
       enable_system_monitoring = _lmaoConfig.kv["enable_system_monitoring"]
+      store_git_details = _lmaoConfig.kv["store_git_details"]
       workspace_id = _lmaoConfig.kv["workspace_id"]
 
     self.project_name = project_name
@@ -237,7 +233,8 @@ class Lmao():
     self.metadata = metadata
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
-    self.workspace_id = workspace_id
+    self.store_git_details = store_git_details
+    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     
     # now set the supporting keys
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
@@ -258,50 +255,39 @@ class Lmao():
       self.system_monitoring.stop()
 
   def _get_name_id(self, project_id: str = None, project_name: str = None):
-    all_projects = self.lmao.list_projects(
-      _ListProjectsRequest = ListProjectsRequest(
+    matching_projects = self.lmao.list_projects(
+      ListProjectsRequest(
         workspace_id = self.workspace_id,
         project_id_or_name = project_id if project_id else project_name,
       )
     )
-    if not all_projects.projects:
+
+    # case for one matching project
+    if len(matching_projects.projects) == 1:
+      project_name = matching_projects.projects[0].project_name
+      project_id = matching_projects.projects[0].project_id
+    elif len(matching_projects.projects) > 1:
+      if project_id:
+        logger.error(f"Multiple entries for {project_id} found, something went wrong from our side.")
+        raise Exception(f"Database duplicate entry for project_id: {project_id}")
+      else:
+        logger.error(f"Project '{project_name}' found multiple times, please use project_id instead.")
+        raise Exception("Ambiguous project name, please use project_id instead.")
+    else:
+      # case for no matching projects returned
       # means we have to initialise this project first and then we will pull the details after the init_run
       if project_id:
         raise Exception(f"Project with id {project_id} not found, please create a new one with project_name")
       logger.info(f"Project '{project_name}' not found, will create a new one.")
-    
-    if project_id:
-      common = list(filter(lambda x: x.project_id == project_name, all_projects.projects))
-      if len(common) == 1:
-        project_name = common[0].project_name
-        project_id = common[0].project_id
-      elif len(common) > 1:
-        logger.error(f"Multiple entries for {project_id} found, something went wrong from our side.")
-        raise Exception(f"Database duplicate entry for project_id: {project_id}")
-      else:
-        raise Exception(f"Project with id {project_id} not found, please create a new one with project_name")
-    else:
-      common = list(filter(lambda x: x.project_name == project_name, all_projects.projects))
-      if len(common) == 1:
-        project_name = common[0].project_name
-        project_id = common[0].project_id
-      elif len(common) > 1:
-        logger.error(f"Project '{project_name}' found multiple times, please use project_id instead.")
-        raise Exception("Ambiguous project name, please use project_id instead.")
-      else:
-        raise Exception(f"Project with name {project_name} not found, please create a new one with project_name")
+
     return project_id, project_name
 
   def _init(self, project_name, project_id, config: Dict[str, Any] = {}):
     # create a tracer object that will load all the information
-    self.tracer = Tracer(start_heartbeat=False)
-    self._nbx_run_id = self.tracer.run_id
-    self._nbx_job_id = self.tracer.job_id
-    if self._nbx_run_id is not None:
-      # update the username since jobs pod does not contain that information
-      secret.put("username", self.tracer.job_proto.auth_info.username)
-      self.username = secret.get("username")
-
+    tracer = Tracer(start_heartbeat = False)
+    self._nbx_run_id = tracer.run_id
+    self._nbx_job_id = tracer.job_id
+    del tracer
     self.lmao = get_lmao_stub(self.username, self.workspace_id)
 
     # do a quick lookup and see if the project exists, if not, create it
@@ -313,10 +299,12 @@ class Lmao():
         project_id, project_name = self._get_name_id(project_id=project_id)
         if not project_id:
           raise Exception(f"Project with id {project_id} not found, please create a new one with project_name")
-      else:
+      elif project_name:
         project_id, project_name = self._get_name_id(project_name=project_name)
         if not project_id:
           logger.info(f"Project '{project_name}' not found, create one from dashboard.")
+      else:
+        raise Exception("provide either `project_id` or `project_name`")
 
     # this is the config value that is used to store data on the plaform, user cannot be allowed to have
     # like a full access to config values
@@ -327,31 +315,34 @@ class Lmao():
     # check if the current folder from where this code is being executed has a .git folder
     # NOTE: in case of NBX-Jobs the current folder ("./") is expected to contain git by default
     log_config["git"] = None
-    if os.path.exists(".git"):
+    if os.path.exists(".git") and self.store_git_details:
       log_config["git"] = get_git_details("./")
 
     # continue as before
     self._agent_details = AgentDetails(
       type = AgentDetails.NBX.JOB,
-      nbx_job_id = self._nbx_job_id or "jj_guvernr",
-      nbx_run_id = self._nbx_run_id or "fake_run",
+      nbx_job_id = self._nbx_job_id or "",
+      nbx_run_id = self._nbx_run_id or "",
     )
 
-    run_details = self.lmao.get_run_details(Run(
-      experiment_id = _lmaoConfig.kv["experiment_id"],
-    ))
-    if run_details.experiment_id:
-      # means that this run already exists so we need to make an update call
-      ack = self.lmao.update_run_status(Run(
-        experiment_id = run_details.experiment_id,
-        agent = self._agent_details,
-      ))
-      if not ack.success:
-        raise Exception(f"Failed to update run status!")
+    if self.experiment_id:
+      run_details = self.lmao.get_run_details(Run(experiment_id = self.experiment_id, project_id=project_id))
+      if not run_details:
+        # TODO: Make a custom exception of this
+        raise Exception("Server Side exception has occurred, Check the log for details")
+      if run_details.experiment_id:
+        # means that this run already exists so we need to make an update call
+        ack = self.lmao.update_run_status(Run(
+          project_id = project_id,
+          experiment_id = run_details.experiment_id,
+          agent = self._agent_details,
+          update_keys = ["agent"],
+        ))
+        if not ack.success:
+          raise Exception(f"Failed to update run status! {ack.message}")
     else:
-      # check if there is a lmao run existing for this project_id
       run_details = self.lmao.init_run(
-        _InitRunRequest = InitRunRequest(
+        InitRunRequest(
           agent_details=self._agent_details,
           created_at = SimplerTimes.get_now_i64(),
           project_name = project_name,
@@ -360,12 +351,8 @@ class Lmao():
         )
       )
 
-    if not run_details:
-      # TODO: Make a custom exception of this
-      raise Exception("Server Side exception has occurred, Check the log for details")
-
     self.project_name = project_name
-    self.project_id = project_id
+    self.project_id = run_details.project_id
     self.metadata = config
 
     self.run = run_details
@@ -403,22 +390,17 @@ class Lmao():
     if self.completed:
       raise Exception("Run already completed, cannot log more data!")
 
-    # if self._total_logged_elements % DEBUG_LOG_EVERY == 0:
-    #   logger.debug(f"Logging: {y.keys()} | {self._total_logged_elements}")
-    # if self._total_logged_elements % INFO_LOG_EVERY == 0:
-    #   logger.info(f"Logging: {y.keys()} | {self._total_logged_elements}")
-
     step = step if step is not None else SimplerTimes.get_now_i64()
     if step < 0:
       raise Exception("Step must be <= 0")
-    run_log = RunLog(experiment_id = self.run.experiment_id, log_type=log_type)
+    run_log = RunLog(experiment_id = self.run.experiment_id, project_id=self.project_id, log_type=log_type)
     for k,v in y.items():
       # TODO:@yashbonde replace Record with RecordColumn
       record = get_record(k, v)
       record.step = step
       run_log.data.append(record)
 
-    ack = self.lmao.on_log(_RunLog = run_log)
+    ack = self.lmao.on_log(run_log)
     if not ack.success:
       logger.error("  >> Server Error")
       for l in ack.message.splitlines():
@@ -432,8 +414,8 @@ class Lmao():
     Register a file save. User should be aware of some structures that we follow for standardizing the data.
     All the experiments are going to be tracked under the following pattern:
 
-    #. ``relic_name`` is going to be the experiment ID, so any changes to the name will not affect relic storage
-    #. ``{experiment_id}(_{job_id}@{experiment_id})`` is the name of the folder which contains all the artifacts in the experiment.
+    #. `relic_name` is going to be the experiment ID, so any changes to the name will not affect relic storage
+    #. `{experiment_id}(_{job_id}@{experiment_id})` is the name of the folder which contains all the artifacts in the experiment.
 
     If relics is not enabled, this function will simply log to the LMAO DB.
 
@@ -458,11 +440,11 @@ class Lmao():
       for f in all_files:
         relic.put(f)
 
-    # # log the files in the LMAO DB for sanity
+    # TODO: @yashbonde log the files in the LMAO DB for sanity, currently this is a no-op, keeping it here so one day
+    # when we add something cool we can use this
     # fl = FileList(experiment_id = self.run.experiment_id)
     # fl.files.extend([File(relic_file = RelicFile(name = x)) for x in all_files])
-    # self.lmao.on_save(_FileList = fl)
-    # self.lmao.on_save()
+    # self.lmao.on_save(fl)
 
   def end(self):
     """End the run to declare it complete. This is more of a convinience function than anything else. For example when you
@@ -473,7 +455,7 @@ class Lmao():
       return None
 
     logger.info("Ending run")
-    ack = self.lmao.on_train_end(_Run = Run(experiment_id=self.run.experiment_id,))
+    ack = self.lmao.on_train_end(self.run)
     if not ack.success:
       logger.error("  >> Server Error")
       for l in ack.message.splitlines():
@@ -482,109 +464,6 @@ class Lmao():
     self.completed = True
     if self.enable_system_monitoring:
       self.system_monitoring.stop()
-
-"""
-Code responsible for Monitoring of live servings
-"""
-
-
-def post_buffer(lmao: LMAO_Stub, queue: Queue, bar: threading.Barrier):
-  while True:
-    bar.wait() # rate_limit
-    buff = LogBuffer()
-    while True:
-      try:
-        item = queue.get()
-        buff.logs.append(item)
-      except Empty:
-        break
-    lmao.on_livelog(buff)
-
-
-class LmaoASGIMiddleware():
-
-  def __init__(self, app, workspace_id: str = "") -> None:
-    if starlette is None:
-      raise ValueError("Starlette is not installed. pip install -U nbox\[serving\]")
-    super().__init__(app)
-
-    # rate limiter
-    self._bar = threading.Barrier(2)
-    def _rate_limiter(s = 1.0):
-      while True:
-        self._bar.wait()
-        time.sleep(s)
-    rl = threading.Thread(target=_rate_limiter, daemon=True)
-
-    # create connection and handshake with the lmao server
-    self.workspace_id = workspace_id
-
-    # create a tracer object that will load all the information
-    self.tracer = Tracer(start_heartbeat=False)
-    self._nbx_run_id = self.tracer.run_id
-    self._nbx_job_id = self.tracer.job_id
-    if self._nbx_run_id is not None:
-      # update the username you have
-      secret.put("username", self.tracer.job_proto.auth_info.username)
-      self.username = secret.get("username")
-    self.lmao = LMAO_Stub(self.username, self.workspace_id)
-
-    serving = self.lmao.init_serving(
-      InitRunRequest(
-        agent_details = AgentDetails(
-          type = AgentDetails.NBX.SERVING,
-          nbx_serving_id = self._nbx_job_id or "jj_guvernr",
-          nbx_run_id = self._nbx_run_id or "fake_deploy",
-        ),
-        created_at = SimplerTimes.get_now_i64(),
-        config = dumps({
-          "my_config": "config"
-        })
-      )
-    )
-    self.serving = serving
-    self.buffer = Queue(maxsize = 2 << 14)
-    self.logger_thread = threading.Thread(target = post_buffer, args = (self.lmao, self.buffer, self._bar), daemon = True)
-    rl.start()
-    self.logger_thread.start()
-
-  async def dispatch(self, request, call_next):
-    method = request.method
-    path_template, is_handled_path = self.get_path_template(request)
-    if not is_handled_path:
-      return await call_next(request)
-
-    before_time = time.perf_counter()
-    try:
-      response = await call_next(request)
-    except BaseException as e:
-      status_code = HTTP_500_INTERNAL_SERVER_ERROR
-      raise e from None
-    else:
-      status_code = response.status_code
-      after_time = time.perf_counter()
-
-    path = path_template.strip("/")
-    if path:
-      _log = ServingHTTPLog(
-        path = path,
-        method = method,
-        status_code = status_code,
-        latency_ms = 1e3 * (after_time-before_time),
-        timestamp = SimplerTimes.get_now_pb(),
-      )
-      self.buffer.put_nowait(_log)
-
-    return response
-
-  @staticmethod
-  def get_path_template(request) -> Tuple[str, bool]:
-    for route in request.app.routes:
-      match, child_scope = route.matches(request.scope)
-      if match == Match.FULL:
-        return route.path, True
-    return request.url.path, False
-
 
 """
 For some Experiences you want to have CLI control so this class manages that
@@ -648,8 +527,8 @@ class LmaoCLI:
     """Upload and register a new run for a NBX-LMAO project.
 
     Args:
-      init_path (str): This can be a path to a ``folder`` or can be optionally of the structure ``fp:fn`` where ``fp``
-        is the path to the file and ``fn`` is the function name.
+      init_path (str): This can be a path to a `folder` or can be optionally of the structure `fp:fn` where `fp`
+        is the path to the file and `fn` is the function name.
       project_name_or_id (str): The name or id of the LMAO project.
       workspace_id (str, optional): If nor provided, defaults to global config
       trigger (bool, optional): Defaults to False. If True, will trigger the run after uploading.
@@ -688,6 +567,10 @@ class LmaoCLI:
     if enable_system_monitoring:
       reconstructed_cli_comm += " --enable_system_monitoring"
 
+    if resource_max_retries < 1:
+      logger.error(f"max_retries must be >= 1. Got: {resource_max_retries}\n  Fix: set --max_retries=2")
+      raise ValueError()
+
     # uncommenting these since it can contain sensitive information, kept just in case for taking dictionaries as input
     # if relics_kwargs:
     #   rks = str(relics_kwargs).replace("'", "")
@@ -705,19 +588,6 @@ class LmaoCLI:
     if untracked_no_limit and not untracked:
       logger.debug("untracked_no_limit is True but untracked is False. Setting untracked to True")
       untracked = True
-    resource = Resource(
-      cpu = resource_cpu,
-      memory = resource_memory,
-      disk_size = resource_disk_size,
-      gpu = resource_gpu,
-      gpu_count = resource_gpu_count,
-      timeout = resource_timeout,
-      max_retries = resource_max_retries,
-    )
-
-    if resource.max_retries < 1:
-      logger.error(f"max_retries must be >= 1. Got: {resource.max_retries}\n  Fix: set --max_retries=2")
-      raise ValueError()
 
     # first step is to get all the relevant information from the DB
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
@@ -731,10 +601,24 @@ class LmaoCLI:
       git_det = get_git_details(init_folder)
     else:
       git_det = {}
+
+
+    job_name = "nbxj_" + project_name[:15]
+    job = Job(job_name = job_name, workspace_id = workspace_id)
+    lmao_stub = get_lmao_stub(secret.get("username"), workspace_id)
+
     _metadata = {
       "user_config": run_kwargs,
       "git": git_det,
-      "resource": message_to_dict(resource),
+      "resource": message_to_dict(Resource(
+        cpu = resource_cpu,
+        memory = resource_memory,
+        disk_size = resource_disk_size,
+        gpu = resource_gpu,
+        gpu_count = resource_gpu_count,
+        timeout = resource_timeout,
+        max_retries = resource_max_retries,
+      )),
       "cli": reconstructed_cli_comm,
       "lmao": {
         "save_to_relic": save_to_relic,
@@ -742,8 +626,6 @@ class LmaoCLI:
       }
     }
 
-    job = Job("nbxj_" + project_name[:15], workspace_id = workspace_id)
-    lmao_stub = get_lmao_stub(secret.get("username"), workspace_id)
     run = lmao_stub.init_run(InitRunRequest(
       agent_details = AgentDetails(
         type = AgentDetails.NBX.JOB,
@@ -752,7 +634,10 @@ class LmaoCLI:
       created_at = SimplerTimes.get_now_i64(),
       config = dumps(_metadata),
       project_id = project_id,
+      project_name = project_name,
     ))
+    if not project_id:
+      logger.info(f"Project {project_name} created with id: {run.project_id}")
     logger.info(f"Run ID: {run.experiment_id}")
 
     # connect to the relic
@@ -779,9 +664,10 @@ class LmaoCLI:
           # see if any file is larger than 10MB and if so, warn the user
           warn_once = False
           for f in untracked_files:
-            if not warn_once and os.path.getsize(f) > 1e7 and not untracked_no_limit:
-              logger.warning(f"There are files larger than 10MB and will not be available")
-              logger.warning("  Fix: use git to track the file, avoid large files")
+            if os.path.getsize(f) > 1e7 and not untracked_no_limit:
+              logger.warning(f"File: {f} is larger than 10MB and will not be available in sync")
+              logger.warning("  Fix: use git to track small files, avoid large files")
+              logger.warning("  Fix: nbox.Relics can be used to store large files")
               logger.warning("  Fix: use --untracked-no-limit to upload all files")
               warn_once = True
               continue
@@ -791,13 +677,19 @@ class LmaoCLI:
       os.remove(patch_file)
 
     # tell the server that this run is being scheduled so atleast the information is visible on the dashboard
-    job: Job = Job.upload(init_path, id_or_name = "nbxj_" + project_name[:15], _ret = True) # keep only 20 chars
-    job.job_proto.resource.CopyFrom(resource)
-    job_proto: JobProto = nbox_grpc_stub.UpdateJob(
-      UpdateJobRequest(
-        job = job.job_proto,
-        update_mask = FieldMask(paths = ["resource"]),
-      )
+    upload_job_folder(
+      "job",
+      init_folder = init_path,
+      name = "nbxj_" + project_name[:15], # keep only 20 chars
+
+      # pass along the resource requirements
+      resource_cpu = resource_cpu,
+      resource_memory = resource_memory,
+      resource_disk_size = resource_disk_size,
+      resource_gpu = resource_gpu,
+      resource_gpu_count = resource_gpu_count,
+      resource_timeout = resource_timeout,
+      resource_max_retries = resource_max_retries,
     )
 
     if trigger:
@@ -807,8 +699,8 @@ class LmaoCLI:
       _lmaoConfig.clear()
       _lmaoConfig.set(
         workspace_id = workspace_id,
-        project_name = project_name,
-        project_id = project_id,
+        project_name = run.project_name,
+        project_id = run.project_id,
         experiment_id = run.experiment_id,
         metadata = _metadata,
         save_to_relic = save_to_relic,

@@ -127,10 +127,11 @@ from nbox.version import __version__
 from nbox.sub_utils.latency import log_latency
 from nbox.framework.on_functions import get_nbx_flow
 from nbox.framework import AirflowMixin, PrefectMixin
-from nbox.hyperloop.job_pb2 import Job as JobProto, Resource
+from nbox.hyperloop.job_pb2 import Job as JobProto
+from nbox.hyperloop.common_pb2 import Resource
 from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
-from nbox.network import _get_job_data
-from nbox.jobs import Schedule, Job, Serve
+
+from nbox.jobs import Schedule, Job, Serve, _get_job_data
 from nbox.messages import write_binary_to_file
 from nbox.relics import RelicsNBX, RelicLocal
 from nbox.init import nbox_ws_v1
@@ -258,13 +259,15 @@ class Operator():
   # 3. from a function, where we decorate an existing function and convert it to an operator
 
   @classmethod
-  def from_job(cls, job_id_or_name, workspace_id: str = ""):
+  def from_job(cls, job_name: str = "", job_id: str = "", workspace_id: str = ""):
     """latch an existing job so that it can be called as an operator."""
     # implement this when we have the client-server that allows us to get the metadata for the job
+    if (not job_name and not job_id) or (job_name and job_id):
+      raise ValueError("Either job_name or job_id must be specified")
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     if not workspace_id:
       raise DeprecationWarning("Personal workspace does not support serving")
-    job_id, job_name = _get_job_data(job_id_or_name, workspace_id = workspace_id)
+    job_id, job_name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
     if job_id is None:
       raise ValueError(f"No serving found with name {job_name}")
     job = Job(job_id, workspace_id = workspace_id)
@@ -506,6 +509,21 @@ class Operator():
 
     return self
 
+  @classmethod
+  def from_class(cls, obj):
+    """Wraps an initialised class as an operator, so you can use all the same methods as Operator"""
+    op = cls()
+    op.__file__ = inspect.getfile(obj.__class__)
+    op.__doc__ = obj.__doc__
+    op.__qualname__ = "cls_" + obj.__class__.__qualname__
+    op._op_type = ospec.OperatorType.WRAP_CLS
+    op._op_spec = ospec._WrapClsSpec(
+      cls_name = obj.__class__.__qualname__,
+      wrap_obj = obj,
+      init_ak = ((), {})
+    )
+    return op
+
   def _fn(self, fn):
     """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a function as an operator"""
     self.forward = fn # override the forward function
@@ -517,6 +535,14 @@ class Operator():
     self._op_spec = ospec._WrapFnSpec(fn_name = fn.__name__, wrap_obj = fn)
 
     return self
+
+  @classmethod
+  def from_fn(cls, fn):
+    """Wraps a function as an operator, so you can use all the same methods as Operator"""
+    op = cls()
+    op = op._fn(fn)
+    return op
+    
 
   # /mixin
 

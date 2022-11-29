@@ -25,7 +25,26 @@ if not tarfile.is_tarfile(fpath) or not fpath.endswith(".nbox"):
 
 with tarfile.open(fpath, "r:gz") as tar:
   folder = os.path.join(gettempdir(), os.path.basename(fpath).replace(".nbox", ""))
-  tar.extractall(folder)
+  def is_within_directory(directory, target):
+      
+      abs_directory = os.path.abspath(directory)
+      abs_target = os.path.abspath(target)
+  
+      prefix = os.path.commonprefix([abs_directory, abs_target])
+      
+      return prefix == abs_directory
+  
+  def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+  
+      for member in tar.getmembers():
+          member_path = os.path.join(path, member.name)
+          if not is_within_directory(path, member_path):
+              raise Exception("Attempted Path Traversal in Tar File")
+  
+      tar.extractall(path, members, numeric_owner=numeric_owner) 
+      
+  
+  safe_extract(tar, folder)
 
 if os.environ.get("NBOX_INSTALL_DEP", False):
   subprocess.run(["pip", "install", "-r", os.path.join(folder, "requirements.txt")])
