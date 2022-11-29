@@ -284,16 +284,10 @@ class Lmao():
 
   def _init(self, project_name, project_id, config: Dict[str, Any] = {}):
     # create a tracer object that will load all the information
-    self.tracer = Tracer(start_heartbeat=False)
-    self._nbx_run_id = self.tracer.run_id
-    self._nbx_job_id = self.tracer.job_id
-
-    # this is not the jobs of this class but `nbox.lib.dist.NBXLet.run()`
-    # if self._nbx_run_id is not None:
-    #   # update the username since jobs pod does not contain that information
-    #   secret.put("username", self.tracer.job_proto.auth_info.username)
-    #   self.username = secret.get("username")
-
+    tracer = Tracer(start_heartbeat = False)
+    self._nbx_run_id = tracer.run_id
+    self._nbx_job_id = tracer.job_id
+    del tracer
     self.lmao = get_lmao_stub(self.username, self.workspace_id)
 
     # do a quick lookup and see if the project exists, if not, create it
@@ -339,6 +333,7 @@ class Lmao():
       if run_details.experiment_id:
         # means that this run already exists so we need to make an update call
         ack = self.lmao.update_run_status(Run(
+          project_id = project_id,
           experiment_id = run_details.experiment_id,
           agent = self._agent_details,
         ))
@@ -637,7 +632,10 @@ class LmaoCLI:
       created_at = SimplerTimes.get_now_i64(),
       config = dumps(_metadata),
       project_id = project_id,
+      project_name = project_name,
     ))
+    if not project_id:
+      logger.info(f"Project {project_name} created with id: {run.project_id}")
     logger.info(f"Run ID: {run.experiment_id}")
 
     # connect to the relic
@@ -697,8 +695,8 @@ class LmaoCLI:
       _lmaoConfig.clear()
       _lmaoConfig.set(
         workspace_id = workspace_id,
-        project_name = project_name,
-        project_id = project_id,
+        project_name = run.project_name,
+        project_id = run.project_id,
         experiment_id = run.experiment_id,
         metadata = _metadata,
         save_to_relic = save_to_relic,

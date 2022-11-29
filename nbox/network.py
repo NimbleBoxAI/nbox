@@ -224,7 +224,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
     j: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
-    new_job = j.status == JobProto.Status.NOT_SET
+    new_job = j.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
   except grpc.RpcError as e:
     if e.code() == grpc.StatusCode.NOT_FOUND:
       new_job = True

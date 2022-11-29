@@ -440,7 +440,8 @@ around the NBX-Jobs gRPC API.
 ################################################################################
 
 @lru_cache()
-def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *, workspace_id: str = ""):
+  """Returns the job id and name"""
   if (not name and not id) or (name and id):
     logger.info(f"Please either pass job_id '{id}' or name '{name}'")
     return None, None
@@ -455,6 +456,9 @@ def _get_job_data(name: str = "", id: str = "", *, workspace_id: str = ""):
     "Could not find job with ID: {}".format(id),
     raise_on_error = True
   )
+  if job.status == JobProto.Status.ARCHIVED and remove_archived:
+    logger.info(f"Job {job.id} is archived. Will try to create a new Job.")
+    return None, name
   job_name = job.name
   job_id = job.id
   logger.info(f"Found job with ID '{job_id}' and name '{job_name}'")
