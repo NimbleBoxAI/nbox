@@ -7,6 +7,7 @@ from typing import List, Set, Union
 from hashlib import sha256 as _hash
 
 def sha256(x: str):
+  """generic function to calculate SHA256 hash of a string"""
   return _hash(x.encode()).hexdigest()
 
 class IndexTypes(Enum):
@@ -94,7 +95,7 @@ class Astea:
 
     Args:
       fname (str): the file name to parse. If this is not provided, then all other values must be provided.
-      code (str): the code text can be provided instead of the 
+      code (str): the code text can be provided instead of the.
       name (str, optional): The name of the node. Defaults to "".
       type (IndexTypes, optional): The type of the node. Defaults to None.
       node (A.AST, optional): The AST node. Defaults to None.

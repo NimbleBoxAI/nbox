@@ -1,24 +1,24 @@
 """
 These function are meant to make jobs easier and contain the code for what I am calling
-``Subway``, which converts any OpenAPI spec into an RPC-like interface. At the end of the
+`Subway`, which converts any OpenAPI spec into an RPC-like interface. At the end of the
 day, each API call is really nothing but a functional call with added steps like
 serialisation and networking combined. This kind of added complexity can:
 
-#. Make code look really ugly, think try-catches and ``r.raise_for_request()``
-#. Easy to develop because information has to be packaged as different parts for each\
-    type of function call (GET, POST, ...). The true intent was always to pass it the\
-    relevant information and forget about underlying details.
-#. API endpoints are just strings and it's easy to have a typo in the URL. When the\
-    ``Subway``is loaded with the OpenAPI spec, it will disallow incorrect URLs. while\
-    managing the parameters correctly.
-#. A more pythonic way of programming where you can use the dot notation.
+- Make code look really ugly, think try-catches and `r.raise_for_request()`
+- Easy to develop because information has to be packaged as different parts for each
+  type of function call (GET, POST, ...). The true intent was always to pass it the
+  relevant information and forget about underlying details.
+- API endpoints are just strings and it's easy to have a typo in the URL. When the
+  `Subway`is loaded with the OpenAPI spec, it will disallow incorrect URLs. while
+  managing the parameters correctly.
+- A more pythonic way of programming where you can use the dot notation.
 
 Based os these ideas there are three types of subways:
 
-#. ``Subway``: Does not load OpenAPI spec and will blindly call the API, avoid this
-#. ``Sub30``: Built for OpenAPI v3.0.0, this becomes ``nbox_ws_v1``
-#. ``SpecSubway``: This is used with the FastAPI's OpenAPI spec, this is used in systems\
-    that use FastAPI (eg. Compute Server)
+- `Subway`: Does not load OpenAPI spec and will blindly call the API, avoid this
+- `Sub30`: Built for OpenAPI v3.0.0, this becomes `nbox_ws_v1`
+- `SpecSubway`: This is used with the FastAPI's OpenAPI spec, this is used in systems
+  that use FastAPI (eg. Compute Server)
 """
 
 import re
@@ -35,7 +35,7 @@ TIMEOUT_CALLS = 60
 
 
 class Subway():
-  """Simple code that allows extending things by ``.attr.ing`` them"""
+  """Simple code that allows extending things by `.attr.ing` them"""
   def __init__(self, _url, _session):
     self._url = _url.rstrip('/')
     self._session = _session
@@ -89,20 +89,22 @@ class Sub30:
   def __init__(self, _url, _api, _session: Session, _default_key: str = "data", *, prefix = "", rl = None, bar = None):
     """Like Subway but built for Nimblebox Webserver APIs.
 
-    Usage:
+    Examples:
+      # Create a stub
+      >>> ws = Sub30(
+      >>>   _url = "https://my-web.site/",
+      >>>   _session = nbox_session,
+      >>>   _api = loads(fetch("https://my-web.site/openapi.json", True).decode()),
+      >>> )
 
-    .. code-block:: python
-
-      ws = Sub30(
-        _url = "https://my-web.site/",
-        _session = nbox_session,
-        _api = loads(fetch("https://my-web.site/openapi.json", True).decode()),
-      )
+      # Call things as if they are functions
+      >>> ws.users()
+      >>> ws.users("post", name = "Fiona Apple")
 
     Args:
-      _url (str): the base url of the API
-      _api (dict): OpenAPI json dict
-      _session (requests.Session): Session object to use for requests
+      _url (str): the base url of the API.
+      _api (dict): OpenAPI json dict.
+      _session (requests.Session): Session object to use for requests.
       prefix (str, optional): This is internal, do not use it explicitly.
       last_call_at (float, optional): This is internal, do not use it explicitly.
     """
@@ -165,7 +167,8 @@ class Sub30:
     return self.__getattr__(attr)
 
   def __call__(self, _method: str = None, **kwargs):
-    r"""
+    """Call the API.
+
     Args:
       _method (str, optional): if only one method is present this will be ignored else "get" will be used. Defaults to None.
     """
@@ -246,9 +249,6 @@ class Sub30:
       except KeyError:
         pass
     return out
-
-  # _get = partial(__call__, _method = "get")
-  # _post = partial(__call__, _method = "post")
 
 class SpecSubway():
   def __init__(self, _url, _session, _spec, __name = None):
@@ -383,4 +383,3 @@ class SpecSubway():
       if len(out) == 1:
         return out[0]
     return out
-

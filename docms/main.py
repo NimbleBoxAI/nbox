@@ -14,6 +14,7 @@ from subprocess import Popen
 from functools import partial
 from pprint import pprint as pp
 from docstring_parser import parse as parse_docstring
+from docstring_parser.common import DocstringStyle
 
 import nbox
 from nbox.utils import folder, logger, get_files_in_folder, threaded_map
@@ -40,6 +41,8 @@ def doc_str_to_mdx(
   # 01 parse and get markdown objects
   # 02 take code pieces and return code text strings
   # 03 add proper tags to the markdown elements like {% .margint %}
+  # print(docstring)
+  # doc_str = parse_docstring(docstring, style = DocstringStyle.GOOGLE)
   doc_str = parse_docstring(docstring)
 
   # markdown part
@@ -66,6 +69,7 @@ def doc_str_to_mdx(
     with open(local_loc, "w") as f:
       f.write(code)
 
+  # print(doc_str.__dict__)
   source = f"https://github.com/NimbleBoxAI/nbox/blob/master/nbox/{source_fp}.py#L{source_lineno}"
   params = []
   for p in doc_str.params:
@@ -124,12 +128,15 @@ def default_template(
   classes_md = ""
   for x in tea.find(types = IndexTypes.CLASS):
     class_index = x.find(types = IndexTypes.FUNCTION)
+    # print(class_index)
     # if mod == "nbox.operator":
       # print(x, class_index)
     # print(mod, fp, x.name, x.node.lineno)
+    source = f"https://github.com/NimbleBoxAI/nbox/blob/master/nbox/{fp}.py#L{x.node.lineno}"
+    container = f'{{% VisionContainer label="{x.name}" source="{source}" variant="class" /%}}'
     _t = jinja2.Template(
-      '''{!% if class_index %!}## class `{{ cls.name }}` {% .margint8 %}
-{!% for x in class_index %!}
+      '''{{ container }}
+{!% if class_index %!}{!% for x in class_index %!}
 {{ doc_str_to_mdx(x.docstring(), x.name, source_lineno = x.node.lineno) }}
 {!% endfor %!}{!% endif %!}
       '''.strip(),
@@ -137,13 +144,11 @@ def default_template(
       block_end_string = '%!}',
     )
     classes_md += _t.render(
+      container = container,
       class_index = class_index,
       doc_str_to_mdx = partial(_doc_str_to_mdx, code_prefix = f"{x.name}."),
       cls = x,
     )
-
-  # if mod == "nbox.operator":
-  #   print(classes_md)
 
   # get all the generations for the functions
   _t = jinja2.Template(
@@ -162,7 +167,9 @@ def default_template(
   ).strip()
   
   # create the final template
-  template = '''# {{ tea.name.strip('./').replace('/','.') }} {% .marginb8 %}
+  # print(tea.docstring())
+  template = '''# {{ mod }} {% .marginb8 %}
+{{ tea.docstring() }}
 
 {!% if functions_md %!}# Functions {% .margint8 %}
 
@@ -178,6 +185,7 @@ def default_template(
     block_end_string = '%!}',
   ).render(
     tea = tea,
+    mod = mod,
     functions_md = functions_md,
     classes_md = classes_md,
   ).strip()
@@ -226,7 +234,7 @@ def module_to_mdx(
       doc_str_to_mdx = partial(doc_str_to_mdx, code_folder = code_folder),
     )
 
-  trg_fp = f"{target_folder}{mod}".replace(".","/")
+  trg_fp = f"{target_folder}{mod}".replace(".","/").replace("/nbox", "")
   os.makedirs(os.path.dirname(trg_fp), exist_ok=True)
   with open(trg_fp+".md", "w") as f:
     f.write(out)
@@ -306,7 +314,12 @@ def main(ignore: List[str] = [], v: bool = False):
     # print(_values)
     module_data.append(_values)
 
-  # module_to_mdx(*module_data[20])
+  # some code to test for a specific module
+  # # mod = "nbox.nbxlib.astea"
+  # mod = "nbox.subway"
+  # module_data = [m for m in module_data if m[0] == mod]
+  # module_to_mdx(*module_data[0])
+  
   _ = threaded_map(module_to_mdx, module_data)
 
   # all the files in src_files are those that simply need to be copied to the gen folder
@@ -326,14 +339,14 @@ def main(ignore: List[str] = [], v: bool = False):
     print(gen_files)
   for f in gen_files:
     f = f[len(GEN):].replace(".md", "")
-    parts = f.split("/")[2:]
+    parts = f.split("/")[1:]
     if v:
       print(parts)
     if len(parts) == 1:
       f = "/".join(parts)
       routes["routes"].append({
         "label": f,
-        "path": f,
+        "path": '/nbox/docs/' + f,
       })
     else:
       # we need to create the tree structure
@@ -353,7 +366,7 @@ def main(ignore: List[str] = [], v: bool = False):
           parent = parent["routes"][-1]
       parent["routes"].append({
         "label": parts[-1],
-        "path": f,
+        "path": '/nbox/' + f,
       })
 
   if v:
