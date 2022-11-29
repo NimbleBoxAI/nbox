@@ -12,6 +12,7 @@ from fire import Fire
 from typing import List
 from subprocess import Popen
 from functools import partial
+from pprint import pprint as pp
 from docstring_parser import parse as parse_docstring
 
 import nbox
@@ -19,12 +20,15 @@ from nbox.utils import folder, logger, get_files_in_folder, threaded_map
 from nbox.nbxlib import astea
 from nbox.nbxlib.astea import Astea, IndexTypes
 
+
 def doc_str_to_mdx(
   docstring: str,
   fn_name: str = "",
   code_folder: str = "",
   code_prefix: str = "",
   docs_code_loc: str = "/code/autogen",
+  source_fp: str = "",
+  source_lineno: int = 0,
 ):
   """
   Args:
@@ -61,17 +65,25 @@ def doc_str_to_mdx(
     local_loc = f"{code_folder}/{code_prefix}{fn_name}.txt"
     with open(local_loc, "w") as f:
       f.write(code)
-  
+
+  source = f"https://github.com/NimbleBoxAI/nbox/blob/master/nbox/{source_fp}.py#L{source_lineno}"
+  params = []
+  for p in doc_str.params:
+    # {"name":"method","type":"str","description":"This is description"}
+    params.append({
+      "name": p.arg_name,
+      "type": str(p.type_name),
+      "description": p.description,
+    })
+
   # template this thing
-  fn_doc = '''{!% if fn_name %!}## function `{{ fn_name }}` {% .margint8 %}{!% endif %!}
+  container = f'{{% VisionContainer label="{fn_name}" source="{source}" variant="function" params={json.dumps(params)}/%}}'
+  fn_doc = '''{{ container }}
 {!% if md_part %!}\n{{ md_part }}{!% endif %!}
 {!% if codelines %!}
 **Example**:
 {% Code languages=["Python"] codeBlock=["{{ code_fp }}"] height={{ 14 * min(20, len(codelines)) }} /%}{!% endif %!}
-**Arguments**: {!% if not args %!}this function does not take in any arguments.{!% else %!} {!% for a in args %!}
-  - {{ a.arg_name }} (`{{ a.type_name }}`{!% if not a.is_optional %!}, **required**{!% endif %!}): {{ a.description }}{!% endfor %!}
-{!% endif %!}
-**Returns**: {!% if not returns %!}this function does not return anything.{!% else %!} {!% for a in returns %!}
+{!% if returns %!}**Returns**: {!% for a in returns %!}
   - `{{ a.type_name }}`: {{ a.description }}{!% endfor %!}
 {!% endif %!}
 '''.strip()
@@ -80,10 +92,9 @@ def doc_str_to_mdx(
     block_start_string = '{!%',
     block_end_string = '%!}',
   ).render(
-    fn_name = fn_name,
+    container = container,
     md_part = md_part,
     codelines = code.splitlines(),
-    args = doc_str.params,
     returns = doc_str.many_returns,
     code_fp = code_fp,
     len = len,
@@ -102,22 +113,24 @@ def default_template(
   fp = ".".join(mod.split(".")[1:]).replace('.','/')
   code = f"{nbox_folder}{fp}.py"
   tea = Astea(code)
+  # print(mod, fp)
 
   # `{{ tea.name.strip('./').replace('/','.') }}` {% .marginb8 %}
   # {# The default template first goes over all the functions then goes over all the classes and it's functions #}
   # Functions
-  _doc_str_to_mdx = partial(doc_str_to_mdx, code_folder=code_folder)
+  _doc_str_to_mdx = partial(doc_str_to_mdx, code_folder=code_folder, source_fp=fp)
 
   # get all the generations for the classes
   classes_md = ""
   for x in tea.find(types = IndexTypes.CLASS):
     class_index = x.find(types = IndexTypes.FUNCTION)
     # if mod == "nbox.operator":
-    #   print(x, class_index)
+      # print(x, class_index)
+    # print(mod, fp, x.name, x.node.lineno)
     _t = jinja2.Template(
       '''{!% if class_index %!}## class `{{ cls.name }}` {% .margint8 %}
 {!% for x in class_index %!}
-{{ doc_str_to_mdx(x.docstring(), x.name) }}
+{{ doc_str_to_mdx(x.docstring(), x.name, source_lineno = x.node.lineno) }}
 {!% endfor %!}{!% endif %!}
       '''.strip(),
       block_start_string = '{!%',
@@ -136,7 +149,7 @@ def default_template(
   _t = jinja2.Template(
     '''
 {!% for fn in tea.find(types=IndexTypes.FUNCTION) %!}
-{{ doc_str_to_mdx(fn.docstring(), fn.name, ) }}
+{{ doc_str_to_mdx(fn.docstring(), fn.name, source_lineno = fn.node.lineno) }}
 {!% endfor %!}
     ''',
     block_start_string = '{!%',
@@ -213,11 +226,13 @@ def module_to_mdx(
       doc_str_to_mdx = partial(doc_str_to_mdx, code_folder = code_folder),
     )
 
-  with open(f"{target_folder}{mod}.md", "w") as f:
+  trg_fp = f"{target_folder}{mod}".replace(".","/")
+  os.makedirs(os.path.dirname(trg_fp), exist_ok=True)
+  with open(trg_fp+".md", "w") as f:
     f.write(out)
 
 
-def main(ignore: List[str] = []):
+def main(ignore: List[str] = [], v: bool = False):
   """Generate documentation for nbox
   
   Args:
@@ -291,38 +306,34 @@ def main(ignore: List[str] = []):
     # print(_values)
     module_data.append(_values)
 
-  threaded_map(
-    module_to_mdx,
-    module_data,
-  )
-
-  # generate the file
-  # (**data)
+  # module_to_mdx(*module_data[20])
+  _ = threaded_map(module_to_mdx, module_data)
 
   # all the files in src_files are those that simply need to be copied to the gen folder
   for f in src_files:
-    Popen(["cp", f, f"{GEN}{f.split('/')[-1]}"]).wait()
+    trg = f"{GEN}{f.split('/')[-1]}"
+    if v:
+      print("Copying", f, "to", trg)
+    Popen(["cp", f, trg]).wait()
 
   # next we need to create nboxRoutes.json which is required by our docs, the GEN folder has everything
   # in a flat structure, we need to create a tree structure. We can do this by putting all the files that
   # start with "nbox" in "API Docs" and others based on the '.' in the name.
 
-  routes = {
-    "label": "nbox",
-    "icon": "/images/docs/nbox.svg",
-    "description": "Documentation for nbox",
-    "path": "/nbox_gen",
-    "routes": [
-    ]
-  }
-  gen_files = sorted(get_files_in_folder(GEN, ".md", False))
+  routes = {"routes": []}
+  gen_files = sorted(get_files_in_folder(GEN+"docs/", ".md", False))
+  if v:
+    print(gen_files)
   for f in gen_files:
     f = f[len(GEN):].replace(".md", "")
-    parts = f.split(".")
+    parts = f.split("/")[2:]
+    if v:
+      print(parts)
     if len(parts) == 1:
+      f = "/".join(parts)
       routes["routes"].append({
         "label": f,
-        "path": "/nbox_gen/" + f,
+        "path": f,
       })
     else:
       # we need to create the tree structure
@@ -342,11 +353,22 @@ def main(ignore: List[str] = []):
           parent = parent["routes"][-1]
       parent["routes"].append({
         "label": parts[-1],
-        "path": "/nbox_gen/" + f,
+        "path": f,
       })
 
+  if v:
+    pp(routes["routes"])
+
+  # update the predefined routes object
+  with open(f"nboxRoutes.json", "r") as f:
+    data = json.load(f)
+  for r in data["routes"]:
+    if r["label"] == "API Reference":
+      # we are only going to update the inner layer
+      r["routes"] = routes["routes"]#[0]["routes"]
+      break
   with open(f"nboxRoutes.json", "w") as f:
-    f.write(json.dumps(routes, indent=2))
+    f.write(json.dumps(data, indent=2))
 
 
 if __name__ == "__main__":

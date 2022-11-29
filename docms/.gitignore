@@ -2,3 +2,4 @@ gen/
 autogen/
 nbox_gen/
 nboxRoutes.json
+src/docs/

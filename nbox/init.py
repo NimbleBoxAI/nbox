@@ -30,7 +30,7 @@ from nbox.version import __version__
 
 
 def __create_channel(channel_name) -> grpc.Channel:
-  """Create a gRPC channel with the Webserver, this will return ``webserver_channel`` with credentials and ssl."""
+  """Create a gRPC channel with the Webserver, this will return `webserver_channel` with credentials and ssl."""
   token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
   ssl_creds = grpc.ssl_channel_credentials()
   creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
@@ -41,8 +41,8 @@ def __create_channel(channel_name) -> grpc.Channel:
   return channel
 
 def get_job_stub() -> WSJobServiceStub:
-  """Create a gRPC stub with the NBX Webserver, this will initialise ``nbox_grpc_stub``
-  object which is globally accesible as ``nbox.nbox_grpc_stub``. If you find yourself
+  """Create a gRPC stub with the NBX Webserver, this will initialise `nbox_grpc_stub`
+  object which is globally accesible as `nbox.nbox_grpc_stub`. If you find yourself
   using this function, you might want to reconsider your design."""
   channel = __create_channel("WSJobServiceStub")
   stub = WSJobServiceStub(channel)
@@ -51,8 +51,8 @@ def get_job_stub() -> WSJobServiceStub:
 
 
 def get_serving_stub() -> ServingServiceStub:
-  """Create a gRPC stub with the NBX Serving, this will initialise ``nbox_serving_grpc_stub``
-  object which is globally accesible as ``nbox.nbox_serving_grpc_stub``. If you find yourself
+  """Create a gRPC stub with the NBX Serving, this will initialise `nbox_serving_grpc_stub`
+  object which is globally accesible as `nbox.nbox_serving_grpc_stub`. If you find yourself
   using this function, you might want to reconsider your design."""
   channel = __create_channel("ServingServiceStub")
   stub = ServingServiceStub(channel)
@@ -61,8 +61,8 @@ def get_serving_stub() -> ServingServiceStub:
 
 
 def get_model_stub() -> ModelServiceStub:
-  """Create a gRPC stub with the NBX Serving, this will initialise ``nbox_model_grpc_stub``
-  object which is globally accesible as ``nbox.nbox_model_grpc_stub``. If you find yourself
+  """Create a gRPC stub with the NBX Serving, this will initialise `nbox_model_grpc_stub`
+  object which is globally accesible as `nbox.nbox_model_grpc_stub`. If you find yourself
   using this function, you might want to reconsider your design."""
   channel = __create_channel("ModelServiceStub")
   stub = ModelServiceStub(channel)
@@ -72,7 +72,7 @@ def get_model_stub() -> ModelServiceStub:
 
 def create_webserver_subway(version: str = "v1", session: requests.Session = None) -> Sub30:
   """Create a Subway object for the NBX Webserver. This is a wrapper around the
-  OpenAPI spec plublished by NBX Webserver. It loads the JSON object in ``Sub30``
+  OpenAPI spec plublished by NBX Webserver. It loads the JSON object in `Sub30`
   which allows accesing REST APIs with python "." (dot) notation. If you find yourself
   using this function, you might want to reconsider your design.
 
@@ -118,6 +118,8 @@ else:
 
 
 def nbox_version_update():
+  """Function to check if the current version of nbox is the latest version. If not, it will
+  print a warning message to the user. This function is called on import of the nbox module."""
   # https://stackoverflow.com/questions/28774852/pypi-api-how-to-get-stable-package-version
   def get_version(package):
     """Return version of package on pypi.python.org using json."""
@@ -137,8 +139,8 @@ def nbox_version_update():
   if latest_version > parse(__version__):
     logger.warning(
       f"Your version of nbox ({__version__}) is outdated. Some functionalities might not work.\n"
-      f"Fix: Please update to {latest_version} using pip3 install nbox --upgrade\n"
-      f"Fix: Update all the relevant requirements.txt files with nbox[serving]=={latest_version}"
+      f"  Fix: Please update to {latest_version} using pip3 install nbox --upgrade\n"
+      f"  Fix: Update all the relevant requirements.txt files with nbox[serving]=={latest_version}"
     )
 
 
