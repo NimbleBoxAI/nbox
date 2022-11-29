@@ -1,0 +1,224 @@
+{
+  "label": "nbox SDK",
+  "icon": "/images/docs/nbox.svg",
+  "description": "Documentation for nbox",
+  "path": "/nbox",
+  "routes": [
+    {
+      "label": "Get Started",
+      "path": "/nbox/start"
+    },
+    {
+      "label": "CLI",
+      "path": "/nbox/cli"
+    },
+    {
+      "label": "API Reference",
+      "routes": [
+        {
+          "label": "auth",
+          "path": "/nbox/docs/auth"
+        },
+        {
+          "label": "cli",
+          "path": "/nbox/docs/cli"
+        },
+        {
+          "label": "framework",
+          "routes": [
+            {
+              "label": "on_functions",
+              "path": "/nbox/docs/framework/on_functions"
+            },
+            {
+              "label": "on_operators",
+              "path": "/nbox/docs/framework/on_operators"
+            }
+          ]
+        },
+        {
+          "label": "init",
+          "path": "/nbox/docs/init"
+        },
+        {
+          "label": "instance",
+          "path": "/nbox/docs/instance"
+        },
+        {
+          "label": "jobs",
+          "path": "/nbox/docs/jobs"
+        },
+        {
+          "label": "lib",
+          "routes": [
+            {
+              "label": "arch",
+              "path": "/nbox/docs/lib/arch"
+            },
+            {
+              "label": "aws",
+              "path": "/nbox/docs/lib/aws"
+            },
+            {
+              "label": "comms",
+              "path": "/nbox/docs/lib/comms"
+            },
+            {
+              "label": "demo",
+              "path": "/nbox/docs/lib/demo"
+            },
+            {
+              "label": "dist",
+              "path": "/nbox/docs/lib/dist"
+            },
+            {
+              "label": "exceptions",
+              "path": "/nbox/docs/lib/exceptions"
+            },
+            {
+              "label": "nbx_instances",
+              "path": "/nbox/docs/lib/nbx_instances"
+            },
+            {
+              "label": "notebook",
+              "path": "/nbox/docs/lib/notebook"
+            },
+            {
+              "label": "shell",
+              "path": "/nbox/docs/lib/shell"
+            }
+          ]
+        },
+        {
+          "label": "lmao",
+          "path": "/nbox/docs/lmao"
+        },
+        {
+          "label": "load",
+          "path": "/nbox/docs/load"
+        },
+        {
+          "label": "messages",
+          "path": "/nbox/docs/messages"
+        },
+        {
+          "label": "model",
+          "path": "/nbox/docs/model"
+        },
+        {
+          "label": "nbxlib",
+          "routes": [
+            {
+              "label": "astea",
+              "path": "/nbox/docs/nbxlib/astea"
+            },
+            {
+              "label": "cloud_machines",
+              "path": "/nbox/docs/nbxlib/cloud_machines"
+            },
+            {
+              "label": "fire",
+              "path": "/nbox/docs/nbxlib/fire"
+            },
+            {
+              "label": "json_logic",
+              "path": "/nbox/docs/nbxlib/json_logic"
+            },
+            {
+              "label": "operator_spec",
+              "path": "/nbox/docs/nbxlib/operator_spec"
+            },
+            {
+              "label": "resource_constants",
+              "path": "/nbox/docs/nbxlib/resource_constants"
+            },
+            {
+              "label": "serving",
+              "path": "/nbox/docs/nbxlib/serving"
+            },
+            {
+              "label": "tracer",
+              "path": "/nbox/docs/nbxlib/tracer"
+            }
+          ]
+        },
+        {
+          "label": "network",
+          "path": "/nbox/docs/network"
+        },
+        {
+          "label": "observability",
+          "routes": [
+            {
+              "label": "metrics",
+              "path": "/nbox/docs/observability/metrics"
+            },
+            {
+              "label": "networking",
+              "path": "/nbox/docs/observability/networking"
+            },
+            {
+              "label": "system",
+              "path": "/nbox/docs/observability/system"
+            }
+          ]
+        },
+        {
+          "label": "operator",
+          "path": "/nbox/docs/operator"
+        },
+        {
+          "label": "relics",
+          "routes": [
+            {
+              "label": "base",
+              "path": "/nbox/docs/relics/base"
+            },
+            {
+              "label": "local",
+              "path": "/nbox/docs/relics/local"
+            },
+            {
+              "label": "nbx",
+              "path": "/nbox/docs/relics/nbx"
+            }
+          ]
+        },
+        {
+          "label": "sub_utils",
+          "routes": [
+            {
+              "label": "latency",
+              "path": "/nbox/docs/sub_utils/latency"
+            },
+            {
+              "label": "ssh",
+              "path": "/nbox/docs/sub_utils/ssh"
+            }
+          ]
+        },
+        {
+          "label": "sublime",
+          "routes": [
+            {
+              "label": "lmao_rpc_client",
+              "path": "/nbox/docs/sublime/lmao_rpc_client"
+            },
+            {
+              "label": "relics_rpc_client",
+              "path": "/nbox/docs/sublime/relics_rpc_client"
+            }
+          ]
+        },
+        {
+          "label": "subway",
+          "path": "/nbox/docs/subway"
+        },
+        {
+          "label": "utils",
+          "path": "/nbox/docs/utils"
+        }
+      ]
+    }
+  ]
+}
