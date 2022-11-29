@@ -2,6 +2,7 @@
 This is the code for NBX-Relics which is a simple file system for your organisation.
 """
 import os
+import time
 import cloudpickle
 import requests
 import tabulate
@@ -25,7 +26,8 @@ from nbox.sublime.relics_rpc_client import (
 from nbox.relics.base import BaseStore
 from nbox.auth import ConfigString, secret
 
-def get_relic_file(fpath: str, username: str, workspace_id: str):
+def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
   # assert os.path.exists(fpath), f"File {fpath} does not exist"
   # assert os.path.isfile(fpath), f"File {fpath} is not a file"
 
@@ -52,7 +54,7 @@ def get_relic_file(fpath: str, username: str, workspace_id: str):
 
 @lru_cache()
 def _get_stub():
-  # url = "http://0.0.0.0:8081/relics" # debug
+  # url = "http://0.0.0.0:8081/relics" # debug mode
   url = secret.get("nbx_url") + "/relics"
   logger.debug("Connecting to RelicStore at: " + url)
   session = deepcopy(nbox_ws_v1._session)
@@ -131,7 +133,12 @@ class RelicsNBX(BaseStore):
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Uploading {local_path} to {relic_file.name}")
-    out = self.stub.create_file(_RelicFile = relic_file,)
+    for _ in range(2):
+      out = self.stub.create_file(_RelicFile = relic_file,)
+      if out != None:
+        break
+      time.sleep(1)
+
     if not out.url:
       raise Exception("Could not get link")
 
@@ -160,7 +167,12 @@ class RelicsNBX(BaseStore):
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Downloading {local_path} from S3 ...")
-    out = self.stub.download_file(_RelicFile = relic_file,)
+    for _ in range(2):
+      out = self.stub.download_file(_RelicFile = relic_file,)
+      if out != None:
+        break
+      time.sleep(1)
+
     if not out.url:
       raise Exception("Could not get link, are you sure this file exists?")
     
@@ -233,21 +245,31 @@ class RelicsNBX(BaseStore):
     logger.debug(f"Getting file: {local_path}")
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
-    out = self.stub.delete_relic_file(relic_file)
+    for _ in range(2):
+      out = self.stub.delete_relic_file(relic_file)
+      if out != None:
+        break
+      time.sleep(1)
+    
     if not out.success:
       logger.error(out.message)
       raise ValueError("Could not delete file")
 
   def has(self, path: str):
     prefix, file_name = os.path.split(path)
-    out = self.stub.list_relic_files(
-      ListRelicFilesRequest(
-        workspace_id=self.workspace_id,
-        relic_name=self.relic_name,
-        prefix=prefix,
-        file_name=file_name
+    for _ in range(2):
+      out = self.stub.list_relic_files(
+        ListRelicFilesRequest(
+          workspace_id=self.workspace_id,
+          relic_name=self.relic_name,
+          prefix=prefix,
+          file_name=file_name
+        )
       )
-    )
+      if out != None:
+        break
+      time.sleep(1)
+
     for f in out.files:
       if f.name.strip("/") == path.strip("/"):
         return True

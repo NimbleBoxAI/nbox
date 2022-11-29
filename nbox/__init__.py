@@ -9,7 +9,7 @@ from nbox.jobs import Job, Serve
 from nbox.model import Model
 from nbox.load import load, PRETRAINED_MODELS
 from nbox.instance import Instance
-from nbox.relics import RelicsNBX
+from nbox.relics import Relics, RelicsNBX
 from nbox.lmao import Lmao
 from nbox.version import __version__
-from nbox.hyperloop.job_pb2 import Resource
+from nbox.hyperloop.common_pb2 import Resource

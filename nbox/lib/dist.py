@@ -9,12 +9,8 @@ import nbox.utils as U
 from nbox import RelicsNBX
 from nbox.auth import secret, ConfigString
 from nbox import Operator, logger
-from nbox.utils import SimplerTimes
 from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.job_pb2 import Job
-from nbox import Operator, nbox_grpc_stub
-from nbox.messages import rpc
-from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
 from nbox.nbxlib.serving import serve_operator
 
 
@@ -49,9 +45,13 @@ class NBXLet(Operator):
       tracer = Tracer()
       if hasattr(self.op._tracer, "job_proto"):
         self.op.thaw(self.op._tracer.job_proto)
-      workspace_id = tracer.job_proto.auth_info.workspace_id
-      secret.put(ConfigString.workspace_id, workspace_id, True)
-      secret.put("username", tracer.job_proto.auth_info.username)
+      workspace_id = tracer.workspace_id
+      logger.info(f"Workspace Id: {workspace_id}")
+
+      # this is important since nbox uses ConfigString.workspace_id place to get workspace_id from while the init_container
+      # might place it at a different place. as of this writing, init_container -> "workspace_id" and nbox -> "config.global.workspace_id"
+      secret.put(ConfigString.workspace_id, workspace_id, True) 
+      # secret.put("username", tracer.job_proto.auth_info.username)
 
       job_id = tracer.job_id
       self.op.propagate(_tracer = tracer)
@@ -74,13 +74,14 @@ class NBXLet(Operator):
         args = _lmaoConfig.kv["args"]
         kwargs = _lmaoConfig.kv["kwargs"]
         logger.info(_lmaoConfig.kv)
+
       else:
         # check if there is a specific relic for this job
         relic = RelicsNBX("cache", workspace_id)
         _in = f"{job_id}/args_kwargs"
         if run_tag:
           _in += f"_{run_tag}"
-        if relic.has(_in):
+        if relic.relic is not None and relic.has(_in):
           (args, kwargs) = relic.get_object(_in)
         else:
           args, kwargs = (), {}
@@ -95,7 +96,9 @@ class NBXLet(Operator):
         _out = f"{job_id}/return"
         if run_tag:
           _out += f"_{run_tag}"
-      relic.put_object(_out, out)
+
+      if relic.relic is not None:
+        relic.put_object(_out, out)
 
       # last step mark as completed
       status = Job.Status.COMPLETED
@@ -104,12 +107,8 @@ class NBXLet(Operator):
     finally:
       logger.info(f"Job {job_id} completed with status {status}")
       if hasattr(tracer, "job_proto"):
-        self.op._tracer.job_proto.status = status
-        rpc(
-          nbox_grpc_stub.UpdateRun, UpdateRunRequest(
-            token = tracer.run_id, job = tracer.job_proto, updated_at = SimplerTimes.get_now_pb()
-          ), "Failed to end job!"
-        )
+        tracer.job_proto.status = status
+        tracer._rpc(f"RPC error in ending job {job_id}")
       U._exit_program()
 
   def serve(self, host: str = "0.0.0.0", port: int = 8000, *, model_name: str = None):
