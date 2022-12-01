@@ -195,12 +195,27 @@ class Astea:
           items.add(tea)
         
         # if this node is a class and node 'n' is a staticmethod then assign is considered
-        elif type(n) == A.Assign and (type(self.node) == A.ClassDef or type(self.node) == A.Module):
-          try:
-            tea = Astea(name=n.targets[0].id, type=IndexTypes.ASSIGN, node=n, code_lines=self.code_lines, order_index=i)
+        elif type(n) == A.Assign:
+          target = n.targets[0]
+          if type(target) == A.Tuple:
+            # iterate over the tuple and add each item as VARIABLE
+            for j, nn in enumerate(target.elts):
+              tea = Astea(name=nn.id, type=IndexTypes.VARIABLE, node=n, code_lines=self.code_lines, order_index=i+j)
+              items.add(tea)
+            continue
+          elif type(target) == A.Name:
+            tea = Astea(name=target.id, type=IndexTypes.VARIABLE, node=n, code_lines=self.code_lines, order_index=i)
             items.add(tea)
-          except:
-            pass
+          else:
+            raise ValueError(f"Unknown type {type(target)} for target {target}")
+          if (type(self.node) == A.ClassDef or type(self.node) == A.Module):
+            try:
+              # this .id is very painful
+              tea = Astea(name=n.targets[0].id, type=IndexTypes.ASSIGN, node=n, code_lines=self.code_lines, order_index=i)
+              items.add(tea)
+            except:
+              # though we eventually want to get away with this try/except, we will keep it just in case
+              pass
         else:
           continue
     items = sorted(list(items), key=lambda x: x.order_index)
