@@ -442,7 +442,7 @@ class Serve:
       rpc(
       nbox_model_service_stub.SetModelPin,
       ModelRequest(model=Model(id=model_id,serving_group_id=self.serving_id,pin_status=Model.PinStatus.PIN_STATUS_PINNED), auth_info=NBXAuthInfo(workspace_id=self.workspace_id)),
-      "Could not deploy model",
+      "Could not pin model",
       raise_on_error=True
     )
     except Exception as e:
