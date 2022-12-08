@@ -17,7 +17,7 @@ from nbox.auth import secret, ConfigString
 from nbox.utils import logger
 from nbox.version import __version__
 from nbox.messages import rpc, streaming_rpc
-from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub
+from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub,nbox_model_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
 from nbox.hyperloop.nbox_ws_pb2 import JobRequest
@@ -25,7 +25,7 @@ from nbox.hyperloop.job_pb2 import Job as JobProto
 from nbox.hyperloop.dag_pb2 import DAG as DAGProto
 from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest
+from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, Model, ModelRequest
 
 
 
@@ -203,8 +203,8 @@ def upload_job_folder(
     raise ValueError(f"Invalid method: {method}, should be either {OT._valid_deployment_types()}")
   if (not name and not id) or (name and id):
     raise ValueError("Either --name or --id must be present")
-  if trigger and method != OT.JOB.value:
-    raise ValueError(f"Trigger can only be used with '{OT.JOB}'")
+  if trigger and (method != OT.JOB.value or method != OT.SERVING):
+    raise ValueError(f"Trigger can only be used with '{OT.JOB}' or '{OT.SERVING}'")
 
   if ":" not in init_folder:
     # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
@@ -336,6 +336,10 @@ def upload_job_folder(
       wait_for_deployment = False,
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
+    if trigger:
+      # trigger the serving
+      logger.info(f"Pinning model for serving: {serving_name} ({serving_id})")
+      out = out.pin()
   else:
     raise ValueError(f"Unknown method: {method}")
 
@@ -420,6 +424,31 @@ class Serve:
     self.serving_id = serving_id
     self.serving_name = serving_name
     self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
+  
+  def pin(self):
+    """Pin a model to the deployment
+
+    Args:
+      model_id (str, optional): Model ID. Defaults to None.
+      workspace_id (str, optional): Workspace ID. Defaults to "".
+    """
+    if model_id is None:
+      model_id = self.model_id
+    if model_id is None:
+      raise ValueError("Must provide model_id")
+    self.model_id = model_id
+    try:
+      logger.info(f"Pin model {model_id} to deployment {self.serving_id}")
+      rpc(
+      nbox_model_service_stub.SetModelPin,
+      ModelRequest(model=Model(id=model_id,serving_group_id=self.serving_id,pin_status=Model.PinStatus.PIN_STATUS_PINNED), auth_info=NBXAuthInfo(workspace_id=self.workspace_id)),
+      "Could not deploy model",
+      raise_on_error=True
+    )
+    except Exception as e:
+      logger.error(e)
+      logger.error("Could not pin model")
+      return False
 
   def __repr__(self) -> str:
     x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
