@@ -9,6 +9,7 @@ import tabulate
 from hashlib import md5
 from typing import List
 from copy import deepcopy
+from subprocess import Popen
 from functools import lru_cache
 
 from nbox.auth import secret
@@ -73,6 +74,15 @@ def print_relics(workspace_id: str = ""):
     logger.info(l)
 
 
+
+class UserAgentType:
+  PYTHON_REQUESTS = "python-requests"
+  CURL = "curl"
+
+  def all():
+    return [UserAgentType.PYTHON_REQUESTS, UserAgentType.CURL,]
+
+
 class RelicsNBX(BaseStore):
   list = staticmethod(print_relics)
 
@@ -102,7 +112,12 @@ class RelicsNBX(BaseStore):
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
     self.prefix = prefix.strip("/")
     self.stub = _get_stub()
-    _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
+    for _ in range(2):
+      _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
+      if _relic != None:
+        break
+      time.sleep(1)
+
     # print("asdfasdfasdfasdf", _relic, not _relic and create)
     if not _relic and create:
       # this means that a new one will have to be created
@@ -121,6 +136,14 @@ class RelicsNBX(BaseStore):
       logger.debug(f"Created new relic {self.relic}")
     else:
       self.relic = _relic
+    
+    self.uat = UserAgentType.PYTHON_REQUESTS
+
+  
+  def set_user_agent(self, user_agent_type: str):
+    if user_agent_type not in UserAgentType.all():
+      raise ValueError(f"Invalid user agent type: {user_agent_type}")
+    self.uat = user_agent_type
 
   def __repr__(self):
     return f"RelicStore({self.workspace_id}, {self.relic_name}, {'CONNECTED' if self.relic else 'NOT CONNECTED'})"
@@ -151,13 +174,17 @@ class RelicsNBX(BaseStore):
     # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
     logger.debug(f"URL: {out.url}")
     logger.debug(f"body: {out.body}")
-    r = requests.post(
-      url = out.url,
-      data = out.body,
-      files = {"file": (out.body["key"], open(local_path, "rb"))}
-    )
-    logger.debug(f"Upload status: {r.status_code}")
-    r.raise_for_status()
+    if self.uat == UserAgentType.PYTHON_REQUESTS:
+      r = requests.post(
+        url = out.url,
+        data = out.body,
+        files = {"file": (out.body["key"], open(local_path, "rb"))}
+      )
+      logger.debug(f"Upload status: {r.status_code}")
+      r.raise_for_status()
+    elif self.uat == UserAgentType.CURL:
+      Popen(["curl", "-X", "POST", "-H", "Content-Type: multipart/form-data", "-F", f"file=@{local_path}", out.url]).wait()
+
 
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
     if self.relic is None:

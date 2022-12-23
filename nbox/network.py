@@ -223,18 +223,18 @@ def deploy_job(
 def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
-    j: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
-    new_job = j.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
+    old_job_proto: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
+    new_job = old_job_proto.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
   except grpc.RpcError as e:
     if e.code() == grpc.StatusCode.NOT_FOUND:
       new_job = True
+      old_job_proto = JobProto()
     else:
       raise e
 
   if not new_job:
     # incase an old job exists, we need to update few things with the new information
     logger.debug("Found existing job, checking for update masks")
-    old_job_proto = Job(job_id=job_proto.id, workspace_id = workspace_id).job_proto
     paths = []
     if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
       paths.append("resource")
@@ -282,6 +282,24 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
       ),
       f"Failed to create job"
     )
+
+  if not old_job_proto.feature_gates:
+    print("Updating feature gates")
+    job_proto.feature_gates.update({
+      "UsePipCaching": "", # some string does not honour value
+      "EnableAuthRefresh": ""
+    })
+    rpc(
+      nbox_grpc_stub.UpdateJob,
+      UpdateJobRequest(
+        job = job_proto,
+        update_mask = FieldMask(paths = ["feature_gates"]),
+        auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get("username")),
+      ),
+      f"Failed to update job",
+      raise_on_error = False, # don't fail job because of this
+    )
+
 
   # write out all the commands for this job
   logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
