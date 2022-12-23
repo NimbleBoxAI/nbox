@@ -145,18 +145,3 @@ def nbox_version_update():
 if not env.NBOX_NO_CHECK_VERSION():
   nbox_version_update()
 
-import sys
-import signal
-
-def handle_sigint(signum, frame):
-  print(f"Received {signum}, shutting down gracefully...")
-  print(frame)
-  # Perform any necessary cleanup here
-  # Then exit the program
-  sys.exit(0)
-
-# handle keyboard interrupt
-# signal.signal(signal.SIGINT, handle_sigint)
-signal.signal(signal.SIGINT, handle_sigint)
-
-

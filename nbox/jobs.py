@@ -191,6 +191,7 @@ def upload_job_folder(
     resource_gpu_count (str, optional): GPU count resource. Defaults to "0".
     resource_timeout (int, optional): Timeout resource. Defaults to 120_000.
     resource_max_retries (int, optional): Max retries resource. Defaults to 2.
+    cron (str, optional): Cron string for scheduling. Defaults to "".
     workspace_id (str, optional): Workspace ID, if None uses the one from config. Defaults to "".
     init_kwargs (dict): kwargs to pass to the `init` function / class, if possible
   """
@@ -236,7 +237,6 @@ def upload_job_folder(
   if method == OT.SERVING.value:
     if serving_type not in ["nbox", "fastapi"]:
       raise ValueError(f"Invalid serving_type: {serving_type}, should be either 'nbox' or 'fastapi'")
-
     if serving_type == "fastapi":
       logger.warning(f"You have selected serving_type='fastapi', this assumes the object: {fn_name} is a FastAPI app")
       init_code = fn_name
