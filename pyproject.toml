@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nbox"
-version = "0.11.2c0"
+version = "0.11.2"
 description = "ML Inference 🥶"
 authors = [
   "NBX Research <research@nimblebox.ai>",
@@ -23,7 +23,7 @@ requests = "^2.25.1"
 tabulate = "0.8.9"
 protobuf = "3.20.2"
 mypy-protobuf = "3.2.0" # this is used for generating nbox spec
-grpcio = "1.43.0"
+grpcio = "1.51.1"
 Jinja2 = "3.0.3"
 cloudpickle = "2.1.0"
 python-json-logger = "2.0.2"

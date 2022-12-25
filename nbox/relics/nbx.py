@@ -3,6 +3,7 @@ This is the code for NBX-Relics which is a simple file system for your organisat
 """
 import os
 import time
+import json
 import cloudpickle
 import requests
 import tabulate
@@ -14,7 +15,8 @@ from functools import lru_cache
 
 from nbox.auth import secret
 from nbox.init import nbox_ws_v1
-from nbox.utils import logger, env
+from nbox.messages import message_to_dict
+from nbox.utils import logger, env, get_mime_type
 from nbox.sublime.relics_rpc_client import (
   RelicStore_Stub,
   RelicFile,
@@ -99,7 +101,7 @@ class RelicsNBX(BaseStore):
     nbx_integration_token: str = "",
   ):
     """
-    The client for NBX-Relics.
+    The client for NBX-Relics. Auto switches to different user/agents for upload download
 
     Args:
       relic_name (str): The name of the relic.
@@ -143,6 +145,7 @@ class RelicsNBX(BaseStore):
   def set_user_agent(self, user_agent_type: str):
     if user_agent_type not in UserAgentType.all():
       raise ValueError(f"Invalid user agent type: {user_agent_type}")
+    logger.info(f"Setting user agent to {user_agent_type} from {self.uat}")
     self.uat = user_agent_type
 
   def __repr__(self):
@@ -153,6 +156,10 @@ class RelicsNBX(BaseStore):
       raise ValueError("relic_name not set in RelicFile")
     if self.prefix:
       relic_file.name = f"{self.prefix}/{relic_file.name}"
+    if "." in local_path:
+      mime = get_mime_type(local_path.split(".")[-1], "application/octet-stream")
+    else:
+      mime = "application/octet-stream"
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Uploading {local_path} to {relic_file.name}")
@@ -165,16 +172,21 @@ class RelicsNBX(BaseStore):
     if not out.url:
       raise Exception("Could not get link")
 
-    # do not perform merge here because "url" might get stored in MongoDB
+    # do merge 'out' and 'relic_file' here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
-    if out.size > 10 ** 7:
-      logger.warning(f"File {local_path} is large ({out.size} bytes), this might take a while")
+    ten_mb = 10 ** 7
+    uat = self.uat
+    if out.size > ten_mb:
+      logger.warning(f"File {local_path} is larger than 10 MiB ({out.size} bytes), this might take a while")
+      logger.warning(f"Switching to user/agent: cURL for this upload")
+      uat = UserAgentType.CURL
 
     # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
     # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
-    logger.debug(f"URL: {out.url}")
-    logger.debug(f"body: {out.body}")
-    if self.uat == UserAgentType.PYTHON_REQUESTS:
+
+    if uat == UserAgentType.PYTHON_REQUESTS:
+      logger.debug(f"URL: {out.url}")
+      logger.debug(f"body: {out.body}")
       r = requests.post(
         url = out.url,
         data = out.body,
@@ -182,8 +194,19 @@ class RelicsNBX(BaseStore):
       )
       logger.debug(f"Upload status: {r.status_code}")
       r.raise_for_status()
-    elif self.uat == UserAgentType.CURL:
-      Popen(["curl", "-X", "POST", "-H", "Content-Type: multipart/form-data", "-F", f"file=@{local_path}", out.url]).wait()
+    elif uat == UserAgentType.CURL:
+      # TIL: https://stackoverflow.com/a/58237351
+      # the fields in the post can be sent in any order
+
+      import shlex
+      shell_com = f'curl -X POST -F key={out.body["key"]} '
+      for k,v in out.body.items():
+        if k == "key":
+          continue
+        shell_com += f'-F {k}={v} '
+      shell_com += f'-F file="@{local_path}" {out.url}'
+      logger.debug(f"Running shell command: {shell_com}")
+      Popen(shlex.split(shell_com)).wait()
 
 
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
