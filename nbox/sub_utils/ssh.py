@@ -111,9 +111,9 @@ class RSockClient:
     """
     self.log('Connecting to RSockServer', "DEBUG")
     token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
-    local_cred = grpc.local_channel_credentials()
-    creds = grpc.composite_channel_credentials(local_cred, token_cred)
-    channel = grpc.secure_channel("localhost:50051", creds)
+    ssl_cred = grpc.ssl_channel_credentials()
+    creds = grpc.composite_channel_credentials(ssl_cred, token_cred)
+    channel = grpc.secure_channel("rsock.nimblebox.ai", creds)
 
     stub = RSocketStub(channel)
     self.rsock_stub = stub
@@ -173,7 +173,7 @@ class RSockClient:
       exit(1)
 
   def client_stream(self):
-    print("Starting client stream", self.client_thread_running)
+    self.log(f"Starting client stream ", "DEBUG")
     while self.client_thread_running:
       data = self.client_socket.recv(1024)
       if data:
