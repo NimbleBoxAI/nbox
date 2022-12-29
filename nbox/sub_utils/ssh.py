@@ -25,10 +25,14 @@ import threading
 import subprocess
 from time import sleep
 from typing import List
+
+import grpc
 from nbox.utils import logger as nbx_logger, FileLogger
 from nbox import utils as U
 from nbox.auth import secret, ConfigString
 from nbox.instance import Instance
+from nbox.sub_utils.rsock_pb.rsock_pb2_grpc import RSocketStub
+from nbox.sub_utils.rsock_pb.rsock_pb2 import HandshakeRequest, HandshakeResponse, DataPacket
 
 class RSockClient:
   # This is a RSockClient. It handels the client socket where client is the user application trying to connect to "client_port"
@@ -60,7 +64,7 @@ class RSockClient:
   #     - The thread is created by calling the function "io_copy" for each connection that is "server" and "client".
   #     - When a connection is closed, the loop is stopped.
 
-  def __init__(self, connection_id, client_socket, user, subdomain, instance_port, file_logger, auth, secure=False):
+  def __init__(self, connection_id, client_socket, user, subdomain, launch_url, instance_port, file_logger, auth, secure=False):
     """
     Initializes a reverse sockets client.
 
@@ -76,6 +80,7 @@ class RSockClient:
     self.client_socket = client_socket
     self.user = user
     self.subdomain = subdomain
+    self.launch_url = launch_url
     self.instance_port = instance_port
     self.auth = auth
     self.secure = secure
@@ -88,10 +93,11 @@ class RSockClient:
     self.log('Starting client')
     self.connect_to_rsock_server()
     self.log('Connected to RSockServer')
-    # self.authenticate()
+    self.authenticate()
     # self.log('Authenticated client')
-    self.set_config()
     self.log('Client init complete')
+
+    self.rsock_connection_token = None
 
   def __repr__(self):
     return f"RSockClient({self.subdomain} | {self.connection_id})"
@@ -104,48 +110,42 @@ class RSockClient:
     Connects to RSockServer.
     """
     self.log('Connecting to RSockServer', "DEBUG")
-    rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    rsock_socket.connect(('rsock.nimblebox.ai', 886))
+    token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
+    local_cred = grpc.local_channel_credentials()
+    creds = grpc.composite_channel_credentials(local_cred, token_cred)
+    channel = grpc.secure_channel("localhost:50051", creds)
 
-    if self.secure:
-      self.log('Starting SSL')
-      certfile = U.join(U.folder(__file__), "pub.crt")
-      self.rsock_socket = ssl.wrap_socket(rsock_socket, ca_certs=certfile, cert_reqs=ssl.CERT_REQUIRED)
-    else:
-      self.rsock_socket = rsock_socket
+    stub = RSocketStub(channel)
+    self.rsock_stub = stub
+
+    # rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # rsock_socket.connect(('rsock.nimblebox.ai', 886))
+    # if self.secure:
+    #   self.log('Starting SSL')
+    #   certfile = U.join(U.folder(__file__), "pub.crt")
+    #   self.rsock_socket = ssl.wrap_socket(rsock_socket, ca_certs=certfile, cert_reqs=ssl.CERT_REQUIRED)
+    # else:
+    #   self.rsock_socket = rsock_socket
 
   def authenticate(self):
     """
     Authenticates the client.
     Sends `"AUTH~{AUTH_TOKEN}"` to RSockServer.
     """
-    self.log('Authenticating client')
-    self.rsock_socket.sendall(bytes('AUTH~{}'.format(self.auth), 'utf-8'))
-    auth = self.rsock_socket.recv(1024)
-    auth = auth.decode('utf-8')
-    if auth == 'OK':
-      self.log('Client authenticated')
-    else:
-      self.log('Client authentication failed', "ERROR")
-      self.client_auth = False
-      exit(1)
-  
-  def set_config(self):
-    """
-    Sets the config of the client.
-    Sends `"SET_CONFIG~{instance}~{instance_port}"` to RSockServer.
-    """
-    self.log('Setting config')
-    self.rsock_socket.sendall(bytes('SET_CLIENT~{}~{}~{}~{}'.format(self.user, self.subdomain, self.instance_port, self.auth), 'utf-8'))
-    config = self.rsock_socket.recv(1024)
-    config = config.decode('utf-8')
-    self.log('Config set to {}'.format(config))
-    if config == 'OK':
+    try:
+      resp: HandshakeResponse = self.rsock_stub.Handshake(HandshakeRequest(
+        jwt = self.auth,
+        instanceKey = self.subdomain,
+        launchURL = self.launch_url,
+        port = str(self.instance_port),
+      ))
+      self.rsock_connection_token = resp.token
       self.client_auth = True
-      self.log('Config set')
-    else:
-      self.log('Config set failed', "ERROR")
+    except grpc.RpcError as e:
+      self.log(f"Authentication failed: {e}", "ERROR")
       exit(1)
+    
+    
 
   def connect(self):
     """
@@ -153,24 +153,18 @@ class RSockClient:
     Sends `"CONNECT"` to RSockServer.
     """
     if self.client_auth:
-      self.log('Starting the io_copy loop')
-      self.rsock_socket.sendall(bytes('CONNECT', 'utf-8'))
-
-      connect_status = self.rsock_socket.recv(1024)
-      connect_status = connect_status.decode('utf-8')
-      self.log('Connected status: {}'.format(connect_status))
-      if connect_status == 'OK':
-        self.log('Connected to project...')
-      else:
-        self.log('Connect failed', "ERROR")
+      stream_iterator = None
+      try:
+        self.rsock_thread_running = True
+        self.client_thread_running = True
+        stream_iterator = self.rsock_stub.Tunnel(self.client_stream())
+        # start the io_copy loop
+      except grpc.RpcError as e:
+        self.log(f"Connection failed: {e}", "ERROR")
         exit(1)
 
-      # start the io_copy loop
-      self.rsock_thread_running = True
-      self.client_thread_running = True
-
-      self.rsock_thread = threading.Thread(target=self.io_copy, args=("server", ))
-      self.client_thread = threading.Thread(target=self.io_copy, args=("client", ))
+      self.rsock_thread = threading.Thread(target=self.server_stream, args=(stream_iterator, ))
+      self.client_thread = threading.Thread(target=self.client_stream)
 
       self.rsock_thread.start()
       self.client_thread.start()
@@ -178,38 +172,23 @@ class RSockClient:
       self.log('Client authentication failed', "ERROR")
       exit(1)
 
-  def io_copy(self, direction):
-    """
-    This is the main loop that handles the data transfer between client and server.
-    """
-    self.log('Starting {} io_copy'.format(direction))
-
-    if direction == 'client':
-      client_socket = self.client_socket
-      server_socket = self.rsock_socket
-
-    elif direction == 'server':
-      client_socket = self.rsock_socket
-      server_socket = self.client_socket
-
-    while self.rsock_thread_running and self.client_thread_running:
-      try:
-        data = client_socket.recv(1024)
-        if data:
-          # self.log('{} data: {}'.format(direction, data))
-          server_socket.sendall(data)
-        else:
-          self.log('{} connection closed'.format(direction))
-          break
-      except Exception as e:
-        self.log('Error in {} io_copy: {}'.format(direction, e), "ERROR")
-        break
-
-    self.rsock_thread_running = False
-    self.rsock_thread_running = False
-    
-    self.log('Stopping {} io_copy'.format(direction))
+  def client_stream(self):
+    print("Starting client stream", self.client_thread_running)
+    while self.client_thread_running:
+      data = self.client_socket.recv(1024)
+      if data:
+        yield DataPacket(
+          token = self.rsock_connection_token,
+          data = data,
+        )
   
+  def server_stream(self,stream):
+    try:
+      for response in stream:
+        self.client_socket.sendall(response.data)
+    except grpc.RpcError as e:
+      self.log(f"Connection failed: {e}", "ERROR")
+      exit(1)
   def stop(self):
     """
     Stops the client.
@@ -218,12 +197,11 @@ class RSockClient:
     self.rsock_thread_running = False
     self.client_thread_running = False
     self.client_socket.close()
-    self.rsock_socket.close()
     self.log('Client stopped')
 
 
 class ConnectionManager:
-  def __init__(self, user: str, subdomain: str, file_logger: str, auth: str, notsecure: bool = False):
+  def __init__(self, user: str, subdomain: str, file_logger: str, auth: str, launch_url:str, notsecure: bool = False):
     """
     Args:
       localport: The port that the client will be listening on.
@@ -237,6 +215,7 @@ class ConnectionManager:
     self.subdomain = subdomain
     self.file_logger = file_logger
     self.auth = auth
+    self.launch_url = launch_url
     self.notsecure = notsecure
     self.connection_id = 0
 
@@ -278,7 +257,7 @@ class ConnectionManager:
 
       # create the client
       secure = not self.notsecure
-      client = RSockClient(self.connection_id, client_socket, self.user, self.subdomain, buildport, self.file_logger, self.auth, secure)
+      client = RSockClient(self.connection_id, client_socket, self.user, self.subdomain, self.launch_url, buildport, self.file_logger, self.auth, secure)
       self.clients.append(client)
 
       # start the client
@@ -289,7 +268,7 @@ class ConnectionManager:
     self.done = False
     sleep(2)
     for client in self.clients:
-      client.rsock_socket.close()
+      client.stop()
     for thread in self.threads:
       thread.join()
 
@@ -349,6 +328,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
     user = secret.get("username"), 
     subdomain = instance.open_data.get("url"),
     auth = instance.open_data.get("token"),
+    launch_url = instance.open_data.get("launch_url"),
   )
   for localport, buildport in apps.items():
     nbx_logger.debug(f"Creating connection from NBX:{buildport} -> local:{localport}")
