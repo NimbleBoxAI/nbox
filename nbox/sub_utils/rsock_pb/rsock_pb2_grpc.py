@@ -5,7 +5,7 @@ import grpc
 import nbox.sub_utils.rsock_pb.rsock_pb2 as rsock__pb2
 
 
-class RSocketStub(object):
+class RSockStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -15,18 +15,18 @@ class RSocketStub(object):
             channel: A grpc.Channel.
         """
         self.Handshake = channel.unary_unary(
-                '/rsock.RSocket/Handshake',
+                '/rsock.RSock/Handshake',
                 request_serializer=rsock__pb2.HandshakeRequest.SerializeToString,
                 response_deserializer=rsock__pb2.HandshakeResponse.FromString,
                 )
         self.Tunnel = channel.stream_stream(
-                '/rsock.RSocket/Tunnel',
+                '/rsock.RSock/Tunnel',
                 request_serializer=rsock__pb2.DataPacket.SerializeToString,
                 response_deserializer=rsock__pb2.DataPacket.FromString,
                 )
 
 
-class RSocketServicer(object):
+class RSockServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Handshake(self, request, context):
@@ -42,7 +42,7 @@ class RSocketServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_RSocketServicer_to_server(servicer, server):
+def add_RSockServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Handshake': grpc.unary_unary_rpc_method_handler(
                     servicer.Handshake,
@@ -56,12 +56,12 @@ def add_RSocketServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'rsock.RSocket', rpc_method_handlers)
+            'rsock.RSock', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
 
 
  # This class is part of an EXPERIMENTAL API.
-class RSocket(object):
+class RSock(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -75,7 +75,7 @@ class RSocket(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.unary_unary(request, target, '/rsock.RSocket/Handshake',
+        return grpc.experimental.unary_unary(request, target, '/rsock.RSock/Handshake',
             rsock__pb2.HandshakeRequest.SerializeToString,
             rsock__pb2.HandshakeResponse.FromString,
             options, channel_credentials,
@@ -92,7 +92,7 @@ class RSocket(object):
             wait_for_ready=None,
             timeout=None,
             metadata=None):
-        return grpc.experimental.stream_stream(request_iterator, target, '/rsock.RSocket/Tunnel',
+        return grpc.experimental.stream_stream(request_iterator, target, '/rsock.RSock/Tunnel',
             rsock__pb2.DataPacket.SerializeToString,
             rsock__pb2.DataPacket.FromString,
             options, channel_credentials,

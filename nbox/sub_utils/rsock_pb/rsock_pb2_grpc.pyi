@@ -7,7 +7,7 @@ import grpc
 import rsock_pb2
 import typing
 
-class RSocketStub:
+class RSockStub:
     def __init__(self, channel: grpc.Channel) -> None: ...
     Handshake: grpc.UnaryUnaryMultiCallable[
         rsock_pb2.HandshakeRequest,
@@ -18,7 +18,7 @@ class RSocketStub:
         rsock_pb2.DataPacket]
 
 
-class RSocketServicer(metaclass=abc.ABCMeta):
+class RSockServicer(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def Handshake(self,
         request: rsock_pb2.HandshakeRequest,
@@ -32,4 +32,4 @@ class RSocketServicer(metaclass=abc.ABCMeta):
     ) -> typing.Iterator[rsock_pb2.DataPacket]: ...
 
 
-def add_RSocketServicer_to_server(servicer: RSocketServicer, server: grpc.Server) -> None: ...
+def add_RSockServicer_to_server(servicer: RSockServicer, server: grpc.Server) -> None: ...

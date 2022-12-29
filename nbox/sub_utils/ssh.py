@@ -31,7 +31,7 @@ from nbox.utils import logger as nbx_logger, FileLogger
 from nbox import utils as U
 from nbox.auth import secret, ConfigString
 from nbox.instance import Instance
-from nbox.sub_utils.rsock_pb.rsock_pb2_grpc import RSocketStub
+from nbox.sub_utils.rsock_pb.rsock_pb2_grpc import RSockStub
 from nbox.sub_utils.rsock_pb.rsock_pb2 import HandshakeRequest, HandshakeResponse, DataPacket
 
 class RSockClient:
@@ -115,7 +115,7 @@ class RSockClient:
     creds = grpc.composite_channel_credentials(ssl_cred, token_cred)
     channel = grpc.secure_channel("rsock.nimblebox.ai", creds)
 
-    stub = RSocketStub(channel)
+    stub = RSockStub(channel)
     self.rsock_stub = stub
 
     # rsock_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
