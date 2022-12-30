@@ -80,7 +80,7 @@ class RSockClient:
     self.client_socket = client_socket
     self.user = user
     self.subdomain = subdomain
-    self.launch_url = launch_url
+    self.launch_url: str = launch_url
     self.instance_port = instance_port
     self.auth = auth
     self.secure = secure
@@ -88,6 +88,7 @@ class RSockClient:
     self.client_auth = False
     self.rsock_thread_running = False
     self.client_thread_running = False
+    self.rsock_connection_token = None
     self.logger = file_logger
 
     self.log('Starting client')
@@ -97,7 +98,6 @@ class RSockClient:
     # self.log('Authenticated client')
     self.log('Client init complete')
 
-    self.rsock_connection_token = None
 
   def __repr__(self):
     return f"RSockClient({self.subdomain} | {self.connection_id})"
@@ -113,7 +113,7 @@ class RSockClient:
     token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
     ssl_cred = grpc.ssl_channel_credentials()
     creds = grpc.composite_channel_credentials(ssl_cred, token_cred)
-    channel = grpc.secure_channel("rsock.nimblebox.ai", creds)
+    channel = grpc.secure_channel(f'{self.launch_url.replace("https://","").replace(self.subdomain,"rsock")}:443', creds)
 
     stub = RSockStub(channel)
     self.rsock_stub = stub
@@ -164,16 +164,14 @@ class RSockClient:
         exit(1)
 
       self.rsock_thread = threading.Thread(target=self.server_stream, args=(stream_iterator, ))
-      self.client_thread = threading.Thread(target=self.client_stream)
+     
 
       self.rsock_thread.start()
-      self.client_thread.start()
     else:
       self.log('Client authentication failed', "ERROR")
       exit(1)
 
   def client_stream(self):
-    self.log(f"Starting client stream ", "DEBUG")
     while self.client_thread_running:
       data = self.client_socket.recv(1024)
       if data:
