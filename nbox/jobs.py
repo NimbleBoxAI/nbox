@@ -514,8 +514,9 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
   headers = ['created_at', 'id', 'name', 'schedule', 'status']
   try:
     sorted_jobs = sorted(out.jobs, key = lambda x: getattr(x, sort))
-  except:
+  except Exception as e:
     logger.error(f"Cannot sort on key: {sort}")
+    sorted_jobs = out.jobs
   data = []
   for j in sorted_jobs:
     _row = []
