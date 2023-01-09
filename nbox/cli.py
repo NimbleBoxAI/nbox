@@ -67,9 +67,10 @@ class Config(object):
     workspace_name = secret.get(ConfigString.workspace_name)
     logger.info(
       "\nnbox config:\n" \
-      f"  workspace_id: {workspace_id}\n" \
       f"  workspace_name: {workspace_name}\n" \
-      f"  nbox version: {V}" \
+      f"    workspace_id: {workspace_id}\n" \
+      f"    nbox version: {V}\n" \
+      f"             URL: {secret.get('nbx_url')}"
     )
 
 def open_home():

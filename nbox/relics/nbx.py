@@ -176,6 +176,7 @@ class RelicsNBX(BaseStore):
     # relic_file.MergeFrom(out)
     ten_mb = 10 ** 7
     uat = self.uat
+    old_uat = uat
     if out.size > ten_mb:
       logger.warning(f"File {local_path} is larger than 10 MiB ({out.size} bytes), this might take a while")
       logger.warning(f"Switching to user/agent: cURL for this upload")
@@ -208,6 +209,10 @@ class RelicsNBX(BaseStore):
       logger.debug(f"Running shell command: {shell_com}")
       Popen(shlex.split(shell_com)).wait()
 
+    if old_uat != uat:
+      logger.warning(f"Restoring user/agent to {old_uat}")
+      self.set_user_agent(old_uat)
+
 
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
     if self.relic is None:
@@ -225,21 +230,36 @@ class RelicsNBX(BaseStore):
 
     if not out.url:
       raise Exception("Could not get link, are you sure this file exists?")
-    
-    # do not perform merge here because "url" might get stored in MongoDB
-    # relic_file.MergeFrom(out)
-    logger.debug(f"URL: {out.url}")
-    with requests.get(out.url, stream=True) as r:
-      r.raise_for_status()
-      total_size = 0
-      with open(local_path, 'wb') as f:
-        for chunk in r.iter_content(chunk_size=8192): 
-          # If you have chunk encoded response uncomment if
-          # and set chunk_size parameter to None.
-          #if chunk: 
-          f.write(chunk)
-          total_size += len(chunk)
-    logger.debug(f"Download '{local_path}' status: OK ({total_size//1024} KB)")
+
+    # same logic as in upload but for download
+    ten_mb = 10 ** 7
+    uat = self.uat
+    if out.size > ten_mb:
+      logger.warning(f"File {local_path} is larger than 10 MiB ({out.size} bytes), this might take a while")
+      logger.warning(f"Switching to user/agent: cURL for this download")
+      uat = UserAgentType.CURL
+
+    if uat == UserAgentType.PYTHON_REQUESTS:    
+      # do not perform merge here because "url" might get stored in MongoDB
+      # relic_file.MergeFrom(out)
+      logger.debug(f"URL: {out.url}")
+      with requests.get(out.url, stream=True) as r:
+        r.raise_for_status()
+        total_size = 0
+        with open(local_path, 'wb') as f:
+          for chunk in r.iter_content(chunk_size=8192): 
+            # If you have chunk encoded response uncomment if
+            # and set chunk_size parameter to None.
+            #if chunk: 
+            f.write(chunk)
+            total_size += len(chunk)
+    elif uat == UserAgentType.CURL:
+      import shlex
+      shell_com = f'curl -o {local_path} {out.url}'
+      logger.debug(f"Running shell command: {shell_com}")
+      Popen(shlex.split(shell_com)).wait()
+      total_size = os.path.getsize(local_path)
+    logger.debug(f"Download '{local_path}' status: OK ({total_size//1000} KiB)")
 
   """
   At it's core the Relic is supposed to be a file system and not a client. Thus you cannot download something
