@@ -294,7 +294,8 @@ class Instance():
       base_domain = launch_data['base_domain']
       self.open_data = {
         "url": f"{base_domain}",
-        "token": self.stub_ws_instance._session.cookies.get_dict()[f"instance_token_{base_domain}"]
+        "token": self.stub_ws_instance._session.cookies.get_dict()[f"instance_id_{base_domain}"],
+        "launch_url": launch_data['launch_url']
       }
       self.__opened = True
 
