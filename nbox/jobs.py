@@ -354,6 +354,7 @@ the highest levels of consistency with the NBX-Jobs API.
 
 @lru_cache()
 def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+  print("Getting deployment data", name, id, workspace_id)
   if (not name and not id) or (name and id):
     logger.warning("Must provide either name or id")
     return None, None
@@ -400,6 +401,8 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
     logger.info(l)
 
 
+
+
 class Serve:
   status = staticmethod(print_serving_list)
   upload = staticmethod(partial(upload_job_folder, "serving"))
@@ -417,7 +420,7 @@ class Serve:
     if workspace_id is None:
       raise DeprecationWarning("Personal workspace does not support serving")
     else:
-      serving_id, serving_name = _get_deployment_data(id = self.id, workspace_id = self.workspace_id)
+      serving_id, serving_name = _get_deployment_data( name = "", id = self.id, workspace_id = self.workspace_id) # TODO add name support
     self.serving_id = serving_id
     self.serving_name = serving_name
     self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
@@ -447,7 +450,32 @@ class Serve:
       logger.error(e)
       logger.error("Could not pin model")
       return False
+  
+  def unpin(self) -> bool:
+    """Pin a model to the deployment
 
+    Args:
+      model_id (str, optional): Model ID. Defaults to None.
+      workspace_id (str, optional): Workspace ID. Defaults to "".
+    """
+    try:
+      logger.info(f"Unpin model {self.model_id} to deployment {self.serving_id}")
+      rpc(
+        nbox_model_service_stub.SetModelPin,
+        ModelRequest(
+          model = ModelProto(
+            id = self.model_id,
+            serving_group_id = self.serving_id,
+            pin_status = ModelProto.PinStatus.PIN_STATUS_UNPINNED
+          ),
+          auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        "Could not pin model",
+        raise_on_error=True
+      )
+    except Exception as e:
+      logger.error(e)
+      logger.error("Could not unpin model")
+      return False
 
   def __repr__(self) -> str:
     x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
