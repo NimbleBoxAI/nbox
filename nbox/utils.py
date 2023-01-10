@@ -43,11 +43,11 @@ import randomname
 import cloudpickle
 from uuid import uuid4
 from typing import List
-from functools import partial
 from contextlib import contextmanager
 from base64 import b64encode, b64decode
 from datetime import datetime, timezone
 from pythonjsonlogger import jsonlogger
+from functools import partial, lru_cache
 from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from google.protobuf.timestamp_pb2 import Timestamp as Timestamp_pb
@@ -282,6 +282,8 @@ def from_json(x: str):
   else:
     return json.loads(x)
 
+def get_assets_folder():
+  return join(folder(__file__), "assets")
 
 # /path
 
@@ -296,6 +298,14 @@ def get_random_name(uuid = False):
 def hash_(item, fn="md5"):
   """Hash sting of any item"""
   return getattr(hashlib, fn)(str(item).encode("utf-8")).hexdigest()
+
+
+@lru_cache()
+def get_mime_type(x: str, defualt = "application/octet-stream"):
+  with open(join(get_assets_folder(), "ex2mime.json"), "r") as f:
+    mimes = json.load(f)
+  return mimes.get(x, defualt)
+
 
 # /misc
 

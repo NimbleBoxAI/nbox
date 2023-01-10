@@ -11,8 +11,8 @@ This file loads first and is responsible for setting up all the global networkin
 """
 
 import os
-import grpc
 import json
+import grpc
 import requests
 
 try:

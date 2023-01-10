@@ -3,17 +3,20 @@ This is the code for NBX-Relics which is a simple file system for your organisat
 """
 import os
 import time
+import json
 import cloudpickle
 import requests
 import tabulate
 from hashlib import md5
 from typing import List
 from copy import deepcopy
+from subprocess import Popen
 from functools import lru_cache
 
 from nbox.auth import secret
 from nbox.init import nbox_ws_v1
-from nbox.utils import logger, env
+from nbox.messages import message_to_dict
+from nbox.utils import logger, env, get_mime_type
 from nbox.sublime.relics_rpc_client import (
   RelicStore_Stub,
   RelicFile,
@@ -73,6 +76,15 @@ def print_relics(workspace_id: str = ""):
     logger.info(l)
 
 
+
+class UserAgentType:
+  PYTHON_REQUESTS = "python-requests"
+  CURL = "curl"
+
+  def all():
+    return [UserAgentType.PYTHON_REQUESTS, UserAgentType.CURL,]
+
+
 class RelicsNBX(BaseStore):
   list = staticmethod(print_relics)
 
@@ -89,7 +101,7 @@ class RelicsNBX(BaseStore):
     nbx_integration_token: str = "",
   ):
     """
-    The client for NBX-Relics.
+    The client for NBX-Relics. Auto switches to different user/agents for upload download
 
     Args:
       relic_name (str): The name of the relic.
@@ -102,7 +114,12 @@ class RelicsNBX(BaseStore):
     self.username = secret.get("username") # if its in the job then this part will automatically be filled
     self.prefix = prefix.strip("/")
     self.stub = _get_stub()
-    _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
+    for _ in range(2):
+      _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
+      if _relic != None:
+        break
+      time.sleep(1)
+
     # print("asdfasdfasdfasdf", _relic, not _relic and create)
     if not _relic and create:
       # this means that a new one will have to be created
@@ -121,6 +138,15 @@ class RelicsNBX(BaseStore):
       logger.debug(f"Created new relic {self.relic}")
     else:
       self.relic = _relic
+    
+    self.uat = UserAgentType.PYTHON_REQUESTS
+
+  
+  def set_user_agent(self, user_agent_type: str):
+    if user_agent_type not in UserAgentType.all():
+      raise ValueError(f"Invalid user agent type: {user_agent_type}")
+    logger.info(f"Setting user agent to {user_agent_type} from {self.uat}")
+    self.uat = user_agent_type
 
   def __repr__(self):
     return f"RelicStore({self.workspace_id}, {self.relic_name}, {'CONNECTED' if self.relic else 'NOT CONNECTED'})"
@@ -130,6 +156,10 @@ class RelicsNBX(BaseStore):
       raise ValueError("relic_name not set in RelicFile")
     if self.prefix:
       relic_file.name = f"{self.prefix}/{relic_file.name}"
+    if "." in local_path:
+      mime = get_mime_type(local_path.split(".")[-1], "application/octet-stream")
+    else:
+      mime = "application/octet-stream"
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Uploading {local_path} to {relic_file.name}")
@@ -142,22 +172,47 @@ class RelicsNBX(BaseStore):
     if not out.url:
       raise Exception("Could not get link")
 
-    # do not perform merge here because "url" might get stored in MongoDB
+    # do merge 'out' and 'relic_file' here because "url" might get stored in MongoDB
     # relic_file.MergeFrom(out)
-    if out.size > 10 ** 7:
-      logger.warning(f"File {local_path} is large ({out.size} bytes), this might take a while")
+    ten_mb = 10 ** 7
+    uat = self.uat
+    old_uat = uat
+    if out.size > ten_mb:
+      logger.warning(f"File {local_path} is larger than 10 MiB ({out.size} bytes), this might take a while")
+      logger.warning(f"Switching to user/agent: cURL for this upload")
+      uat = UserAgentType.CURL
 
     # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
     # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
-    logger.debug(f"URL: {out.url}")
-    logger.debug(f"body: {out.body}")
-    r = requests.post(
-      url = out.url,
-      data = out.body,
-      files = {"file": (out.body["key"], open(local_path, "rb"))}
-    )
-    logger.debug(f"Upload status: {r.status_code}")
-    r.raise_for_status()
+
+    if uat == UserAgentType.PYTHON_REQUESTS:
+      logger.debug(f"URL: {out.url}")
+      logger.debug(f"body: {out.body}")
+      r = requests.post(
+        url = out.url,
+        data = out.body,
+        files = {"file": (out.body["key"], open(local_path, "rb"))}
+      )
+      logger.debug(f"Upload status: {r.status_code}")
+      r.raise_for_status()
+    elif uat == UserAgentType.CURL:
+      # TIL: https://stackoverflow.com/a/58237351
+      # the fields in the post can be sent in any order
+
+      import shlex
+      shell_com = f'curl -X POST -F key={out.body["key"]} '
+      for k,v in out.body.items():
+        if k == "key":
+          continue
+        shell_com += f'-F {k}={v} '
+      shell_com += f'-F file="@{local_path}" {out.url}'
+      logger.debug(f"Running shell command: {shell_com}")
+      Popen(shlex.split(shell_com)).wait()
+
+    if old_uat != uat:
+      logger.warning(f"Restoring user/agent to {old_uat}")
+      self.set_user_agent(old_uat)
+
 
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
     if self.relic is None:
@@ -175,21 +230,36 @@ class RelicsNBX(BaseStore):
 
     if not out.url:
       raise Exception("Could not get link, are you sure this file exists?")
-    
-    # do not perform merge here because "url" might get stored in MongoDB
-    # relic_file.MergeFrom(out)
-    logger.debug(f"URL: {out.url}")
-    with requests.get(out.url, stream=True) as r:
-      r.raise_for_status()
-      total_size = 0
-      with open(local_path, 'wb') as f:
-        for chunk in r.iter_content(chunk_size=8192): 
-          # If you have chunk encoded response uncomment if
-          # and set chunk_size parameter to None.
-          #if chunk: 
-          f.write(chunk)
-          total_size += len(chunk)
-    logger.debug(f"Download '{local_path}' status: OK ({total_size//1024} KB)")
+
+    # same logic as in upload but for download
+    ten_mb = 10 ** 7
+    uat = self.uat
+    if out.size > ten_mb:
+      logger.warning(f"File {local_path} is larger than 10 MiB ({out.size} bytes), this might take a while")
+      logger.warning(f"Switching to user/agent: cURL for this download")
+      uat = UserAgentType.CURL
+
+    if uat == UserAgentType.PYTHON_REQUESTS:    
+      # do not perform merge here because "url" might get stored in MongoDB
+      # relic_file.MergeFrom(out)
+      logger.debug(f"URL: {out.url}")
+      with requests.get(out.url, stream=True) as r:
+        r.raise_for_status()
+        total_size = 0
+        with open(local_path, 'wb') as f:
+          for chunk in r.iter_content(chunk_size=8192): 
+            # If you have chunk encoded response uncomment if
+            # and set chunk_size parameter to None.
+            #if chunk: 
+            f.write(chunk)
+            total_size += len(chunk)
+    elif uat == UserAgentType.CURL:
+      import shlex
+      shell_com = f'curl -o {local_path} {out.url}'
+      logger.debug(f"Running shell command: {shell_com}")
+      Popen(shlex.split(shell_com)).wait()
+      total_size = os.path.getsize(local_path)
+    logger.debug(f"Download '{local_path}' status: OK ({total_size//1000} KiB)")
 
   """
   At it's core the Relic is supposed to be a file system and not a client. Thus you cannot download something

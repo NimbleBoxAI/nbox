@@ -49,7 +49,7 @@ class Subway():
   def u(self, attr: str):
     return getattr(self, attr)
 
-  def __call__(self, method = "get", trailing = "", json = {}, data = None, _verbose = False):
+  def __call__(self, method = "get", trailing = "", json = {}, data = None, _verbose = False, **kwargs):
     fn = getattr(self._session, method)
     url = f"{self._url}{trailing}"
     if _verbose:
@@ -59,11 +59,11 @@ class Subway():
       items["json"] = json
     if data:
       items["data"] = data
-    r = fn(url, **items)
+    r = fn(url, **items, **kwargs)
     if _verbose:
       logger.debug(r.content.decode())
-    r.raise_for_status() # good when server is good
     try:
+      r.raise_for_status() # good when server is good
       return r.json()
     except:
       return r.content.decode()
