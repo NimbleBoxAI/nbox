@@ -354,7 +354,7 @@ the highest levels of consistency with the NBX-Jobs API.
 
 @lru_cache()
 def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
-  print("Getting deployment data", name, id, workspace_id)
+  # print("Getting deployment data", name, id, workspace_id)
   if (not name and not id) or (name and id):
     logger.warning("Must provide either name or id")
     return None, None
