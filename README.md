@@ -8,6 +8,17 @@ Version](https://img.shields.io/badge/python-3.6%20%7C%203.7%20%7C%203.8%20%7C%2
 
 `nbox` provides first class API support for all NimbleBox.ai infrastructure (NBX-Build, Jobs, Deploy) and services (NBX-Workspaces) components. Write jobs using `nbox.Operators`
 
+## Installation
+
+```bash
+# on macos find the correct wheel file based on python version: https://github.com/pietrodn/grpcio-mac-arm-build/releases/tag/1.51.1
+pip install <wheel_url>
+pip install nbox
+
+# on linux
+pip install nbox
+```
+
 # 🤷Why NimbleBox
 
 - Write and execute code in Python

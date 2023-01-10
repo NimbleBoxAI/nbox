@@ -96,7 +96,10 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
     ModelRequest(model=
       Model(
         serving_group_id=serving_id, name=model_name,
-        code=Code(type=Code.Type.ZIP, size=int(max(file_size/(1024*1024), 1)),), # MBs
+        code=Code(
+          type=Code.Type.ZIP,
+          size=int(max(file_size/(1000*1000), 1)) # MiBs
+        ),
         type=Model.ServingType.SERVING_TYPE_NBOX_OP
         ),
       auth_info=NBXAuthInfo(workspace_id=workspace_id)
@@ -110,17 +113,42 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   logger.debug(f"deployment_id: {deployment_id}")
 
   # upload the file to a S3 -> don't raise for status here
-  # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
-  # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
   s3_url = response.code.s3_url
   s3_meta = response.code.s3_meta
-  logger.info(f"Uploading model to S3 ... (fs: {response.code.size/1024/1024:0.3f} MB)")
-  r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
-  try:
-    r.raise_for_status()
-  except:
-    logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
-    return
+
+  use_curl = False
+  if response.code.size > 10:
+    logger.warning(
+      f"File {zip_path} is larger than 10 MiB ({response.code.size} MiB), this might take a while\n"
+      f"Switching to user/agent: cURL for this upload\n"
+      f"Protip:\n"
+      f"  - if you are constantly uploading large files, take a look at nbox.Relics, that's the right tool for the job"
+    )
+    use_curl = True
+
+  if use_curl:
+    import shlex
+    from subprocess import Popen
+    shell_com = f'curl -X POST -F key={s3_meta["key"]} '
+    # for k,v in out.body.items():
+    for k,v in s3_meta.items():
+      if k == "key":
+        continue
+      shell_com += f'-F {k}={v} '
+    shell_com += f'-F file="@{zip_path}" {s3_url}'
+    logger.debug(f"Running shell command: {shell_com}")
+    out = Popen(shlex.split(shell_com)).wait()
+    if out != 0:
+      logger.error(f"Failed to upload model: {out}, please check logs for this")
+      return
+  else:
+    r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
+    try:
+      r.raise_for_status()
+    except:
+      logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
+      return
+
 
   # model is uploaded successfully, now we need to deploy it
   logger.info(f"Model uploaded successfully, deploying ...")
@@ -132,14 +160,14 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   )
 
   # write out all the commands for this deployment
-  logger.info("API will soon be hosted, here's how you can use it:")
+  # logger.info("API will soon be hosted, here's how you can use it:")
   # _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
   # _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
   # _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
+  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
   # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
-  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
   logger.info(f"  [page] - {_webpage}")
 
   return Serve(serving_id = serving_id, model_id = model_id, workspace_id = workspace_id)
@@ -223,18 +251,18 @@ def deploy_job(
 def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
-    j: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
-    new_job = j.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
+    old_job_proto: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
+    new_job = old_job_proto.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
   except grpc.RpcError as e:
     if e.code() == grpc.StatusCode.NOT_FOUND:
       new_job = True
+      old_job_proto = JobProto()
     else:
       raise e
 
   if not new_job:
     # incase an old job exists, we need to update few things with the new information
     logger.debug("Found existing job, checking for update masks")
-    old_job_proto = Job(job_id=job_proto.id, workspace_id = workspace_id).job_proto
     paths = []
     if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
       paths.append("resource")
@@ -260,6 +288,8 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
+  
+  # TODO: @yashbonde migrate requests to curl like Serve
   logger.info(f"Uploading model to S3 ... (fs: {job_proto.code.size/1024/1024:0.3f} MB)")
   r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
   try:
@@ -269,31 +299,38 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
     return
 
   # if this is the first time this is being created
-  if new_job:
-    job_proto.feature_gates.update({
+  def _update_feature_gates(proto: JobProto, **kwargs):
+    proto.feature_gates.update({
       "UsePipCaching": "", # some string does not honour value
       "EnableAuthRefresh": ""
     })
     rpc(
-      nbox_grpc_stub.CreateJob,
       JobRequest(
-        job = job_proto,
+        job = proto,
+        update_mask = FieldMask(paths = ["feature_gates"]),
         auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get("username"))
       ),
-      f"Failed to create job"
+      **kwargs
     )
 
+  if new_job:
+    print("Creating a new job")
+    _update_feature_gates(job_proto, stub = nbox_grpc_stub.CreateJob, err_msg = "Failed to create job")
+
+  if not old_job_proto.feature_gates:
+    print("Updating feature gates")
+    _update_feature_gates(job_proto, stub = nbox_grpc_stub.UpdateJob, err_msg = "Failed to update job", raise_on_error = False)
+
   # write out all the commands for this job
-  logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
+  # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
-  _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
+  # _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
   # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
   _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/jobs/{job_proto.id}"
   # logger.info(f" [python] - {_api}")
-  logger.info(f"    [CLI] - {_cli}")
+  # logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
-  # logger.info(f"   [page] - {_webpage}")
-  logger.info(f"See job on page: {_webpage}")
+  logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
   return Job(job_id = job_proto.id, workspace_id = workspace_id)

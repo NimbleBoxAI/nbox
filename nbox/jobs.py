@@ -17,7 +17,7 @@ from nbox.auth import secret, ConfigString
 from nbox.utils import logger
 from nbox.version import __version__
 from nbox.messages import rpc, streaming_rpc
-from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub
+from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub, nbox_model_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
 from nbox.hyperloop.nbox_ws_pb2 import JobRequest
@@ -25,7 +25,7 @@ from nbox.hyperloop.job_pb2 import Job as JobProto
 from nbox.hyperloop.dag_pb2 import DAG as DAGProto
 from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource
 from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest
+from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto
 
 
 
@@ -203,8 +203,8 @@ def upload_job_folder(
     raise ValueError(f"Invalid method: {method}, should be either {OT._valid_deployment_types()}")
   if (not name and not id) or (name and id):
     raise ValueError("Either --name or --id must be present")
-  if trigger and method != OT.JOB.value:
-    raise ValueError(f"Trigger can only be used with '{OT.JOB}'")
+  if trigger and method not in [OT.JOB.value, OT.SERVING.value]:
+    raise ValueError(f"Trigger can only be used with '{OT.JOB}' or '{OT.SERVING}'")
 
   if ":" not in init_folder:
     # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
@@ -226,18 +226,17 @@ def upload_job_folder(
   fn_name = fn_name.strip()
   if not os.path.exists(init_folder):
     raise ValueError(f"Folder {init_folder} does not exist")
+  logger.info(f"Uploading code from folder: {init_folder}:{file_name}:{fn_name}")
   _curdir = os.getcwd()
   os.chdir(init_folder)
 
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-  logger.info(f"Uploading code from folder: {init_folder}:{file_name}:{fn_name}")
 
   # Now that we have the init_folder and function name, we can throw relevant errors
   perform_tea = True
   if method == OT.SERVING.value:
     if serving_type not in ["nbox", "fastapi"]:
       raise ValueError(f"Invalid serving_type: {serving_type}, should be either 'nbox' or 'fastapi'")
-    
     if serving_type == "fastapi":
       logger.warning(f"You have selected serving_type='fastapi', this assumes the object: {fn_name} is a FastAPI app")
       init_code = fn_name
@@ -266,7 +265,7 @@ def upload_job_folder(
       init_code = fn_name
     elif fn.type == IT.CLASS:
       # requires initialisation, in this case we will store the relevant to things in a Relic
-      init_comm = ",".join([f"{k}={v}" for k, v in init_kwargs.items()])    
+      init_comm = ",".join([f"{k}={v}" for k, v in init_kwargs.items()])
       init_code = f"{fn_name}({init_comm})"
       logger.info(f"Starting with init code:\n  {init_code}")
 
@@ -336,6 +335,8 @@ def upload_job_folder(
       wait_for_deployment = False,
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
+    if trigger:
+      out.pin()
   else:
     raise ValueError(f"Unknown method: {method}")
 
@@ -353,6 +354,7 @@ the highest levels of consistency with the NBX-Jobs API.
 
 @lru_cache()
 def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+  print("Getting deployment data", name, id, workspace_id)
   if (not name and not id) or (name and id):
     logger.warning("Must provide either name or id")
     return None, None
@@ -399,6 +401,8 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
     logger.info(l)
 
 
+
+
 class Serve:
   status = staticmethod(print_serving_list)
   upload = staticmethod(partial(upload_job_folder, "serving"))
@@ -416,10 +420,62 @@ class Serve:
     if workspace_id is None:
       raise DeprecationWarning("Personal workspace does not support serving")
     else:
-      serving_id, serving_name = _get_deployment_data(id = self.id, workspace_id = self.workspace_id)
+      serving_id, serving_name = _get_deployment_data( name = "", id = self.id, workspace_id = self.workspace_id) # TODO add name support
     self.serving_id = serving_id
     self.serving_name = serving_name
     self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
+
+  def pin(self) -> bool:
+    """Pin a model to the deployment
+
+    Args:
+      model_id (str, optional): Model ID. Defaults to None.
+      workspace_id (str, optional): Workspace ID. Defaults to "".
+    """
+    try:
+      logger.info(f"Pin model {self.model_id} to deployment {self.serving_id}")
+      rpc(
+        nbox_model_service_stub.SetModelPin,
+        ModelRequest(
+          model = ModelProto(
+            id = self.model_id,
+            serving_group_id = self.serving_id,
+            pin_status = ModelProto.PinStatus.PIN_STATUS_PINNED
+          ),
+          auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        "Could not pin model",
+        raise_on_error=True
+      )
+    except Exception as e:
+      logger.error(e)
+      logger.error("Could not pin model")
+      return False
+  
+  def unpin(self) -> bool:
+    """Pin a model to the deployment
+
+    Args:
+      model_id (str, optional): Model ID. Defaults to None.
+      workspace_id (str, optional): Workspace ID. Defaults to "".
+    """
+    try:
+      logger.info(f"Unpin model {self.model_id} to deployment {self.serving_id}")
+      rpc(
+        nbox_model_service_stub.SetModelPin,
+        ModelRequest(
+          model = ModelProto(
+            id = self.model_id,
+            serving_group_id = self.serving_id,
+            pin_status = ModelProto.PinStatus.PIN_STATUS_UNPINNED
+          ),
+          auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        "Could not pin model",
+        raise_on_error=True
+      )
+    except Exception as e:
+      logger.error(e)
+      logger.error("Could not unpin model")
+      return False
 
   def __repr__(self) -> str:
     x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
@@ -486,8 +542,9 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
   headers = ['created_at', 'id', 'name', 'schedule', 'status']
   try:
     sorted_jobs = sorted(out.jobs, key = lambda x: getattr(x, sort))
-  except:
+  except Exception as e:
     logger.error(f"Cannot sort on key: {sort}")
+    sorted_jobs = out.jobs
   data = []
   for j in sorted_jobs:
     _row = []

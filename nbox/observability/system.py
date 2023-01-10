@@ -13,8 +13,8 @@ def get_metrics_dict():
   # total_memory = psutil.virtual_memory().total
   data = {
     "cpu_usage": sum(cpu_usage) / len(cpu_usage),
-    "memory_available (MiB)": psutil.virtual_memory().available // (1024 ** 2),
-    "memory_usage (MiB)": psutil.virtual_memory().used // (1024 ** 2),
+    "memory_available (MB)": psutil.virtual_memory().available // (1024 ** 2),
+    "memory_usage (MB)": psutil.virtual_memory().used // (1024 ** 2),
     "memory_percentage": psutil.virtual_memory().percent,
     "disk_utilisation": psutil.disk_usage('/').percent
   }
