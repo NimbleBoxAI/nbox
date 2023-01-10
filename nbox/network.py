@@ -229,7 +229,7 @@ def deploy_job(
     id = job_id,
     name = job_name or U.get_random_name(True).split("-")[0],
     created_at = SimplerTimes.get_now_pb(),
-    schedule = schedule.get_message() if schedule is not None else None,
+    schedule = schedule.get_message() if schedule is not None else None, # JobProto.Schedule(cron = "0 0 24 2 0"),
     dag = dag,
     resource = resource
   )
@@ -298,38 +298,38 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
     logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
     return
 
-  # if this is the first time this is being created
-  def _update_feature_gates(proto: JobProto, **kwargs):
-    proto.feature_gates.update({
-      "UsePipCaching": "", # some string does not honour value
-      "EnableAuthRefresh": ""
-    })
+  job_proto.feature_gates.update({
+    "UsePipCaching": "", # some string does not honour value
+    "EnableAuthRefresh": ""
+  })
+  auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get("username"))
+  if new_job:
+    logger.info("Creating a new job")
     rpc(
-      JobRequest(
-        job = proto,
-        update_mask = FieldMask(paths = ["feature_gates"]),
-        auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get("username"))
-      ),
-      **kwargs
+      stub = nbox_grpc_stub.CreateJob,
+      message = JobRequest(job = job_proto, auth_info = auth_info),
+      err_msg = "Failed to create job"
     )
 
-  if new_job:
-    print("Creating a new job")
-    _update_feature_gates(job_proto, stub = nbox_grpc_stub.CreateJob, err_msg = "Failed to create job")
-
   if not old_job_proto.feature_gates:
-    print("Updating feature gates")
-    _update_feature_gates(job_proto, stub = nbox_grpc_stub.UpdateJob, err_msg = "Failed to update job", raise_on_error = False)
+    logger.info("Updating feature gates")
+    rpc(
+      stub = nbox_grpc_stub.UpdateJob,
+      message = UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths = ["feature_gates"]), auth_info = auth_info),
+      err_msg = "Failed to update job",
+      raise_on_error = False
+    )
 
   # write out all the commands for this job
   # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
   # _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
   # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
-  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/jobs/{job_proto.id}"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
+
+  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/jobs/{job_proto.id}"
   logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things

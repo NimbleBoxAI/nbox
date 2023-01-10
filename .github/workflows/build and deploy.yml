@@ -1,9 +1,13 @@
 name: Build and Deploy nbox
 on:
   push:
-    branches: [v1, master]
+    branches: [v1]
     paths:
       -"pyproject.toml"
+  
+  # workflow_dispatch gives a button on the Github UI to run this workflow manually
+  workflow_dispatch:
+
 jobs:
   build:
     name: Build and Deploy

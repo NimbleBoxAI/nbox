@@ -9,13 +9,6 @@ Usage
   nbx tunnel 8000 --i "nbox-dev"
 """
 
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:3: ERROR: Unexpected indentation.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:4: WARNING: Block quote ends without a blank line; unexpected unindent.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:6: ERROR: Unexpected indentation.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:19: WARNING: Bullet list ends without a blank line; unexpected unindent.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:20: WARNING: Enumerated list ends without a blank line; unexpected unindent.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:21: WARNING: Enumerated list ends without a blank line; unexpected unindent.
-
 import os
 import sys
 import ssl
