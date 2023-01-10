@@ -142,10 +142,6 @@ from nbox.subway import SpecSubway
 DEFAULT_RESOURCE = ospec.DEFAULT_RESOURCE
 FN_IGNORE = ospec.FN_IGNORE
 
-def generic_method(fn, base_url, session, *args, **kwargs):
-  r = session.post(f"{base_url}/forward/{fn}")
-
-
 class Operator():
   node = Node()
   source_edges: List[Node] = None
@@ -290,7 +286,7 @@ class Operator():
       relic.put_object(f"{job_id}/args_kwargs_{tag}", (args, kwargs))
 
       # and then we will trigger the job and wait for the run to complete
-      job.trigger(tag = tag)
+      job.trigger(_tag = tag)
       latest_run = job.last_n_runs(1)
 
       if not _wait:
@@ -479,7 +475,7 @@ class Operator():
 
   @classmethod
   def fn(cls):
-    """Wraps the function as an Operator, so you can use all the same methods as Operator"""
+    """Wraps a function or class as an Operator, so you can use all the same methods as Operator"""
     def wrap(fn):
       if type(fn) == type(wrap): # lol the quick hack
         # this is a wrapped function to be run as a job
@@ -763,7 +759,7 @@ class Operator():
   ) -> 'Operator':
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint, returns the relevant
     ``.from_job()`` or ``.from_serving`` Operator. This uploads the entire folder where the caller file is located.
-    In which case having a ``.nboxignore`` and ``requirements.txt`` will also be moved over.
+    In which case having a ``.nboxignore`` and ``requirements.txt`` will be honoured.
 
     Args:
       workspace_id (str): The workspace id to deploy to.
@@ -775,7 +771,7 @@ class Operator():
     if not workspace_id:
       raise ValueError("Must provide a workspace_id")
 
-# go over reasonable checks for deployment
+    # go over reasonable checks for deployment
     if deployment_type == None:
       if self._op_type in [ospec.OperatorType.WRAP_CLS, ospec.OperatorType.SERVING]:
         deployment_type = "serving"

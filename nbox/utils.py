@@ -209,7 +209,12 @@ def isthere(*packages, soft = True):
 
 # path/
 
-def get_files_in_folder(folder, ext = ["*"], abs_path: bool = True, followlinks: bool = False) -> List[str]:
+def get_files_in_folder(
+  folder,
+  ext = ["*"],
+  abs_path: bool = True,
+  followlinks: bool = False,
+) -> List[str]:
   """Get files with ``ext`` in ``folder``"""
   # this method is faster than glob
   import os
@@ -263,9 +268,22 @@ def py_to_bs64(x: str):
 def py_from_bs64(x: str):
   return cloudpickle.loads(b64decode(x.encode("utf-8")))
 
+def to_json(x: dict, fp: str = "", indent = 2):
+  if fp:
+    with open(fp, "w") as f:
+      f.write(json.dumps(x, indent = indent))
+  else:
+    return json.dumps(x, indent = indent)
+
+def from_json(x: str):
+  if os.path.isfile(x):
+    with open(x, "r") as f:
+      return json.load(f)
+  else:
+    return json.loads(x)
+
 def get_assets_folder():
   return join(folder(__file__), "assets")
-
 
 # /path
 

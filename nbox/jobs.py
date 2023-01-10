@@ -43,26 +43,26 @@ class Schedule:
 
     Usage:
 
-    .. code-block:: python
+    ```python
+    # 4:20 everyday
+    Schedule(4, 0)
 
-      # 4:20 everyday
-      Schedule(4, 0)
+    # 4:20 every friday
+    Schedule(4, 20, ["fri"])
 
-      # 4:20 every friday
-      Schedule(4, 20, ["fri"])
+    # 4:20 every friday from jan to feb
+    Schedule(4, 20, ["fri"], ["jan", "feb"])
 
-      # 4:20 every friday from jan to feb
-      Schedule(4, 20, ["fri"], ["jan", "feb"])
+    # 4:20 everyday starting in 2 days and runs for 3 days
+    starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
+    Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
 
-      # 4:20 everyday starting in 2 days and runs for 3 days
-      starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
-      Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
+    # Every 1 hour
+    Schedule(1)
 
-      # Every 1 hour
-      Schedule(1)
-
-      # Every 69 minutes
-      Schedule(minute = 69)
+    # Every 69 minutes
+    Schedule(minute = 69)
+    ```
 
     Args:
       hour (int): Hour of the day, if only this value is passed it will run every ``hour``
