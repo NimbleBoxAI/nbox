@@ -299,7 +299,8 @@ class RelicsNBX(BaseStore):
     relic_file.workspace_id = self.workspace_id
     self._download_relic_file(local_path, relic_file)
 
-  def get_from(self, local_path: str, remote_path: str) -> None:
+  def get_from(self, local_path: str, remote_path: str, unzip: bool = False) -> None:
+    # TODO:@yashbonde add support for unzipping
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
     logger.debug(f"Getting file: {local_path} from {remote_path}")

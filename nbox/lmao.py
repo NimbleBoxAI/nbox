@@ -395,6 +395,7 @@ class Lmao():
       raise Exception("Step must be <= 0")
     run_log = RunLog(experiment_id = self.run.experiment_id, project_id=self.project_id, log_type=log_type)
     for k,v in y.items():
+      # TODO:@yashbonde replace Record with RecordColumn
       record = get_record(k, v)
       record.step = step
       run_log.data.append(record)
@@ -661,12 +662,14 @@ class LmaoCLI:
         untracked_files = git_det["untracked_files"] # what to do with these?
         if untracked_files:
           # see if any file is larger than 10MB and if so, warn the user
+          warn_once = False
           for f in untracked_files:
             if os.path.getsize(f) > 1e7 and not untracked_no_limit:
               logger.warning(f"File: {f} is larger than 10MB and will not be available in sync")
               logger.warning("  Fix: use git to track small files, avoid large files")
               logger.warning("  Fix: nbox.Relics can be used to store large files")
               logger.warning("  Fix: use --untracked-no-limit to upload all files")
+              warn_once = True
               continue
             zip_file.write(f, arcname = f)
       relic.put_to(_zf, f"{project_name}/{run.experiment_id}/git.zip")

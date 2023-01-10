@@ -83,6 +83,7 @@ def get_fastapi_routes(op: Operator):
         # python would disallow you from "__" functions, this networking layer does that for "_"
         continue
       fn = getattr(wrap_class, p)
+      # TODO:@yashbonde >>> replace /method_{p} with /pyrpc/{p} and /method_{p}_rest with /rest/{p}
       routes.append((f"/method_{p}", get_fastapi_fn(fn)))
       routes.append((f"/rest_{p}", get_fastapi_fn(fn, _rest = True)))
 
