@@ -100,8 +100,7 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name,resource)
           type=Code.Type.ZIP,
           size=int(max(file_size/(1000*1000), 1)) # MiBs
         ),
-        type=Model.ServingType.SERVING_TYPE_NBOX_OP,
-        resource=resource
+        type=Model.ServingType.SERVING_TYPE_NBOX_OP
         ),
       auth_info=NBXAuthInfo(workspace_id=workspace_id)
       ),
