@@ -25,11 +25,14 @@ import re
 import time
 import string
 import threading
+from google.protobuf.message import Message
 from requests import Session
 from functools import lru_cache
 from json import dumps as json_dumps
 
 from nbox.utils import logger
+
+from nbox.sublime.proto import lmao_pb2
 
 TIMEOUT_CALLS = 60
 
@@ -321,7 +324,7 @@ class SpecSubway():
   def __repr__(self):
     return f"<SpecSubway ({self._url})>"
 
-  def __getattr__(self, attr):
+  def __getattr__(self, attr) -> 'SpecSubway':
     # https://stackoverflow.com/questions/3278077/difference-between-getattr-vs-getattribute
     if self._caller and len(self._spec) == 1:
       raise AttributeError(f"'.{self._name}' does not have children")
@@ -383,3 +386,38 @@ class SpecSubway():
       if len(out) == 1:
         return out[0]
     return out
+
+
+class SublimeRPCSubway:
+  SERVICE_LMAO = "lmao"
+  SERVICE_RELICS = "relics"
+  valid = [SERVICE_LMAO, SERVICE_RELICS]
+
+  def __init__(self, service_name, url, _rpc_name: str = "", _stub = None):
+    """Create an abstract for the Sublime RPC service which implements VPC secure calls for NimbleBox Monitoring and Relics"""
+    raise NotImplementedError("This is not ready yet")
+    self.sn = service_name
+    self.url = url
+    self._rpc_name = _rpc_name
+    self._stub = _stub
+
+    # now perform checks
+    if self.sn not in self.valid:
+      raise ValueError(f"Service name '{self.sn}' is not valid, must be one of {SublimeRPCSubway.valid}")
+
+    if self._stub == None:
+      self._stub = init_sublime_rpc_stub(self.sn, self.url)
+    
+  def __getattr__(self, __rpc_name: str) -> 'SublimeRPCSubway':
+    return SublimeRPCSubway(self.sn, self.url, __rpc_name)
+
+  def _to_sublime(self, message: Message) -> Message:
+    """function to convert the incoming message to sublime format"""
+    if self.sn == self.SERVICE_LMAO:
+      # match the message type to one in lmao_pb2
+      # if type(message) == Message:
+      #   return message
+      pass
+
+  def __call__(self, messsage: Message):
+    sublime_format = self._to_sublime()

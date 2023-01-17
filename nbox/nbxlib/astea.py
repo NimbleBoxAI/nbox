@@ -208,7 +208,8 @@ class Astea:
             tea = Astea(name=target.id, type=IndexTypes.VARIABLE, node=n, code_lines=self.code_lines, order_index=i)
             items.add(tea)
           else:
-            raise ValueError(f"Unknown type {type(target)} for target {target}")
+            # raise ValueError(f"Unknown type {type(target)} for target {target}")
+            pass
           if (type(self.node) == A.ClassDef or type(self.node) == A.Module):
             try:
               # this .id is very painful

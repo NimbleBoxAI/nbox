@@ -266,13 +266,18 @@ class Operator():
       raise ValueError("Either job_name or job_id must be specified")
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     if not workspace_id:
-      raise DeprecationWarning("Personal workspace does not support serving")
-    job_id, job_name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
+      raise DeprecationWarning("workspace_id cannot be none. Reauth yourself with `nbx login`")
+    job_id, job_name = _get_job_data(
+      name = job_name,
+      id = job_id,
+      remove_archived = True, 
+      workspace_id = workspace_id
+    )
     if job_id is None:
       raise ValueError(f"No serving found with name {job_name}")
-    job = Job(job_id, workspace_id = workspace_id)
+    job = Job(job_id = job_id, workspace_id = workspace_id)
     logger.debug(f"Latching to job '{job_name}' ({job_id})")
-    
+
     def forward(*args, _wait: bool = True, **kwargs):
       """This is the forward method for a NBX-Job. All the parameters will be passed through Relics."""
       logger.debug(f"Running job '{job_name}' ({job_id})")
@@ -280,13 +285,13 @@ class Operator():
 
       # determining the put location is very tricky because there is no way to create a sync between the
       # key put here and what the run will pull. This can lead to many weird race conditions. So for now
-      # I am going to rely on the fact that we cannot have two parallel active runs. Thus at any given
-      # moment there can be only one file at /{job_id}/args_kwargs.pkl
+      # I am going to rely on the fact that we cannot have two parallel runs with same tag. Thus at any given
+      # moment there can be only one file at /{job_id}/args_kwargs_{tag}.pkl
       tag = U.get_random_name(True).split("-")[0]
       relic.put_object(f"{job_id}/args_kwargs_{tag}", (args, kwargs))
 
-      # and then we will trigger the job and wait for the run to complete
-      job.trigger(_tag = tag)
+      # and then we will trigger the job with that specific tag and wait for the run to complete
+      job.trigger(tag = tag)
       latest_run = job.last_n_runs(1)
 
       if not _wait:
@@ -748,8 +753,8 @@ class Operator():
 
   def deploy(
     self,
-    workspace_id: str,
-    id_or_name:str = None,
+    group_id: str,
+    workspace_id: str = "",
     deployment_type: str = None,
     resource: Resource = None,
     ignore_patterns: List[str] = [],
@@ -769,7 +774,8 @@ class Operator():
     """
 
     if not workspace_id:
-      raise ValueError("Must provide a workspace_id")
+      workspace_id = secret.get(ConfigString.workspace_id)
+      logger.info(f"Using workspace_id: {workspace_id}")
 
     # go over reasonable checks for deployment
     if deployment_type == None:
@@ -788,8 +794,6 @@ class Operator():
     # get the filepath and name to import for convience
     fp, folder, file, name = ospec.get_operator_location(self)
     logger.info(f"Deployment Type: {deployment_type}")
-    logger.info(f"Deploying '{name}' from '{fp}'")
-    logger.info(f"Will upload folder: {folder}")
 
     # create a temporary directory to store all the files
     # copy over all the files and wait for it, else the changes below won't be reflected
@@ -843,16 +847,22 @@ get_schedule = lambda: None
     if _unittest:
       return
 
+    init_folder = f"{fp.replace('.py', '')}:{name}"
+    logger.debug(f"Upload init_folder: {init_folder}")
+
     if deployment_type == ospec.OperatorType.JOB.value:
       out = Job.upload(
-        init_folder = folder,
-        id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
-        workspace_id = workspace_id,
+        init_folder = init_folder,
+        id = group_id,
         _ret = True
       )
-      return self.from_job(job_id_or_name = out.id, workspace_id = workspace_id)
+      return self.from_job(job_id = out.id)
     elif deployment_type == ospec.OperatorType.SERVING.value:
-      out = Serve.upload(init_folder = folder, id_or_name = id_or_name, workspace_id = workspace_id, _ret = True)
+      out = Serve.upload(
+        init_folder = init_folder,
+        id = group_id,
+        _ret = True
+      )
 
       # get the serving object
       stub = nbox_ws_v1.workspace.u(workspace_id).deployments.u(out.id)

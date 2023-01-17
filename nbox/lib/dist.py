@@ -67,9 +67,11 @@ class NBXLet(Operator):
       if run_tag.startswith(LMAO_JOB_TYPE_PREFIX):
         relic = RelicsNBX(LMAO_RELIC_NAME, workspace_id)
         fp = run_tag[len(LMAO_JOB_TYPE_PREFIX)+1:] # +1 for the -
-        if not relic.has(fp+"/init.pkl"):
+        init_pkl = fp+"/init.pkl"
+        logger.info(f"Looking for init.pkl at {init_pkl}")
+        if not relic.has():
           raise Exception(f"Could not find init.pkl for tag {run_tag}")
-        init_data = relic.get_object(fp+"/init.pkl")
+        init_data = relic.get_object(init_pkl)
         _lmaoConfig.kv = init_data
         args = _lmaoConfig.kv["args"]
         kwargs = _lmaoConfig.kv["kwargs"]
@@ -82,6 +84,7 @@ class NBXLet(Operator):
         _in = f"{job_id}/args_kwargs"
         if run_tag:
           _in += f"_{run_tag}"
+        logger.info(f"Looking for init.pkl at {_in}")
         if relic.relic is not None and relic.has(_in):
           (args, kwargs) = relic.get_object(_in)
         else:
@@ -98,6 +101,7 @@ class NBXLet(Operator):
         if run_tag:
           _out += f"_{run_tag}"
 
+      logger.info(f"Saving output to {_out}")
       if relic.relic is not None:
         relic.put_object(_out, out)
 

@@ -161,11 +161,19 @@ def upload_job_folder(
   resource_timeout: int = 120_000,
   resource_max_retries: int = 2,
 
+  # deployment specific
+  model_name: str = "",
+
   # X-type
   serving_type: str = "nbox",
 
   # there's no more need to pass the workspace_id anymore
   workspace_id: str = "",
+
+  # some extra things for functionality
+  _ret: bool = False,
+
+  # finally everything else is assumed to be passed to the initialisation script
   **init_kwargs
 ):
   """Upload the code for a job or serving to the NBX. if `id_or_name` is not present, it will create a new Job.
@@ -205,13 +213,15 @@ def upload_job_folder(
     raise ValueError("Either --name or --id must be present")
   if trigger and method not in [OT.JOB.value, OT.SERVING.value]:
     raise ValueError(f"Trigger can only be used with '{OT.JOB}' or '{OT.SERVING}'")
+  if model_name and method != OT.SERVING.value:
+    raise ValueError(f"model_name can only be used with '{OT.SERVING}'")
 
   if ":" not in init_folder:
     # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
     # in this case the module is loaded on the local machine and so user will need to have
     # everything installed locally. This was a legacy method before 0.10.0
     logger.error(
-      'Old method of having a manual nbx_user.py file is not deprecated\n'
+      'Old method of having a manual nbx_user.py file is now deprecated\n'
       f'  Fix: nbx {method} upload file_path:fn_cls_name --id "id"'
     )
     raise ValueError("Old style upload is not supported anymore")
@@ -326,9 +336,12 @@ def upload_job_folder(
 
   elif method == ospec.OperatorType.SERVING.value:
     serving_id, serving_name = _get_deployment_data(name = name, id = id, workspace_id = workspace_id)
+    model_name = model_name or U.get_random_name().replace("-", "_")
+    logger.info(f"Model name: {model_name}")
     out: Serve = deploy_serving(
       init_folder = init_folder,
       serving_id = serving_id,
+      model_name = model_name,
       serving_name = serving_name,
       workspace_id = workspace_id,
       resource = resource,
@@ -341,6 +354,9 @@ def upload_job_folder(
     raise ValueError(f"Unknown method: {method}")
 
   os.chdir(_curdir)
+
+  if _ret:
+    return out
 
 
 ################################################################################
@@ -405,7 +421,7 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
 
 class Serve:
   status = staticmethod(print_serving_list)
-  upload = staticmethod(partial(upload_job_folder, "serving"))
+  upload: 'Serve' = staticmethod(partial(upload_job_folder, "serving"))
 
   def __init__(self, serving_id: str = None, model_id: str = None, *, workspace_id: str = "") -> None:
     """Python wrapper for NBX-Serving gRPC API
@@ -508,7 +524,10 @@ def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *,
 
   job: JobProto = rpc(
     nbox_grpc_stub.GetJob,
-    JobRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),job=JobProto(id=id, name=name)),
+    JobRequest(
+      auth_info = NBXAuthInfo(workspace_id=workspace_id),
+      job = JobProto(id=id, name=name)
+    ),
     "Could not find job with ID: {}".format(id),
     raise_on_error = True
   )
@@ -565,7 +584,7 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
 
 class Job:
   status = staticmethod(get_job_list)
-  upload = staticmethod(partial(upload_job_folder, "job"))
+  upload: 'Job' = staticmethod(partial(upload_job_folder, "job"))
 
   def __init__(self, job_name: str = "", job_id: str = "", *, workspace_id: str = ""):
     """Python wrapper for NBX-Jobs gRPC API

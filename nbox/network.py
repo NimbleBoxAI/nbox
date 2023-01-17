@@ -44,6 +44,7 @@ Function related to serving of any model.
 def deploy_serving(
   init_folder: str,
   serving_name: str,
+  model_name: str,
   serving_id: str = None,
   workspace_id: str = None,
   resource: Resource = None,
@@ -70,8 +71,6 @@ def deploy_serving(
   #   data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
   #   serving_id = data["deployment_id"]
   #   logger.info(f"Serving ID: {serving_id}")
-  model_name = U.get_random_name().replace("-", "_")
-  logger.info(f"Model name: {model_name}")
 
   # zip init folder
   zip_path = zip_to_nbox_folder(
@@ -93,19 +92,20 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   # get bucket URL and upload the data
   response: Model = rpc(
     nbox_model_service_stub.UploadModel,
-    ModelRequest(model=
-      Model(
-        serving_group_id=serving_id, name=model_name,
-        code=Code(
-          type=Code.Type.ZIP,
-          size=int(max(file_size/(1000*1000), 1)) # MiBs
+    ModelRequest(
+      model = Model(
+        serving_group_id = serving_id,
+        name = model_name,
+        code = Code(
+          type = Code.Type.ZIP,
+          size = int(max(file_size/(1024*1024), 1)) # MBs
         ),
-        type=Model.ServingType.SERVING_TYPE_NBOX_OP
-        ),
-      auth_info=NBXAuthInfo(workspace_id=workspace_id)
+        type = Model.ServingType.SERVING_TYPE_NBOX_OP
       ),
+      auth_info = NBXAuthInfo(workspace_id = workspace_id)
+    ),
     "Could not get upload URL",
-    raise_on_error=True
+    raise_on_error = True
   )
   model_id = response.id
   deployment_id = response.serving_group_id
@@ -130,7 +130,6 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
     import shlex
     from subprocess import Popen
     shell_com = f'curl -X POST -F key={s3_meta["key"]} '
-    # for k,v in out.body.items():
     for k,v in s3_meta.items():
       if k == "key":
         continue
@@ -251,7 +250,9 @@ def deploy_job(
 def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
-    old_job_proto: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
+    old_job_proto: JobProto = nbox_grpc_stub.GetJob(
+      JobRequest(job = JobProto(id = job_proto.id), auth_info = NBXAuthInfo(workspace_id = workspace_id))
+    )
     new_job = old_job_proto.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
   except grpc.RpcError as e:
     if e.code() == grpc.StatusCode.NOT_FOUND:

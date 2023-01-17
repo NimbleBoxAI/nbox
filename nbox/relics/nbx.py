@@ -162,7 +162,7 @@ class RelicsNBX(BaseStore):
       mime = "application/octet-stream"
 
     # ideally this is a lot like what happens in nbox
-    logger.debug(f"Uploading {local_path} to {relic_file.name}")
+    logger.info(f"Uploading {local_path} to {relic_file.name}")
     for _ in range(2):
       out = self.stub.create_file(_RelicFile = relic_file,)
       if out != None:
@@ -186,14 +186,14 @@ class RelicsNBX(BaseStore):
     # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
 
     if uat == UserAgentType.PYTHON_REQUESTS:
-      logger.debug(f"URL: {out.url}")
-      logger.debug(f"body: {out.body}")
+      logger.info(f"URL: {out.url}")
+      logger.info(f"body: {out.body}")
       r = requests.post(
         url = out.url,
         data = out.body,
         files = {"file": (out.body["key"], open(local_path, "rb"))}
       )
-      logger.debug(f"Upload status: {r.status_code}")
+      logger.info(f"Upload status: {r.status_code}")
       r.raise_for_status()
     elif uat == UserAgentType.CURL:
       # TIL: https://stackoverflow.com/a/58237351
