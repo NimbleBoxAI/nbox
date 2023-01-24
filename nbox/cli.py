@@ -35,40 +35,40 @@ logger = U.get_logger()
 
 
 class Config(object):
-  def update(self, workspace_id: str = ""):
+  def update(self, workspace_id: str):
     """Set global config for `nbox`"""
     secret = init_secret()
-    if workspace_id:
-      secret.put(ConfigString.workspace_id, workspace_id, True)
-      logger.info(f"Global Workspace ID set to {workspace_id}")
+    data = secret.get(ConfigString.cache)
+    redo = not data or (workspace_id not in data)
+    if redo:
+      workspaces = nbox_ws_v1.workspace()
+      workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
+      if len(workspace_details) == 0:
+        logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
+        raise Exception("Invalid workspace ID")
+      workspace_details = workspace_details[0]
+      workspace_name = workspace_details["workspace_name"]
+      secret.secrets[ConfigString.cache].update({
+        workspace_id: {
+          "workspace_id": workspace_id,
+          "workspace_name": workspace_name
+        }
+      })
+    else:
+      data = data[workspace_id]
+      workspace_name = data["workspace_name"]
 
-      data = secret.get(ConfigString.cache)
-      redo = not data or (workspace_id not in data)
-
-      if redo:
-        workspaces = nbox_ws_v1.workspace()
-        workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
-        if len(workspace_details) == 0:
-          logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
-          raise Exception("Invalid workspace ID")
-        workspace_details = workspace_details[0]
-        workspace_name = workspace_details["workspace_name"]
-        secret.secrets.get(ConfigString.cache).update({workspace_id: workspace_details})
-      else:
-        data = data[workspace_id]
-        workspace_name = data["workspace_name"]
-
-      secret.put(ConfigString.workspace_name, workspace_name, True)
-      logger.info(f"Global Workspace: {workspace_name}")
+    secret.put(ConfigString.workspace_id, workspace_id, True)
+    secret.put(ConfigString.workspace_name, workspace_name, True)
+    logger.info(f"Global Workspace: {workspace_name}")
 
   def show(self):
     """Pretty print global config for `nbox`"""
-    workspace_id = secret.get(ConfigString.workspace_id)
-    workspace_name = secret.get(ConfigString.workspace_name)
     logger.info(
       "\nnbox config:\n" \
-      f"  workspace_name: {workspace_name}\n" \
-      f"    workspace_id: {workspace_id}\n" \
+      f"  workspace_name: {secret.get(ConfigString.workspace_name)}\n" \
+      f"    workspace_id: {secret.get(ConfigString.workspace_id)}\n" \
+      f"        username: {secret.get(ConfigString.username)}\n" \
       f"    nbox version: {V}\n" \
       f"             URL: {secret.get('nbx_url')}"
     )

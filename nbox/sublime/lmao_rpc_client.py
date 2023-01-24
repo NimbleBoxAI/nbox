@@ -175,6 +175,19 @@ class LMAO_Stub:
     _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
     return _lmao_Acknowledge
 
+  def delete_project(self, _lmao_Project: Project) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/delete_project",
+      Echo(message = "Project", base64_string=message_to_b64(_lmao_Project), rpc_name = "delete_project")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
+    return _lmao_Acknowledge
+
   def init_serving(self, _lmao_InitRunRequest: InitRunRequest) -> Serving:
     echo_resp: Echo = call_rpc(
       self.session,

@@ -24,6 +24,8 @@ class ConfigString():
   workspace_id = "config.global.workspace_id"
   workspace_name = "config.global.workspace_name"
   cache = "cache"
+  username = "username"
+  access_token = "access_token"
 
   def items():
     return [ConfigString.workspace_id, ConfigString.workspace_name, ConfigString.cache]

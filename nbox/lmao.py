@@ -58,7 +58,10 @@ functional components of LMAO
 """
 
 @lru_cache()
-def get_lmao_stub(username: str, workspace_id: str) -> LMAO_Stub:
+def get_lmao_stub() -> LMAO_Stub:
+  username = username or secret.get(ConfigString.username)
+  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+
   # prepare the URL
   id_or_name = f"monitoring-{workspace_id}"
   logger.info(f"Instance id_or_name: {id_or_name}")
@@ -76,13 +79,9 @@ def get_lmao_stub(username: str, workspace_id: str) -> LMAO_Stub:
 
   # create a session with the auth header
   _session = Session()
-  _session.headers.update({
-    "NBX-TOKEN": open_data["token"],
-    "X-NBX-USERNAME": username,
-  })
+  _session.cookies.update(instance.stub_ws_instance._session.cookies)
 
-  # define the stub
-  # self.lmao = LMAO_Stub(url = "http://127.0.0.1:8080", session = Session()) # debug
+  # self.lmao = LMAO_Stub(url = "http://127.0.0.1:8080", session = _session) # debug
   lmao_stub = LMAO_Stub(url = url, session = _session)
   return lmao_stub
 
@@ -288,7 +287,7 @@ class Lmao():
     self._nbx_run_id = tracer.run_id
     self._nbx_job_id = tracer.job_id
     del tracer
-    self.lmao = get_lmao_stub(self.username, self.workspace_id)
+    self.lmao = get_lmao_stub()
 
     # do a quick lookup and see if the project exists, if not, create it
     if self.config:
@@ -364,8 +363,8 @@ class Lmao():
     # now initialize the relic
     if self.save_to_relic:
       # The relic will be the project id
-      self.relic = RelicsNBX("experiments", self.workspace_id, create = True)
-      logger.info(f"Will store everything in folder: {self.experiment_prefix}")
+      self.relic = RelicsNBX(LMAO_RELIC_NAME, self.workspace_id, create = True)
+      logger.info(f"Will store everything in relic '{LMAO_RELIC_NAME}' folder: {self.experiment_prefix}")
 
     # system metrics monitoring, by default is enabled optionally turn it off
     if self.enable_system_monitoring:
@@ -374,15 +373,14 @@ class Lmao():
 
   @property
   def experiment_prefix(self):
-    prefix = f"{self.project_name}/{self.run.experiment_id}/"
-    return prefix
+    return f"{self.project_name}/{self.run.experiment_id}/"
 
   """The functions below are the ones supposed to be used."""
 
   @lru_cache(maxsize=1)
   def get_relic(self):
     """Get the underlying Relic for more advanced usage patterns."""
-    return RelicsNBX("experiments", self.workspace_id, create = True, prefix = f"{self.project_name}/{self.run.experiment_id}")
+    return RelicsNBX(LMAO_RELIC_NAME, self.workspace_id, create = True, prefix = f"{self.project_name}/{self.run.experiment_id}")
 
   def log(self, y: Dict[str, Union[int, float, str]], step = None, *, log_type: str = RunLog.LogType.USER):
     """Log a single level dictionary to the platform at any given step. This function does not really care about the
@@ -402,9 +400,7 @@ class Lmao():
 
     ack = self.lmao.on_log(run_log)
     if not ack.success:
-      logger.error("  >> Server Error")
-      for l in ack.message.splitlines():
-        logger.error("  " + l)
+      logger.error(f"  >> Server Error\n{ack.message}")
       raise Exception("Server Error")
 
     self._total_logged_elements += 1
@@ -475,8 +471,7 @@ lmao open project_name_or_id
 
 @lru_cache()
 def get_project_name_id(project_name_or_id: str, workspace_id: str):
-  username = secret.get("username")
-  lmao_stub = get_lmao_stub(username, workspace_id)
+  lmao_stub = get_lmao_stub()
   out = lmao_stub.list_projects(ListProjectsRequest(workspace_id=workspace_id, project_id_or_name=project_name_or_id))
   if not out.projects:
     logger.error(f"Project: {project_name_or_id} not found")
@@ -605,7 +600,7 @@ class LmaoCLI:
 
     job_name = "nbxj_" + project_name[:15]
     job = Job(job_name = job_name, workspace_id = workspace_id)
-    lmao_stub = get_lmao_stub(secret.get("username"), workspace_id)
+    lmao_stub = get_lmao_stub()
 
     _metadata = {
       "user_config": run_kwargs,

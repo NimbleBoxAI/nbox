@@ -324,7 +324,13 @@ def main(ignore: List[str] = [], v: bool = False):
 
   # all the files in src_files are those that simply need to be copied to the gen folder
   for f in src_files:
-    trg = f"{GEN}{f.split('/')[-1]}"
+    child_folders = f.split('/')[1:]
+    if len(child_folders) > 1:
+      child_folders = child_folders[:-1]
+      child_folders = "/".join(child_folders)
+      if not os.path.exists(f"{GEN}{child_folders}"):
+        os.makedirs(f"{GEN}{child_folders}")
+    trg = f"{GEN}{'/'.join(f.split('/')[1:])}"
     if v:
       print("Copying", f, "to", trg)
     Popen(["cp", f, trg]).wait()
