@@ -58,8 +58,8 @@ def deploy_serving(
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
 
-  if resource is not None:
-    logger.warning("Resource is coming in the following release!")
+  # if resource is not None:
+  #   logger.warning("Resource is coming in the following release!")
   if wait_for_deployment:
     logger.warning("Wait for deployment is coming in the following release!")
 
@@ -83,10 +83,10 @@ def deploy_serving(
     model_name = model_name,
     **exe_jinja_kwargs,
   )
-  return _upload_serving_zip(zip_path, workspace_id, serving_id, model_name)
+  return _upload_serving_zip(zip_path, workspace_id, serving_id, model_name, resource)
 
 
-def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
+def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name,resource):
   file_size = os.stat(zip_path).st_size # serving in bytes
 
   # get bucket URL and upload the data
@@ -153,7 +153,7 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   logger.info(f"Model uploaded successfully, deploying ...")
   response: Model = rpc(
     nbox_model_service_stub.Deploy,
-    ModelRequest(model=Model(id=model_id,serving_group_id=deployment_id), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    ModelRequest(model=Model(id=model_id,serving_group_id=deployment_id,resource=resource), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
     "Could not deploy model",
     raise_on_error=True
   )
