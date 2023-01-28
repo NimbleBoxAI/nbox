@@ -20,12 +20,12 @@ from nbox.messages import rpc, streaming_rpc
 from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub, nbox_model_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
-from nbox.hyperloop.nbox_ws_pb2 import JobRequest
-from nbox.hyperloop.job_pb2 import Job as JobProto
-from nbox.hyperloop.dag_pb2 import DAG as DAGProto
-from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource
-from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto
+from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest
+from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
+from nbox.hyperloop.jobs.dag_pb2 import DAG as DAGProto
+from nbox.hyperloop.common.common_pb2 import NBXAuthInfo, Resource
+from nbox.hyperloop.jobs.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
+from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto
 
 
 

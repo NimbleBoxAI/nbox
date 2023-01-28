@@ -10,7 +10,7 @@ from nbox import RelicsNBX
 from nbox.auth import secret, ConfigString
 from nbox import Operator, logger
 from nbox.nbxlib.tracer import Tracer
-from nbox.hyperloop.job_pb2 import Job
+from nbox.hyperloop.jobs.job_pb2 import Job
 from nbox.nbxlib.serving import serve_operator
 
 

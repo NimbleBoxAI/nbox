@@ -6,7 +6,7 @@ from time import sleep
 
 import nbox.utils as U
 from nbox.utils import logger
-from nbox.hyperloop.common_pb2 import Resource
+from nbox.hyperloop.common.common_pb2 import Resource
 
 class OperatorType(Enum):
   """This Enum does not concern the user, however I am describing it so people can get a feel of the breadth

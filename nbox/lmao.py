@@ -37,12 +37,12 @@ from nbox.auth import secret, ConfigString
 from nbox.nbxlib.tracer import Tracer
 from nbox.relics import RelicsNBX
 from nbox.jobs import Job, upload_job_folder
-from nbox.hyperloop.common_pb2 import Resource
+from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.init import nbox_grpc_stub
 from nbox.messages import message_to_dict
-from nbox.hyperloop.nbox_ws_pb2 import UpdateJobRequest
-from nbox.hyperloop.job_pb2 import Job as JobProto
-from nbox.hyperloop.common_pb2 import NBXAuthInfo
+from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateJobRequest
+from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
+from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 
 # all the sublime -> hyperloop stuff
 from nbox.sublime.lmao_rpc_client import (

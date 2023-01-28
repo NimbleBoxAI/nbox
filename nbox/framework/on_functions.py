@@ -14,7 +14,7 @@ from typing import Union
 from uuid import uuid4
 
 from ..utils import logger
-from ..hyperloop.dag_pb2 import DAG, Flowchart, Node, Code, Edge, RunStatus
+from ..hyperloop.jobs.dag_pb2 import DAG, Flowchart, Node, Code, Edge, RunStatus
 
 # ==================
 

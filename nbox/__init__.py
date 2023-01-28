@@ -12,4 +12,4 @@ from nbox.instance import Instance
 from nbox.relics import Relics, RelicsNBX
 from nbox.lmao import Lmao
 from nbox.version import __version__
-from nbox.hyperloop.common_pb2 import Resource
+from nbox.hyperloop.common.common_pb2 import Resource
