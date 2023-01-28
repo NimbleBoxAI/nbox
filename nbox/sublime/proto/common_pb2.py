@@ -21,7 +21,7 @@ DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12proto/common.p
 _ACKNOWLEDGE = DESCRIPTOR.message_types_by_name['Acknowledge']
 Acknowledge = _reflection.GeneratedProtocolMessageType('Acknowledge', (_message.Message,), {
   'DESCRIPTOR' : _ACKNOWLEDGE,
-  '__module__' : 'proto.jobs.common_pb2'
+  '__module__' : 'proto.common_pb2'
   # @@protoc_insertion_point(class_scope:Acknowledge)
   })
 _sym_db.RegisterMessage(Acknowledge)
