@@ -25,7 +25,7 @@ from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.jobs.dag_pb2 import DAG as DAGProto
 from nbox.hyperloop.common.common_pb2 import NBXAuthInfo, Resource
 from nbox.hyperloop.jobs.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto
+from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto, UpdateModelRequest
 
 
 
@@ -491,6 +491,32 @@ class Serve:
     except Exception as e:
       logger.error(e)
       logger.error("Could not unpin model")
+      return False
+  
+  def scale(self, replicas: int) -> bool:
+    """Scale the model deployment
+
+    Args:
+      replicas (int): Number of replicas
+    """
+    try:
+      logger.info(f"Scale model deployment {self.model_id} to {replicas} replicas")
+      rpc(
+        nbox_model_service_stub.UpdateModel,
+        UpdateModelRequest(
+         model=ModelProto(
+           id=self.model_id,
+            serving_group_id=self.serving_id,
+            replicas=replicas
+          ),
+          update_mask=FieldMask(paths=["replicas"]),
+          auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        "Could not scale deployment",
+        raise_on_error=True
+      )
+    except Exception as e:
+      logger.error(e)
+      logger.error("Could not scale deployment")
       return False
 
   def __repr__(self) -> str:
