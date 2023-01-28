@@ -518,6 +518,25 @@ class Serve:
       logger.error(e)
       logger.error("Could not scale deployment")
       return False
+  
+  def logs(self, f = sys.stdout):
+    """Get the logs of the model deployment
+
+    Args:
+      f (file, optional): File to write the logs to. Defaults to sys.stdout.
+    """
+    logger.debug(f"Streaming logs of job '{self.model_id}'")
+    for model_log in streaming_rpc(
+      nbox_model_service_stub.ModelLogs,
+      ModelRequest(model = ModelProto(id = self.model_id, serving_group_id = self.serving_id),
+          auth_info = NBXAuthInfo(workspace_id=self.workspace_id),
+      ),
+      f"Could not get logs of model {self.model_id}, only live logs are available",
+      False
+    ):
+      for log in model_log.log:
+        f.write(log)
+        f.flush()
 
   def __repr__(self) -> str:
     x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
@@ -669,7 +688,7 @@ class Job:
       True
     ):
       for log in job_log.log:
-        f.write(log + "\n")
+        f.write(log)
         f.flush()
 
   def delete(self):
