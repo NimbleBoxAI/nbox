@@ -161,10 +161,8 @@ class Operator():
     """Create an operator, which abstracts your code into sharable, bulding blocks which
     can then deployed on either NBX-Jobs or NBX-Deploy.
     
-    Usage:
+    Examples:
 
-    .. code-block:: python
-      
       class MyOperator(Operator):
         def __init__(self, ...):
           ... # initialisation of job happens here
@@ -196,7 +194,7 @@ class Operator():
   def __remote_init__(self):
     """User can overwrite this function, this will be called only when running on remote.
     This helps in with things like creating the models can caching them in self, instead
-    of ``lru_cache`` in forward."""
+    of `lru_cache` in forward."""
     pass
 
   def remote_init(self):
@@ -260,7 +258,13 @@ class Operator():
 
   @classmethod
   def from_job(cls, job_name: str = "", job_id: str = "", workspace_id: str = ""):
-    """latch an existing job so that it can be called as an operator."""
+    """latch an existing job so that it can be called as an operator. This is designed to be used as
+    a part of "Compute Fabric" mode.
+
+    Args:
+      job_name (str, optional): Name of the job. Defaults to "".
+      job_id (str, optional): ID of the job. Defaults to "".
+    """
     # implement this when we have the client-server that allows us to get the metadata for the job
     if (not job_name and not job_id) or (job_name and job_id):
       raise ValueError("Either job_name or job_id must be specified")
@@ -499,7 +503,7 @@ class Operator():
     return wrap
 
   def _cls(self, fn, *args, **kwargs):
-    """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a class as an operator"""
+    """Do not use directly, use `@operator` decorator instead. Utility to wrap a class as an operator"""
     obj = fn(*args, **kwargs)
     # override the file this is necessary for getting the remote operations running
     self.__file__ = inspect.getfile(fn)
@@ -530,7 +534,7 @@ class Operator():
     return op
 
   def _fn(self, fn):
-    """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a function as an operator"""
+    """Do not use directly, use `@operator` decorator instead. Utility to wrap a function as an operator"""
     self.forward = fn # override the forward function
     # override the file this is necessary for getting the remote operations running
     self.__file__ = inspect.getfile(fn)
@@ -754,23 +758,23 @@ class Operator():
   def deploy(
     self,
     group_id: str,
-    workspace_id: str = "",
     deployment_type: str = None,
     resource: Resource = None,
     ignore_patterns: List[str] = [],
+    workspace_id: str = "",
     *,
     _unittest = False,
     _include_pattern = [],
   ) -> 'Operator':
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint, returns the relevant
-    ``.from_job()`` or ``.from_serving`` Operator. This uploads the entire folder where the caller file is located.
-    In which case having a ``.nboxignore`` and ``requirements.txt`` will be honoured.
+    `.from_job()` or `.from_serving` Operator. This uploads the entire folder where the caller file is located.
+    In which case having a `.nboxignore` and `requirements.txt` will be honoured.
 
     Args:
-      workspace_id (str): The workspace id to deploy to.
-      id_or_name (str, optional): The id or name of the deployment. if deployment_type is 'serving' this this must be provided.
-      deployment_type (str, optional): Defaults to 'serving' if WRAP_CLS else 'job'. The type of deployment to create.
-      resource (Resource, optional): The resource to deploy to, uses a reasonable default.
+      group_id (str): The Job/Deploy id to deploy to.
+      deployment_type (str, optional): The deployment type. Defaults to None.
+      resource (Resource, optional): The resource to use for deployment. Defaults to None.
+      ignore_patterns (List[str], optional): The patterns to ignore. Defaults to [].
     """
 
     if not workspace_id:

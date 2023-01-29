@@ -1,6 +1,7 @@
 """
-Network functions are gateway between NBX-Services. If you find yourself using this
-you might want to reach out to us <research-at-nimblebox-dot-ai>!
+Network functions are gateway between NBX-Services.
+
+{% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
 
 But for the curious mind, many of our services work on gRPC and Protobufs. This network.py
 manages the quirkyness of our backend and packs multiple steps as one function.
@@ -53,7 +54,18 @@ def deploy_serving(
   *,
   _unittest = False
 ):
-  """Use the NBX-Deploy Infrastructure"""
+  """Use the NBX-Deploy Infrastructure
+
+  Args:
+    init_folder (str): Path to the code
+    serving_name (str): Name of the serving
+    model_name (str): Name of the model
+    serving_id (str, optional): Serving ID. Defaults to None.
+    workspace_id (str, optional): Workspace ID. Defaults to None.
+    resource (Resource, optional): Resource. Defaults to None.
+    wait_for_deployment (bool, optional): Wait for deployment. Defaults to False.
+    exe_jinja_kwargs (dict, optional): Jinja kwargs. Defaults to {}.
+  """
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")

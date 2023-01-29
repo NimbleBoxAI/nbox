@@ -1,12 +1,11 @@
 """
 Creates a socket tunnel between users localhost to server called RSockServer (Reverse Socket Server) .
 
-Usage
------
+```bash
+nbx tunnel 8000 --i "nbox-dev"
+```
 
-.. code-block:: bash
-
-  nbx tunnel 8000 --i "nbox-dev"
+{% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
 """
 
 import os
@@ -67,7 +66,6 @@ class RSockClient:
       instance_port: The port that the instance is listening on.
       auth: The authentication token that the client has to provide to connect to the RSockServer.
       secure: Whether or not the client is using SSL.
-    
     """
     self.connection_id = connection_id
     self.client_socket = client_socket
@@ -335,9 +333,8 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str = "")
 
   Args:
     port: Local port for terminal
-    *apps_to_ports: A tuple of values `buildport:localport`. For example, ``jupyter:8888`` or ``2001:8002``
+    *apps_to_ports: A tuple of values `buildport:localport`. For example, `jupyter:8888` or `2001:8002`
     i(str): The instance to connect to
-    pwd (str): password to connect to that instance.
   """
   workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id)
   connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)

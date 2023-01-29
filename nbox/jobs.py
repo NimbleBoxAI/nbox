@@ -1,12 +1,13 @@
 """
-``nbox.Job`` and ``nbox.Serve`` are wrappers to the NBX-Jobs and NBX-Deploy APIs and contains staticmethods for convinience from the CLI.
+`nbox.Job` and `nbox.Serve` are wrappers to the NBX-Jobs and NBX-Deploy APIs and contains staticmethods for convinience from the CLI.
 
-* ``datetime.now(timezone.utc)`` is incorrect, use `this <https://blog.ganssle.io/articles/2019/11/utcnow.html>`_ method.
+* `datetime.now(timezone.utc)` is incorrect, use [this](https://blog.ganssle.io/articles/2019/11/utcnow.html) method.
 """
 
 import os
 import sys
 import tabulate
+from typing import Tuple, List, Dict
 from functools import lru_cache, partial
 from datetime import datetime, timedelta, timezone
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -39,38 +40,36 @@ class Schedule:
     starts: datetime = None,
     ends: datetime = None,
   ):
-    """Make scheduling natural.
-
-    Usage:
-
-    ```python
-    # 4:20 everyday
-    Schedule(4, 0)
-
-    # 4:20 every friday
-    Schedule(4, 20, ["fri"])
-
-    # 4:20 every friday from jan to feb
-    Schedule(4, 20, ["fri"], ["jan", "feb"])
-
-    # 4:20 everyday starting in 2 days and runs for 3 days
-    starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
-    Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
-
-    # Every 1 hour
-    Schedule(1)
-
-    # Every 69 minutes
-    Schedule(minute = 69)
-    ```
+    """Make scheduling natural. Uses 24-hour nomenclature.
 
     Args:
-      hour (int): Hour of the day, if only this value is passed it will run every ``hour``
-      minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
+      hour (int): Hour of the day, if only this value is passed it will run every `hour`
+      minute (int): Minute of the hour, if only this value is passed it will run every `minute`
       days (str/list, optional): List of days (first three chars) of the week, if not passed it will run every day.
       months (str/list, optional): List of months (first three chars) of the year, if not passed it will run every month.
       starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
       ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
+
+    Examples:
+
+      # 4:20PM everyday
+      Schedule(16, 20)
+
+      # 4:20AM every friday
+      Schedule(4, 20, ["fri"])
+
+      # 4:20AM every friday from jan to feb
+      Schedule(4, 20, ["fri"], ["jan", "feb"])
+
+      # 4:20PM everyday starting in 2 days and runs for 3 days
+      starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
+      Schedule(16, 20, starts = starts, ends = starts + timedelta(days = 3))
+
+      # Every 1 hour
+      Schedule(1)
+
+      # Every 69 minutes
+      Schedule(minute = 69)
     """
     self.hour = hour
     self.minute = minute
@@ -117,20 +116,26 @@ class Schedule:
 
   @property
   def cron(self):
-    """Cron string"""
+    """Get the cron string for the given schedule"""
     if self.mode == "every":
       return f"{self.minute} {self.hour} * * *"
     return f"{self.minute} {self.hour} * {self.months} {self.days}"
 
   def get_dict(self):
+    """Get the dictionary representation of this Schedule"""
     return {"cron": self.cron, "mode": self.mode, "starts": self.starts, "ends": self.ends}
 
   def get_message(self) -> JobProto.Schedule:
     """Get the JobProto.Schedule object for this Schedule"""
-    _starts = Timestamp(); _starts.GetCurrentTime()
-    _ends = Timestamp(); _ends.FromDatetime(self.ends)
-    # return JobProto.Schedule(start = _starts, end = _ends, cron = self.cron)
-    return JobProto.Schedule(cron = self.cron)
+    _starts = Timestamp()
+    _starts.GetCurrentTime()
+    _ends = Timestamp()
+    _ends.FromDatetime(self.ends)
+    return JobProto.Schedule(
+      start = _starts,
+      end = _ends,
+      cron = self.cron
+    )
 
   def __repr__(self):
     return str(self.get_dict())
@@ -369,7 +374,17 @@ the highest levels of consistency with the NBX-Jobs API.
 ################################################################################
 
 @lru_cache()
-def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = "") -> Tuple[str, str]:
+  """
+  Get the deployment data, either by name or id
+
+  Args:
+    name (str, optional): Name of the deployment. Defaults to "".
+    id (str, optional): ID of the deployment. Defaults to "".
+
+  Returns:
+    Tuple[str, str]: (id, name)
+  """
   # print("Getting deployment data", name, id, workspace_id)
   if (not name and not id) or (name and id):
     logger.warning("Must provide either name or id")
@@ -389,6 +404,12 @@ def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""
 
 
 def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
+  """
+  Print the list of deployments
+
+  Args:
+    sort (str, optional): Sort by. Defaults to "created_on".
+  """
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -417,8 +438,6 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
     logger.info(l)
 
 
-
-
 class Serve:
   status = staticmethod(print_serving_list)
   upload: 'Serve' = staticmethod(partial(upload_job_folder, "serving"))
@@ -427,8 +446,8 @@ class Serve:
     """Python wrapper for NBX-Serving gRPC API
 
     Args:
-      id (str): Deployment ID
-      workspace_id (str, optional): If None personal workspace is used. Defaults to None.
+      serving_id (str, optional): Serving ID. Defaults to None.
+      model_id (str, optional): Model ID. Defaults to None.
     """
     self.id = serving_id
     self.model_id = model_id
@@ -512,8 +531,18 @@ around the NBX-Jobs gRPC API.
 ################################################################################
 
 @lru_cache()
-def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *, workspace_id: str = ""):
-  """Returns the job id and name"""
+def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *, workspace_id: str = "") -> Tuple[str, str]:
+  """
+  Returns the job id and name
+  
+  Args:
+    name (str, optional): Job name. Defaults to "".
+    id (str, optional): Job ID. Defaults to "".
+    remove_archived (bool, optional): If True, will remove archived jobs. Defaults to True.
+
+  Returns:
+    Tuple[str, str]: Job ID, Job Name
+  """
   if (not name and not id) or (name and id):
     logger.info(f"Please either pass job_id '{id}' or name '{name}'")
     return None, None
@@ -541,7 +570,11 @@ def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *,
 
 
 def get_job_list(sort: str = "name", *, workspace_id: str = ""):
-  """Get list of jobs, optionally in a workspace"""
+  """Get list of jobs
+  
+  Args:
+    sort (str, optional): Sort key. Defaults to "name".
+  """
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
 
   def _get_time(t):
@@ -590,8 +623,8 @@ class Job:
     """Python wrapper for NBX-Jobs gRPC API
 
     Args:
-        id (str): job ID
-        workspace_id (str, optional): If None personal workspace is used. Defaults to None.
+      job_name (str, optional): Job name. Defaults to "".
+      job_id (str, optional): Job ID. Defaults to "".
     """
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     self.id, self.name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
@@ -610,10 +643,15 @@ class Job:
 
   @property
   def exists(self):
+    """Check if this job exists in the workspace"""
     return self.id is not None
 
   def change_schedule(self, new_schedule: Schedule):
-    """Change schedule this job"""
+    """Change schedule this job
+    
+    Args:
+      new_schedule (Schedule): New schedule
+    """
     logger.debug(f"Updating job '{self.job_proto.id}'")
     self.job_proto.schedule.MergeFrom(new_schedule.get_message())
     rpc(
@@ -634,7 +672,7 @@ class Job:
     return x
 
   def logs(self, f = sys.stdout):
-    """Stream logs of the job, ``f`` can be anything has a ``.write/.flush`` methods"""
+    """Stream logs of the job, `f` can be anything has a `.write/.flush` methods"""
     logger.debug(f"Streaming logs of job '{self.job_proto.id}'")
     for job_log in streaming_rpc(
       nbox_grpc_stub.GetJobLogs,
@@ -654,7 +692,7 @@ class Job:
     self.refresh()
 
   def refresh(self):
-    """Refresh Job statistics"""
+    """Refresh Job data"""
     logger.info(f"Updating job '{self.job_proto.id}'")
     if self.id == None:
       self.id, self.name = _get_job_data(id = self.id, workspace_id = self.workspace_id)
@@ -670,7 +708,11 @@ class Job:
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
   def trigger(self, tag: str = ""):
-    """Manually triger this job"""
+    """Manually triger this job.
+    
+    Args:
+      tag (str, optional): Tag to be set in the run metadata, read in more detail before trying to use this. Defaults to "".
+    """
     logger.debug(f"Triggering job '{self.job_proto.id}'")
     if tag:
       self.job_proto.feature_gates.update({"SetRunMetadata": tag})
@@ -681,7 +723,8 @@ class Job:
   def pause(self):
     """Pause the execution of this job.
 
-    WARNING: This will "cancel" all the scheduled runs, if present"""
+    **WARNING: This will "cancel" all the scheduled runs, if present**
+    """
     logger.info(f"Pausing job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.PAUSED
@@ -698,17 +741,35 @@ class Job:
     logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()
 
-  def _get_runs(self, page = -1, limit = 10):
+  def _get_runs(self, page = -1, limit = 10) -> List[Dict]:
     self.run_stub = nbox_ws_v1.workspace.u(self.workspace_id).job.u(self.id).runs
     runs = self.run_stub(limit = limit, page = page)["runs_list"]
     return runs
 
-  def get_runs(self, page = -1, sort = "s_no", limit = 10):
+  def get_runs(self, page = -1, sort = "s_no", limit = 10) -> List[Dict]:
+    """
+    Get runs for this job
+
+    Args:
+      page (int, optional): Page number. Defaults to -1.
+      sort (str, optional): Sort by. Defaults to "s_no".
+      limit (int, optional): Number of runs to return. Defaults to 10.
+
+    Returns:
+      List[Dict]: List of runs
+    """
     runs = self._get_runs(page, limit)
     sorted_runs = sorted(runs, key = lambda x: x[sort])
     return sorted_runs
 
   def display_runs(self, sort: str = "created_at", page: int = -1, limit = 10):
+    """Display runs for this job
+
+    Args:
+      sort (str, optional): Sort by. Defaults to "created_at".
+      page (int, optional): Page number. Defaults to -1.
+      limit (int, optional): Number of runs to return. Defaults to 10.
+    """
     headers = ["s_no", "created_at", "run_id", "status"]
 
     def _display_runs(runs):
@@ -730,7 +791,15 @@ class Job:
       y = input(f">> Print {limit} more runs? (y/n): ")
       done = y != "y"
 
-  def last_n_runs(self, n: int = 10):
+  def last_n_runs(self, n: int = 10) -> List[Dict]:
+    """Get last n runs for this job
+
+    Args:
+      n (int, optional): Number of runs to return. Defaults to 10.
+
+    Returns:
+      List[Dict]: List of runs
+    """
     all_items = []
     _page = 1
     out = self._get_runs(_page, n)

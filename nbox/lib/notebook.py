@@ -1,14 +1,16 @@
 """
 Jupyter Notebooks are user by millions of developers world wide, so we said why not just
 create an operator that runs the jupyter notebook and creates a python file out of it.
-Catch: Currently we do not support notebooks that have a ``!`` for shell commands, please
-replace them with ``subprocess.call(shelex.split(<com>))``
+Catch: Currently we do not support notebooks that have a `!` for shell commands, please
+replace them with `subprocess.call(shelex.split(<com>))`
 
-.. code-block:: python
+Example:
 
-  from nbox.lib.notebook import NotebookRunner
-  op = NotebookRunner("./sample.ipynb")
-  op() # call and it will do the rest
+```
+from nbox.lib.notebook import NotebookRunner
+op = NotebookRunner("./sample.ipynb")
+op() # call and it will do the rest
+```
 """
 
 import sys

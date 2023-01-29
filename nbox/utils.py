@@ -3,24 +3,24 @@ Utility objects and functions.
 
 This has a couple of cool things:
 
-#. ``get_logger``: a master logger for nbox, this can be modified to log through anything
-#. ``isthere``: a decorator that checks if a package is installed, if not it raises an error\
+- `get_logger`: a master logger for nbox, this can be modified to log through anything
+- `isthere`: a decorator that checks if a package is installed, if not it raises an error\
   It is more complicated than it needs to be because it is seedling for a way to package\
   functions and code together so that it can be used in a more dynamic way.
-#. ``get_files_in_folder``: a function that returns all files in a folder with a certain extension
-#. ``fetch``: a function that fetches a url and caches it in ``tempdir`` for faster loading
-#. ``get_random_name``: a function that returns a random name, if ``True`` is passed returns\
-  an ``uuid4()`` for truly random names :)
-#. ``hash_``: a function that returns a hash of any python object, string is accurate, others\
+- `get_files_in_folder`: a function that returns all files in a folder with a certain extension
+- `fetch`: a function that fetches a url and caches it in `tempdir` for faster loading
+- `get_random_name`: a function that returns a random name, if `True` is passed returns\
+  an `uuid4()` for truly random names :)
+- `hash_`: a function that returns a hash of any python object, string is accurate, others\
   might be anything, but atleast it returns something.
-#. ``folder/join``: to be used in pair, ``join(folder(__file__), "server_temp.jinja")`` means\
+- `folder/join`: to be used in pair, `join(folder(__file__), "server_temp.jinja")` means\
   relative path "../other.py". Scattered throughout the codebase, the super generic name will\
   bite me.
-#. ``to_pickle/from_pickle``: to be used in pair, ``to_pickle(obj, "path")`` and ``from_pickle("path")``\
+- `to_pickle/from_pickle`: to be used in pair, `to_pickle(obj, "path")` and `from_pickle("path")`\
   to save and load python objects to disk.
-#. ``DBase``: सस्ता-protobuf (cheap protobuf), can be nested and ``get_dict`` will get for all\
+- `DBase`: सस्ता-protobuf (cheap protobuf), can be nested and `get_dict` will get for all\
   children
-#. ``PoolBranch``: Or how to use multiprocessing, but blocked so you don't have to give a shit\
+- `PoolBranch`: Or how to use multiprocessing, but blocked so you don't have to give a shit\
   about it.
 """
 
@@ -56,17 +56,17 @@ class env:
   """
   Single namespace for all environment variables.
   
-  #. ``NBOX_LOG_LEVEL``: Logging level for ``nbox``, set ``NBOX_LOG_LEVEL=info|debug|warning"
-  #. ``NBOX_JSON_LOG``: Whether to print json-logs, set ``NBOX_JSON_LOG=1``
-  #. ``NBOX_JOB_FOLDER``: Folder path for the job, set ``NBOX_JOB_FOLDER=/tmp/nbox/jobs"``
-  #. ``NBOX_NO_AUTH``: If set ``secrets = None``, this will break any API request and is good only for local testing
-  #. ``NBOX_SSH_NO_HOST_CHECKING``: If set, ``ssh`` will not check for host key
-  #. ``NBOX_HOME_DIR``: By default ~/.nbx folder
-  #. ``NBOX_USER_TOKEN``: User token for NimbleBox.ai from <app.nimblebox.ai/secrets>_
-  #. ``NBOX_NO_LOAD_GRPC``: If set, will not load grpc stub
-  #. ``NBOX_NO_LOAD_WS``: If set, will not load webserver subway
-  #. ``NBOX_LMAO_DISABLE_RELICS``: If set, Monitoring data will be stored on the cloud Relic
-  #. ``NBOX_LMAO_DISABLE_SYSTEM_METRICS``: If set, system metrics will not logged in monitoring
+  #. `NBOX_LOG_LEVEL`: Logging level for `nbox`, set `NBOX_LOG_LEVEL=info|debug|warning"
+  #. `NBOX_JSON_LOG`: Whether to print json-logs, set `NBOX_JSON_LOG=1`
+  #. `NBOX_JOB_FOLDER`: Folder path for the job, set `NBOX_JOB_FOLDER=/tmp/nbox/jobs"`
+  #. `NBOX_NO_AUTH`: If set `secrets = None`, this will break any API request and is good only for local testing
+  #. `NBOX_SSH_NO_HOST_CHECKING`: If set, `ssh` will not check for host key
+  #. `NBOX_HOME_DIR`: By default ~/.nbx folder
+  #. `NBOX_USER_TOKEN`: User token for NimbleBox.ai from <app.nimblebox.ai/secrets>_
+  #. `NBOX_NO_LOAD_GRPC`: If set, will not load grpc stub
+  #. `NBOX_NO_LOAD_WS`: If set, will not load webserver subway
+  #. `NBOX_LMAO_DISABLE_RELICS`: If set, Monitoring data will be stored on the cloud Relic
+  #. `NBOX_LMAO_DISABLE_SYSTEM_METRICS`: If set, system metrics will not logged in monitoring
   """
   NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
   NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
@@ -169,7 +169,7 @@ def isthere(*packages, soft = True):
   """Checks all the packages
 
   Args:
-      soft (bool, optional): If ``False`` raises ``ImportError``. Defaults to True.
+      soft (bool, optional): If `False` raises `ImportError`. Defaults to `True`.
   """
   def wrapper(fn):
     _fn_ = fn
@@ -215,7 +215,7 @@ def get_files_in_folder(
   abs_path: bool = True,
   followlinks: bool = False,
 ) -> List[str]:
-  """Get files with ``ext`` in ``folder``"""
+  """Get files with `ext` in `folder`"""
   # this method is faster than glob
   import os
   all_paths = []
@@ -234,7 +234,7 @@ def get_files_in_folder(
   return all_paths
 
 def fetch(url, force = False):
-  """Fetch and cache a url for faster loading, ``force`` re-downloads"""
+  """Fetch and cache a url for faster loading, `force` re-downloads"""
   fp = join(tempfile.gettempdir(), hash_(url))
   if os.path.isfile(fp) and os.stat(fp).st_size > 0 and not force:
     with open(fp, "rb") as f:
@@ -290,7 +290,7 @@ def get_assets_folder():
 # misc/
 
 def get_random_name(uuid = False):
-  """Get a random name, if ``uuid`` is ``True``, return a uuid4"""
+  """Get a random name, if `uuid` is `True`, return a uuid4"""
   if uuid:
     return str(uuid4())
   return randomname.generate()

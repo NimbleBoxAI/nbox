@@ -117,12 +117,31 @@ class NBXClient:
     return json.dumps(self.secrets, indent=2)
 
   def get(self, item, default=None, reload: bool = False):
+    """
+    Get the value of the item from the secrets file.
+
+    Args:
+      item (str): The item to get the value for
+      default (any): The default value to return if the item is not found
+      reload (bool): If True, reload the secrets file before getting the value
+
+    Returns:
+      any: The value of the item or the default value if the item is not found
+    """
     if reload:
       with open(self.fp, "r") as f:
         self.secrets = json.load(f)
     return self.secrets.get(item, default)
 
   def put(self, item, value, persist: bool = False):
+    """
+    Put the value of the item in the secrets file.
+
+    Args:
+      item (str): The item to put the value for
+      value (any): The value to put
+      persist (bool): If True, persist the secrets file after putting the value
+    """
     self.secrets[item] = value
     if persist:
       with open(self.fp, "w") as f:
@@ -130,6 +149,9 @@ class NBXClient:
 
 
 def init_secret():
+  """
+  Initialize the secret object. This is a singleton object that can be used across multiple processes.
+  """
   # add any logic here for creating secrets
   if not U.env.NBOX_NO_AUTH(False):
     secret = NBXClient()

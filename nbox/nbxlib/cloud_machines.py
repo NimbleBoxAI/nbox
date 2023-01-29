@@ -9,6 +9,11 @@ from nbox.nbxlib.resource_constants import PresetMachineConfig
 
 # Computer types in Amazon Web Services
 class AWS:
+  """
+  Almost all the machines available in AWS are listed here.
+
+  For more information please refer the [AWS EC2 page](https://aws.amazon.com/ec2/instance-types/).
+  """
   c6a_12xlarge = PresetMachineConfig(cpu='48000m',memory='96Gi',metadata={'api_name': 'c6a.12xlarge', 'backend': 'AWS'})
   c6a_24xlarge = PresetMachineConfig(cpu='96000m',memory='192Gi',metadata={'api_name': 'c6a.24xlarge', 'backend': 'AWS'})
   c6a_2xlarge = PresetMachineConfig(cpu='8000m',memory='16Gi',metadata={'api_name': 'c6a.2xlarge', 'backend': 'AWS'})
@@ -524,6 +529,11 @@ class AWS:
 
 # Computer types in Google Cloud Platform
 class GCP:
+  """
+  Almost all the machines available in GCP are listed here.
+
+  For more information please refer the [GCP documentation](https://cloud.google.com/compute/docs/machine-types).
+  """
   e2_micro = PresetMachineConfig(cpu='2000m',memory='1Gi',metadata={'api_name': 'e2-micro', 'backend': 'GCP', 'gpu_comments': 'Not supported'})
   n2_highcpu_2 = PresetMachineConfig(cpu='2000m',memory='2Gi',metadata={'api_name': 'n2-highcpu-2', 'backend': 'GCP', 'gpu_comments': 'Not supported'})
   n2d_highcpu_2 = PresetMachineConfig(cpu='2000m',memory='2Gi',metadata={'api_name': 'n2d-highcpu-2', 'backend': 'GCP', 'gpu_comments': 'Not supported'})
@@ -669,6 +679,11 @@ class GCP:
 
 # Computer types in Microsoft Azure
 class MSAZ:
+  """
+  Almost all the machines available in Microsoft Azure are listed here.
+
+  For more information please refer the [Microsoft Azure documentation](https://docs.microsoft.com/en-us/azure/virtual-machines/sizes-general)
+  """
   M416ms_v2 = PresetMachineConfig(cpu='416000m',memory='11400Gi',metadata={'api_name': 'M416ms v2', 'backend': 'MSAZ'})
   M208ms_v2 = PresetMachineConfig(cpu='208000m',memory='5700Gi',metadata={'api_name': 'M208ms v2', 'backend': 'MSAZ'})
   M416s_v2 = PresetMachineConfig(cpu='416000m',memory='5700Gi',metadata={'api_name': 'M416s v2', 'backend': 'MSAZ'})

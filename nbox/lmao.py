@@ -104,7 +104,7 @@ def get_record(k: str, v: Union[int, float, str]) -> Record:
   return record
 
 def get_git_details(folder):
-  """If there is a .git folder in the folder, return some details for that."""
+  """If there is a `.git` folder in the folder, return some details for that."""
   repo = Repo(folder)
 
   # check for any unstaged files
@@ -410,8 +410,8 @@ class Lmao():
     Register a file save. User should be aware of some structures that we follow for standardizing the data.
     All the experiments are going to be tracked under the following pattern:
 
-    #. `relic_name` is going to be the experiment ID, so any changes to the name will not affect relic storage
-    #. `{experiment_id}(_{job_id}@{experiment_id})` is the name of the folder which contains all the artifacts in the experiment.
+    - `relic_name` is going to be the experiment ID, so any changes to the name will not affect relic storage
+    - `{experiment_id}(_{job_id}@{experiment_id})` is the name of the folder which contains all the artifacts in the experiment.
 
     If relics is not enabled, this function will simply log to the LMAO DB.
 
@@ -464,9 +464,11 @@ class Lmao():
 """
 For some Experiences you want to have CLI control so this class manages that
 
+```
 lmao upload fp:fn project_name_or_id
 lmao trigger project_name_or_id
 lmao open project_name_or_id
+```
 """
 
 @lru_cache()
@@ -522,8 +524,7 @@ class LmaoCLI:
     """Upload and register a new run for a NBX-LMAO project.
 
     Args:
-      init_path (str): This can be a path to a `folder` or can be optionally of the structure `fp:fn` where `fp`
-        is the path to the file and `fn` is the function name.
+      init_path (str): This can be a path to a `folder` or can be optionally of the structure `fp:fn` where `fp` is the path to the file and `fn` is the function name.
       project_name_or_id (str): The name or id of the LMAO project.
       workspace_id (str, optional): If nor provided, defaults to global config
       trigger (bool, optional): Defaults to False. If True, will trigger the run after uploading.

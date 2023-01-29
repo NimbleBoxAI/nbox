@@ -1,10 +1,10 @@
 import re
-from typing import Union
 
 from nbox.hyperloop.common_pb2 import Resource
 from nbox.nbxlib.cloud_machines import AWS, GCP, MSAZ
 
 class PresetMachineConfig(object):
+  """Generic dataclass for machine configurations"""
   def __init__(
     self,
     cpu: str = "1000m",

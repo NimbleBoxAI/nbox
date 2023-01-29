@@ -8,7 +8,7 @@ You can SSH into your instance with the `nbx tunnel` command. This command will 
 to your instance and start an SSH session.
 
 ```bash
-nbx tunnel 8000 -i "instance-name"
+nbx tunnel 8000 -i "instance-id"
 ```
 """
 

@@ -1,3 +1,13 @@
+"""
+## OperatorSpec
+
+This file is a helper file for the `Operator` class. It contains the `OperatorSpec` class which can be thought of
+as the `struct` that contains all the information needed to run an `Operator`. This is then used across all the
+functions in the `Operator` to provide relevant behaviour.
+
+{% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
+"""
+
 import os
 import inspect
 from enum import Enum
@@ -10,15 +20,15 @@ from nbox.hyperloop.common_pb2 import Resource
 
 class OperatorType(Enum):
   """This Enum does not concern the user, however I am describing it so people can get a feel of the breadth
-  of what nbox can do. The purpose of ``Operator`` is to build an abstract representation of any possible compute
+  of what nbox can do. The purpose of `Operator` is to build an abstract representation of any possible compute
   and execute them in any fashion needed to improve the overall performance of any distributed software system.
   Here are the different types of operators:
 
-  #. ``UNSET``: this is the default mode and is like using vanilla python without any nbox features.
-  #. ``JOB``: In this case the process is run as a batch process and the I/O of values is done using Relics
-  #. ``SERVING``: In this case the process is run as an API proces
-  #. ``WRAP_FN``: When we wrap a function as an ``Operator``, by default deployed as a job
-  #. ``WRAP_CLS``: When we wrap a class as an ``Operator``, by default deployed as a serving
+  - `UNSET`: this is the default mode and is like using vanilla python without any nbox features.
+  - `JOB`: In this case the process is run as a batch process and the I/O of values is done using Relics
+  - `SERVING`: In this case the process is run as an API proces
+  - `WRAP_FN`: When we wrap a function as an `Operator`, by default deployed as a job
+  - `WRAP_CLS`: When we wrap a class as an `Operator`, by default deployed as a serving
   """
   UNSET = "unset" # default
   JOB = "job"
