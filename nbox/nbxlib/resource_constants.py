@@ -1,6 +1,6 @@
 import re
 
-from nbox.hyperloop.common_pb2 import Resource
+from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.nbxlib.cloud_machines import AWS, GCP, MSAZ
 
 class PresetMachineConfig(object):

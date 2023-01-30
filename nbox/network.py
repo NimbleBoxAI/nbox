@@ -22,14 +22,14 @@ import nbox.utils as U
 from nbox.auth import secret
 from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
-from nbox.hyperloop.dag_pb2 import DAG
+from nbox.hyperloop.jobs.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub, nbox_model_service_stub
-from nbox.hyperloop.job_pb2 import  Job as JobProto
-from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource, Code
-from nbox.hyperloop.serve_pb2 import ModelRequest, Model
+from nbox.hyperloop.jobs.job_pb2 import  Job as JobProto
+from nbox.hyperloop.common.common_pb2 import NBXAuthInfo, Resource, Code
+from nbox.hyperloop.deploy.serve_pb2 import ModelRequest, Model
 from nbox.messages import rpc, write_binary_to_file
 from nbox.jobs import Schedule, Serve, Job
-from nbox.hyperloop.nbox_ws_pb2 import JobRequest, UpdateJobRequest
+from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest, UpdateJobRequest
 from nbox.nbxlib.operator_spec import OperatorType as OT
 
 

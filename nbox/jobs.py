@@ -21,12 +21,12 @@ from nbox.messages import rpc, streaming_rpc
 from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub, nbox_model_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
-from nbox.hyperloop.nbox_ws_pb2 import JobRequest
-from nbox.hyperloop.job_pb2 import Job as JobProto
-from nbox.hyperloop.dag_pb2 import DAG as DAGProto
-from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource
-from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto
+from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest
+from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
+from nbox.hyperloop.jobs.dag_pb2 import DAG as DAGProto
+from nbox.hyperloop.common.common_pb2 import NBXAuthInfo, Resource
+from nbox.hyperloop.jobs.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
+from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto, UpdateModelRequest
 
 
 
@@ -511,6 +511,51 @@ class Serve:
       logger.error(e)
       logger.error("Could not unpin model")
       return False
+  
+  def scale(self, replicas: int) -> bool:
+    """Scale the model deployment
+
+    Args:
+      replicas (int): Number of replicas
+    """
+    try:
+      logger.info(f"Scale model deployment {self.model_id} to {replicas} replicas")
+      rpc(
+        nbox_model_service_stub.UpdateModel,
+        UpdateModelRequest(
+         model=ModelProto(
+           id=self.model_id,
+            serving_group_id=self.serving_id,
+            replicas=replicas
+          ),
+          update_mask=FieldMask(paths=["replicas"]),
+          auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        "Could not scale deployment",
+        raise_on_error=True
+      )
+    except Exception as e:
+      logger.error(e)
+      logger.error("Could not scale deployment")
+      return False
+  
+  def logs(self, f = sys.stdout):
+    """Get the logs of the model deployment
+
+    Args:
+      f (file, optional): File to write the logs to. Defaults to sys.stdout.
+    """
+    logger.debug(f"Streaming logs of job '{self.model_id}'")
+    for model_log in streaming_rpc(
+      nbox_model_service_stub.ModelLogs,
+      ModelRequest(model = ModelProto(id = self.model_id, serving_group_id = self.serving_id),
+          auth_info = NBXAuthInfo(workspace_id=self.workspace_id),
+      ),
+      f"Could not get logs of model {self.model_id}, only live logs are available",
+      False
+    ):
+      for log in model_log.log:
+        f.write(log)
+        f.flush()
 
   def __repr__(self) -> str:
     x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
@@ -681,7 +726,7 @@ class Job:
       True
     ):
       for log in job_log.log:
-        f.write(log + "\n")
+        f.write(log)
         f.flush()
 
   def delete(self):

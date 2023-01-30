@@ -24,8 +24,8 @@ except ImportError:
 from nbox.auth import secret, ConfigString
 from nbox.utils import logger, env
 from nbox.subway import Sub30
-from nbox.hyperloop.nbox_ws_pb2_grpc import WSJobServiceStub
-from nbox.hyperloop.serve_pb2_grpc import ServingServiceStub, ModelServiceStub
+from nbox.hyperloop.jobs.nbox_ws_pb2_grpc import WSJobServiceStub
+from nbox.hyperloop.deploy.serve_pb2_grpc import ServingServiceStub, ModelServiceStub
 from nbox.version import __version__
 
 

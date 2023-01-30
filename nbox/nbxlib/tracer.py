@@ -10,10 +10,10 @@ import nbox.utils as U
 from nbox.utils import logger, SimplerTimes
 from nbox.init import nbox_grpc_stub
 from nbox.auth import secret
-from nbox.hyperloop.job_pb2 import Job as JobProto
-from nbox.hyperloop.dag_pb2 import Node
-from nbox.hyperloop.nbox_ws_pb2 import UpdateRunRequest
-from nbox.hyperloop.common_pb2 import NBXAuthInfo
+from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
+from nbox.hyperloop.jobs.dag_pb2 import Node
+from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateRunRequest
+from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 from nbox.messages import rpc, read_file_to_binary, read_file_to_string, message_to_dict
 
 class Tracer:
