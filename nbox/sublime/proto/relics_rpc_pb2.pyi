@@ -3,152 +3,231 @@
 isort:skip_file
 """
 import builtins
+import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
 import proto.relics_pb2
-import typing
-import typing_extensions
+import sys
+
+if sys.version_info >= (3, 8):
+    import typing as typing_extensions
+else:
+    import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
+@typing_extensions.final
 class CreateRelicRequest(google.protobuf.message.Message):
     """things related to general WebAPIs"""
+
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    WORKSPACE_ID_FIELD_NUMBER: builtins.int
+
     NAME_FIELD_NUMBER: builtins.int
     REGION_FIELD_NUMBER: builtins.int
     NBX_INTEGRATION_TOKEN_FIELD_NUMBER: builtins.int
     NBX_RESOURCE_ID_FIELD_NUMBER: builtins.int
     BUCKET_META_FIELD_NUMBER: builtins.int
-    workspace_id: typing.Text
-    """the main separation layer"""
-
-    name: typing.Text
-    region: typing.Text
-    nbx_integration_token: typing.Text
+    name: builtins.str
+    region: builtins.str
+    nbx_integration_token: builtins.str
     """deprecated, will be removed soon"""
-
-    nbx_resource_id: typing.Text
+    nbx_resource_id: builtins.str
     """this is the resource id for which will be paired with integration token"""
-
     @property
     def bucket_meta(self) -> proto.relics_pb2.BucketMetadata:
         """If the bucket is in their platform then they tell us that they want one there
         else we are going to assume that they want one in our platform
         """
-        pass
-    def __init__(self,
+    def __init__(
+        self,
         *,
-        workspace_id: typing.Text = ...,
-        name: typing.Text = ...,
-        region: typing.Text = ...,
-        nbx_integration_token: typing.Text = ...,
-        nbx_resource_id: typing.Text = ...,
-        bucket_meta: typing.Optional[proto.relics_pb2.BucketMetadata] = ...,
-        ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","name",b"name","nbx_integration_token",b"nbx_integration_token","nbx_resource_id",b"nbx_resource_id","region",b"region","workspace_id",b"workspace_id"]) -> None: ...
+        name: builtins.str = ...,
+        region: builtins.str = ...,
+        nbx_integration_token: builtins.str = ...,
+        nbx_resource_id: builtins.str = ...,
+        bucket_meta: proto.relics_pb2.BucketMetadata | None = ...,
+    ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["bucket_meta", b"bucket_meta"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta", b"bucket_meta", "name", b"name", "nbx_integration_token", b"nbx_integration_token", "nbx_resource_id", b"nbx_resource_id", "region", b"region"]) -> None: ...
+
 global___CreateRelicRequest = CreateRelicRequest
 
+@typing_extensions.final
 class ListRelicsRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    WORKSPACE_ID_FIELD_NUMBER: builtins.int
+
     RELIC_NAME_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
-    workspace_id: typing.Text
-    """the main separation layer"""
-
-    relic_name: typing.Text
+    relic_name: builtins.str
     """the name of the relic"""
-
     page_no: builtins.int
     """the page number for pagination needs"""
-
-    relic_id: typing.Text
+    relic_id: builtins.str
     """the ID of the parent relic"""
-
-    def __init__(self,
+    def __init__(
+        self,
         *,
-        workspace_id: typing.Text = ...,
-        relic_name: typing.Text = ...,
+        relic_name: builtins.str = ...,
         page_no: builtins.int = ...,
-        relic_id: typing.Text = ...,
-        ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["page_no",b"page_no","relic_id",b"relic_id","relic_name",b"relic_name","workspace_id",b"workspace_id"]) -> None: ...
+        relic_id: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["page_no", b"page_no", "relic_id", b"relic_id", "relic_name", b"relic_name"]) -> None: ...
+
 global___ListRelicsRequest = ListRelicsRequest
 
+@typing_extensions.final
 class ListRelicsResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     RELICS_FIELD_NUMBER: builtins.int
     TOTAL_RELICS_FIELD_NUMBER: builtins.int
     @property
     def relics(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[proto.relics_pb2.Relic]: ...
     total_relics: builtins.int
     """the total number of relics used for pagination"""
-
-    def __init__(self,
+    def __init__(
+        self,
         *,
-        relics: typing.Optional[typing.Iterable[proto.relics_pb2.Relic]] = ...,
+        relics: collections.abc.Iterable[proto.relics_pb2.Relic] | None = ...,
         total_relics: builtins.int = ...,
-        ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["relics",b"relics","total_relics",b"total_relics"]) -> None: ...
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["relics", b"relics", "total_relics", b"total_relics"]) -> None: ...
+
 global___ListRelicsResponse = ListRelicsResponse
 
+@typing_extensions.final
 class ListRelicFilesRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    WORKSPACE_ID_FIELD_NUMBER: builtins.int
+
     RELIC_ID_FIELD_NUMBER: builtins.int
     RELIC_NAME_FIELD_NUMBER: builtins.int
     PREFIX_FIELD_NUMBER: builtins.int
     FILE_NAME_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
-    workspace_id: typing.Text
-    """the main separation layer"""
-
-    relic_id: typing.Text
+    relic_id: builtins.str
     """the id of the relic"""
-
-    relic_name: typing.Text
+    relic_name: builtins.str
     """the id of the relic"""
-
-    prefix: typing.Text
+    prefix: builtins.str
     """the prefix for the files"""
-
-    file_name: typing.Text
+    file_name: builtins.str
     """for searching through the files, we may not support this functionality
     right now, but this is a crucial system to have
     """
-
     page_no: builtins.int
     """the page number for pagination needs"""
-
-    def __init__(self,
+    def __init__(
+        self,
         *,
-        workspace_id: typing.Text = ...,
-        relic_id: typing.Text = ...,
-        relic_name: typing.Text = ...,
-        prefix: typing.Text = ...,
-        file_name: typing.Text = ...,
+        relic_id: builtins.str = ...,
+        relic_name: builtins.str = ...,
+        prefix: builtins.str = ...,
+        file_name: builtins.str = ...,
         page_no: builtins.int = ...,
-        ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["file_name",b"file_name","page_no",b"page_no","prefix",b"prefix","relic_id",b"relic_id","relic_name",b"relic_name","workspace_id",b"workspace_id"]) -> None: ...
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["file_name", b"file_name", "page_no", b"page_no", "prefix", b"prefix", "relic_id", b"relic_id", "relic_name", b"relic_name"]) -> None: ...
+
 global___ListRelicFilesRequest = ListRelicFilesRequest
 
+@typing_extensions.final
 class ListRelicFilesResponse(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
     FILES_FIELD_NUMBER: builtins.int
     TOTAL_FILES_FIELD_NUMBER: builtins.int
     @property
     def files(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[proto.relics_pb2.RelicFile]: ...
     total_files: builtins.int
     """the total number of files used for pagination"""
-
-    def __init__(self,
+    def __init__(
+        self,
         *,
-        files: typing.Optional[typing.Iterable[proto.relics_pb2.RelicFile]] = ...,
+        files: collections.abc.Iterable[proto.relics_pb2.RelicFile] | None = ...,
         total_files: builtins.int = ...,
-        ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["files",b"files","total_files",b"total_files"]) -> None: ...
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["files", b"files", "total_files", b"total_files"]) -> None: ...
+
 global___ListRelicFilesResponse = ListRelicFilesResponse
+
+@typing_extensions.final
+class ActivityLogRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    RELIC_ID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    FROM_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
+    TO_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
+    PAGE_NO_FIELD_NUMBER: builtins.int
+    @property
+    def relic_id(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[builtins.str]:
+        """the id of the relic"""
+    username: builtins.str
+    """the username for which we want to get the logs"""
+    from_timestamp_ns: builtins.int
+    """the timestamp from which we want to get the logs"""
+    to_timestamp_ns: builtins.int
+    """the timestamp to which we want to get the logs"""
+    page_no: builtins.int
+    """the page number for pagination needs"""
+    def __init__(
+        self,
+        *,
+        relic_id: collections.abc.Iterable[builtins.str] | None = ...,
+        username: builtins.str = ...,
+        from_timestamp_ns: builtins.int = ...,
+        to_timestamp_ns: builtins.int = ...,
+        page_no: builtins.int = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns", b"from_timestamp_ns", "page_no", b"page_no", "relic_id", b"relic_id", "to_timestamp_ns", b"to_timestamp_ns", "username", b"username"]) -> None: ...
+
+global___ActivityLogRequest = ActivityLogRequest
+
+@typing_extensions.final
+class ActivityLog(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    TIMESTAMP_NS_FIELD_NUMBER: builtins.int
+    RELIC_ID_FIELD_NUMBER: builtins.int
+    OPERATION_FIELD_NUMBER: builtins.int
+    OBJECT_SIZE_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    timestamp_ns: builtins.int
+    """the timestamp at which the logs were created"""
+    relic_id: builtins.str
+    """the id of the relic"""
+    operation: builtins.str
+    """the operation that was performed"""
+    object_size: builtins.str
+    """the size of the object that was operated on"""
+    username: builtins.str
+    """the username of the user who performed the operation"""
+    def __init__(
+        self,
+        *,
+        timestamp_ns: builtins.int = ...,
+        relic_id: builtins.str = ...,
+        operation: builtins.str = ...,
+        object_size: builtins.str = ...,
+        username: builtins.str = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["object_size", b"object_size", "operation", b"operation", "relic_id", b"relic_id", "timestamp_ns", b"timestamp_ns", "username", b"username"]) -> None: ...
+
+global___ActivityLog = ActivityLog
+
+@typing_extensions.final
+class ActivityLogResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LOGS_FIELD_NUMBER: builtins.int
+    @property
+    def logs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ActivityLog]: ...
+    def __init__(
+        self,
+        *,
+        logs: collections.abc.Iterable[global___ActivityLog] | None = ...,
+    ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["logs", b"logs"]) -> None: ...
+
+global___ActivityLogResponse = ActivityLogResponse

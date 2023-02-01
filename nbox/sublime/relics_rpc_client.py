@@ -137,5 +137,18 @@ class RelicStore_Stub:
     _RelicFile = b64_to_message(echo_resp.base64_string, _RelicFile)
     return _RelicFile
 
+  def get_activity_log(self, _ActivityLogRequest: ActivityLogRequest) -> ActivityLogResponse:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/get_activity_log",
+      Echo(message = "ActivityLogRequest", base64_string=message_to_b64(_ActivityLogRequest), rpc_name = "get_activity_log")
+    )
+    if echo_resp is None:
+      return None
+
+    _ActivityLogResponse = ActivityLogResponse() # predefine the output proto
+    _ActivityLogResponse = b64_to_message(echo_resp.base64_string, _ActivityLogResponse)
+    return _ActivityLogResponse
+
 
 # ------ End Stub ------ #

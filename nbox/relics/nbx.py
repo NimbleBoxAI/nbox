@@ -46,11 +46,18 @@ def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
       "last_modified": int(file_stat.st_mtime), # int
       "size": max(1, file_stat.st_size),        # bytes
     }
+
+  if "." in fpath_cleaned:
+      content_type = get_mime_type(fpath_cleaned.split(".")[-1], "application/octet-stream")
+  else:
+      content_type = "application/octet-stream"
+
   return RelicFile(
     name = fpath_cleaned,
     username = username,
     type = RelicFile.RelicType.FILE,
     workspace_id = workspace_id,
+    content_type=content_type,
     **extra
   )
 
@@ -156,10 +163,6 @@ class RelicsNBX(BaseStore):
       raise ValueError("relic_name not set in RelicFile")
     if self.prefix:
       relic_file.name = f"{self.prefix}/{relic_file.name}"
-    if "." in local_path:
-      mime = get_mime_type(local_path.split(".")[-1], "application/octet-stream")
-    else:
-      mime = "application/octet-stream"
 
     # ideally this is a lot like what happens in nbox
     logger.debug(f"Uploading {local_path} to {relic_file.name}")
