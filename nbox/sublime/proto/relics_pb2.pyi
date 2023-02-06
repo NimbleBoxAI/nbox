@@ -30,6 +30,7 @@ class Relic(google.protobuf.message.Message):
     LAST_MODIFIED_FIELD_NUMBER: builtins.int
     STARRED_FIELD_NUMBER: builtins.int
     TAGS_FIELD_NUMBER: builtins.int
+    WORKSPACE_ID_FIELD_NUMBER: builtins.int
     BUCKET_META_FIELD_NUMBER: builtins.int
     id: typing.Text
     """these are the primary fields"""
@@ -44,6 +45,7 @@ class Relic(google.protobuf.message.Message):
     def tags(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
         """tags are like labels in NBX-Relics"""
         pass
+    workspace_id: typing.Text
     @property
     def bucket_meta(self) -> global___BucketMetadata:
         """there are other things that may not be needed by the FE, think of this as the 
@@ -60,10 +62,11 @@ class Relic(google.protobuf.message.Message):
         last_modified: builtins.int = ...,
         starred: builtins.bool = ...,
         tags: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        workspace_id: typing.Text = ...,
         bucket_meta: typing.Optional[global___BucketMetadata] = ...,
         ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","starred",b"starred","tags",b"tags"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","starred",b"starred","tags",b"tags","workspace_id",b"workspace_id"]) -> None: ...
 global___Relic = Relic
 
 class BucketMetadata(google.protobuf.message.Message):
@@ -195,6 +198,7 @@ class RelicFile(google.protobuf.message.Message):
     COMMENT_FIELD_NUMBER: builtins.int
     USERNAME_FIELD_NUMBER: builtins.int
     TYPE_FIELD_NUMBER: builtins.int
+    WORKSPACE_ID_FIELD_NUMBER: builtins.int
     RELIC_NAME_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
     CONTENT_TYPE_FIELD_NUMBER: builtins.int
@@ -223,6 +227,7 @@ class RelicFile(google.protobuf.message.Message):
     """
 
     type: global___RelicFile.RelicType.ValueType
+    workspace_id: typing.Text
     relic_name: typing.Text
     """the name of the parent relic"""
 
@@ -255,6 +260,7 @@ class RelicFile(google.protobuf.message.Message):
         comment: typing.Text = ...,
         username: typing.Text = ...,
         type: global___RelicFile.RelicType.ValueType = ...,
+        workspace_id: typing.Text = ...,
         relic_name: typing.Text = ...,
         relic_id: typing.Text = ...,
         content_type: typing.Text = ...,
@@ -262,5 +268,5 @@ class RelicFile(google.protobuf.message.Message):
         headers: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         body: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","content_type",b"content_type","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","content_type",b"content_type","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___RelicFile = RelicFile
