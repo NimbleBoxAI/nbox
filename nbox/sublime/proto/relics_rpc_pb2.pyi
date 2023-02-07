@@ -22,7 +22,7 @@ class CreateRelicRequest(google.protobuf.message.Message):
     NBX_RESOURCE_ID_FIELD_NUMBER: builtins.int
     BUCKET_META_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
-    """the main separation layer"""
+    """the workspace id for which we are creating the relic"""
 
     name: typing.Text
     region: typing.Text
@@ -58,7 +58,7 @@ class ListRelicsRequest(google.protobuf.message.Message):
     PAGE_NO_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
-    """the main separation layer"""
+    """the workspace id for which we are creating the relic"""
 
     relic_name: typing.Text
     """the name of the relic"""
@@ -105,7 +105,7 @@ class ListRelicFilesRequest(google.protobuf.message.Message):
     FILE_NAME_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
-    """the main separation layer"""
+    """the workspace id for which we are creating the relic"""
 
     relic_id: typing.Text
     """the id of the relic"""
@@ -152,3 +152,82 @@ class ListRelicFilesResponse(google.protobuf.message.Message):
         ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["files",b"files","total_files",b"total_files"]) -> None: ...
 global___ListRelicFilesResponse = ListRelicFilesResponse
+
+class ActivityLogRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    RELIC_ID_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    FROM_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
+    TO_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
+    PAGE_NO_FIELD_NUMBER: builtins.int
+    @property
+    def relic_id(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
+        """the id of the relic"""
+        pass
+    username: typing.Text
+    """the username for which we want to get the logs"""
+
+    from_timestamp_ns: builtins.int
+    """the timestamp from which we want to get the logs"""
+
+    to_timestamp_ns: builtins.int
+    """the timestamp to which we want to get the logs"""
+
+    page_no: builtins.int
+    """the page number for pagination needs"""
+
+    def __init__(self,
+        *,
+        relic_id: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        username: typing.Text = ...,
+        from_timestamp_ns: builtins.int = ...,
+        to_timestamp_ns: builtins.int = ...,
+        page_no: builtins.int = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns",b"from_timestamp_ns","page_no",b"page_no","relic_id",b"relic_id","to_timestamp_ns",b"to_timestamp_ns","username",b"username"]) -> None: ...
+global___ActivityLogRequest = ActivityLogRequest
+
+class ActivityLog(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    TIMESTAMP_NS_FIELD_NUMBER: builtins.int
+    RELIC_ID_FIELD_NUMBER: builtins.int
+    OPERATION_FIELD_NUMBER: builtins.int
+    OBJECT_SIZE_FIELD_NUMBER: builtins.int
+    USERNAME_FIELD_NUMBER: builtins.int
+    timestamp_ns: builtins.int
+    """the timestamp at which the logs were created"""
+
+    relic_id: typing.Text
+    """the id of the relic"""
+
+    operation: typing.Text
+    """the operation that was performed"""
+
+    object_size: typing.Text
+    """the size of the object that was operated on"""
+
+    username: typing.Text
+    """the username of the user who performed the operation"""
+
+    def __init__(self,
+        *,
+        timestamp_ns: builtins.int = ...,
+        relic_id: typing.Text = ...,
+        operation: typing.Text = ...,
+        object_size: typing.Text = ...,
+        username: typing.Text = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["object_size",b"object_size","operation",b"operation","relic_id",b"relic_id","timestamp_ns",b"timestamp_ns","username",b"username"]) -> None: ...
+global___ActivityLog = ActivityLog
+
+class ActivityLogResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    LOGS_FIELD_NUMBER: builtins.int
+    @property
+    def logs(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ActivityLog]: ...
+    def __init__(self,
+        *,
+        logs: typing.Optional[typing.Iterable[global___ActivityLog]] = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["logs",b"logs"]) -> None: ...
+global___ActivityLogResponse = ActivityLogResponse

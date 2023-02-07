@@ -46,8 +46,6 @@ class Relic(google.protobuf.message.Message):
         """tags are like labels in NBX-Relics"""
         pass
     workspace_id: typing.Text
-    """this is the workspace id"""
-
     @property
     def bucket_meta(self) -> global___BucketMetadata:
         """there are other things that may not be needed by the FE, think of this as the 
@@ -203,6 +201,7 @@ class RelicFile(google.protobuf.message.Message):
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     RELIC_NAME_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
+    CONTENT_TYPE_FIELD_NUMBER: builtins.int
     URL_FIELD_NUMBER: builtins.int
     HEADERS_FIELD_NUMBER: builtins.int
     BODY_FIELD_NUMBER: builtins.int
@@ -229,14 +228,13 @@ class RelicFile(google.protobuf.message.Message):
 
     type: global___RelicFile.RelicType.ValueType
     workspace_id: typing.Text
-    """this is the workspace id"""
-
     relic_name: typing.Text
     """the name of the parent relic"""
 
     relic_id: typing.Text
     """the name of the parent relic"""
 
+    content_type: typing.Text
     url: typing.Text
     """NOTE: these are high index values so they can be expanded in the 1xx range
     this is all for the different clouds
@@ -265,9 +263,10 @@ class RelicFile(google.protobuf.message.Message):
         workspace_id: typing.Text = ...,
         relic_name: typing.Text = ...,
         relic_id: typing.Text = ...,
+        content_type: typing.Text = ...,
         url: typing.Text = ...,
         headers: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         body: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","content_type",b"content_type","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___RelicFile = RelicFile
