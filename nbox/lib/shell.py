@@ -28,17 +28,6 @@ class ShellCommand(Operator):
       if called_process.returncode != 0:
         raise Exception(f"Command {comm} failed with return code {called_process.stdout}")
 
-
-class Python(Operator):
-  def __init__(self, func, *args, **kwargs):
-    """Convert a python function into an operator, everything has to be passed at runtime"""
-    super().__init__()
-    self.fak = (func, args, kwargs)
-
-  def forward(self):
-    return self.fak[0](*self.fak[1], **self.fak[2])
-
-
 class PythonScript(Operator):
   def __init__(self, fpath, python_path = "/usr/bin/python3", **kwargs):
     """Run any file in python as an operator"""

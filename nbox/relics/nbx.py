@@ -312,12 +312,12 @@ class RelicsNBX(BaseStore):
     relic_file.workspace_id = self.workspace_id
     self._download_relic_file(local_path, relic_file)
 
-  def rm(self, local_path: str):
+  def rm(self, remote_path: str):
     """Delete the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.debug(f"Getting file: {local_path}")
-    relic_file = get_relic_file(local_path, self.username, self.workspace_id)
+    logger.debug(f"Getting file: {remote_path}")
+    relic_file = get_relic_file(remote_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     for _ in range(2):
       out = self.stub.delete_relic_file(relic_file)

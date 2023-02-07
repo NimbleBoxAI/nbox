@@ -23,9 +23,11 @@ from nbox.utils import join, logger
 class ConfigString():
   workspace_id = "config.global.workspace_id"
   workspace_name = "config.global.workspace_name"
+  email = "email"
   cache = "cache"
   username = "username"
   access_token = "access_token"
+  url = "nbx_url"
 
   def items():
     return [ConfigString.workspace_id, ConfigString.workspace_name, ConfigString.cache]
@@ -89,10 +91,10 @@ class NBXClient:
 
       # create the objects
       self.secrets = {
-        "email": email,
-        "access_token": access_token,
-        "nbx_url": nbx_url,
-        "username": username,
+        ConfigString.email: email,
+        ConfigString.access_token: access_token,
+        ConfigString.url: nbx_url,
+        ConfigString.username: username,
 
         # config values that can be set by the user for convenience
         ConfigString.workspace_id: workspace_id,

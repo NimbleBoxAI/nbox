@@ -38,7 +38,7 @@ from nbox.nbxlib.tracer import Tracer
 from nbox.relics import RelicsNBX
 from nbox.jobs import Job, upload_job_folder
 from nbox.hyperloop.common.common_pb2 import Resource
-from nbox.init import nbox_grpc_stub
+from nbox.init import nbox_grpc_stub, nbox_ws_v1
 from nbox.messages import message_to_dict
 from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateJobRequest
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
@@ -57,32 +57,8 @@ from nbox.observability.system import SystemMetricsLogger
 functional components of LMAO
 """
 
-@lru_cache()
 def get_lmao_stub() -> LMAO_Stub:
-  username = username or secret.get(ConfigString.username)
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-
-  # prepare the URL
-  id_or_name = f"monitoring-{workspace_id}"
-  logger.info(f"Instance id_or_name: {id_or_name}")
-  logger.debug(f"workspace_id: {workspace_id}")
-  instance = Instance(id_or_name, workspace_id = workspace_id)
-  try:
-    open_data = instance.open_data
-  except AttributeError:
-    raise Exception(f"Is instance '{instance.project_id}' running?")
-  build = "build"
-  if "app.c." in secret.get("nbx_url"):
-    build = "build.c"
-  url = f"https://server-{open_data['url']}.{build}.nimblebox.ai/"
-  logger.debug(f"URL: {url}")
-
-  # create a session with the auth header
-  _session = Session()
-  _session.cookies.update(instance.stub_ws_instance._session.cookies)
-
-  # self.lmao = LMAO_Stub(url = "http://127.0.0.1:8080", session = _session) # debug
-  lmao_stub = LMAO_Stub(url = url, session = _session)
+  lmao_stub = LMAO_Stub(url = secret.get(ConfigString.url) + "/monitoring", session = nbox_ws_v1._session)
   return lmao_stub
 
 def get_record(k: str, v: Union[int, float, str]) -> Record:
@@ -325,25 +301,34 @@ class Lmao():
     )
 
     if self.experiment_id:
-      run_details = self.lmao.get_run_details(Run(experiment_id = self.experiment_id, project_id=project_id))
+      run_details = self.lmao.get_run_details(
+        Run(
+          workspace_id = self.workspace_id,
+          project_id=project_id,
+          experiment_id = self.experiment_id,
+        )
+      )
       if not run_details:
         # TODO: Make a custom exception of this
         raise Exception("Server Side exception has occurred, Check the log for details")
       if run_details.experiment_id:
         # means that this run already exists so we need to make an update call
-        ack = self.lmao.update_run_status(Run(
-          project_id = project_id,
-          experiment_id = run_details.experiment_id,
-          agent = self._agent_details,
-          update_keys = ["agent"],
-        ))
+        ack = self.lmao.update_run_status(
+          Run(
+            workspace_id = self.workspace_id,
+            project_id = project_id,
+            experiment_id = run_details.experiment_id,
+            agent = self._agent_details,
+            update_keys = ["agent"],
+          )
+        )
         if not ack.success:
           raise Exception(f"Failed to update run status! {ack.message}")
     else:
       run_details = self.lmao.init_run(
         InitRunRequest(
+          workspace_id = self.workspace_id,
           agent_details=self._agent_details,
-          created_at = SimplerTimes.get_now_i64(),
           project_name = project_name,
           project_id = project_id,
           config = dumps(log_config),
@@ -391,7 +376,12 @@ class Lmao():
     step = step if step is not None else SimplerTimes.get_now_i64()
     if step < 0:
       raise Exception("Step must be <= 0")
-    run_log = RunLog(experiment_id = self.run.experiment_id, project_id=self.project_id, log_type=log_type)
+    run_log = RunLog(
+      workspace_id = self.workspace_id,
+      project_id=self.project_id,
+      experiment_id = self.run.experiment_id,
+      log_type=log_type
+    )
     for k,v in y.items():
       # TODO:@yashbonde replace Record with RecordColumn
       record = get_record(k, v)
@@ -429,6 +419,8 @@ class Lmao():
       else:
         raise Exception(f"File or Folder not found: {folder_or_file}")
 
+    # TODO: @yashbonde log the files in the LMAO DB for sanity, currently this is a no-op, keeping it here so one day
+    # when we add something cool we can use this
     logger.debug(f"Storing {len(all_files)} files")
     if self.save_to_relic:
       relic = self.get_relic()
@@ -436,11 +428,6 @@ class Lmao():
       for f in all_files:
         relic.put(f)
 
-    # TODO: @yashbonde log the files in the LMAO DB for sanity, currently this is a no-op, keeping it here so one day
-    # when we add something cool we can use this
-    # fl = FileList(experiment_id = self.run.experiment_id)
-    # fl.files.extend([File(relic_file = RelicFile(name = x)) for x in all_files])
-    # self.lmao.on_save(fl)
 
   def end(self):
     """End the run to declare it complete. This is more of a convinience function than anything else. For example when you

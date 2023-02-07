@@ -792,8 +792,8 @@ class Operator():
     if deployment_type not in ospec.OperatorType._valid_deployment_types():
       raise ValueError(f"Invalid deployment type: {deployment_type}. Must be one of {ospec.OperatorType._valid_deployment_types()}")
     if deployment_type == ospec.OperatorType.SERVING.value:
-      if id_or_name is None:
-        raise ValueError("id_or_name must be provided for serving deployment")
+      if group_id is None:
+        raise ValueError("pass deployment_id as group_id for serving deployment")
 
     # get the filepath and name to import for convience
     fp, folder, file, name = ospec.get_operator_location(self)

@@ -442,7 +442,7 @@ class Serve:
   status = staticmethod(print_serving_list)
   upload: 'Serve' = staticmethod(partial(upload_job_folder, "serving"))
 
-  def __init__(self, serving_id: str = None, model_id: str = None, *, workspace_id: str = "") -> None:
+  def __init__(self, serving_id: str = "", model_id: str = "", *, workspace_id: str = "") -> None:
     """Python wrapper for NBX-Serving gRPC API
 
     Args:
@@ -518,6 +518,11 @@ class Serve:
     Args:
       replicas (int): Number of replicas
     """
+    if not self.model_id:
+      raise ValueError("Model ID is required to scale a model. Pass with --model_id")
+    if replicas < 1:
+      raise ValueError("Replicas must be greater than 0")
+
     try:
       logger.info(f"Scale model deployment {self.model_id} to {replicas} replicas")
       rpc(
@@ -547,8 +552,14 @@ class Serve:
     logger.debug(f"Streaming logs of job '{self.model_id}'")
     for model_log in streaming_rpc(
       nbox_model_service_stub.ModelLogs,
-      ModelRequest(model = ModelProto(id = self.model_id, serving_group_id = self.serving_id),
-          auth_info = NBXAuthInfo(workspace_id=self.workspace_id),
+      ModelRequest(
+        model = ModelProto(
+          id = self.model_id,
+          serving_group_id = self.serving_id
+        ),
+        auth_info = NBXAuthInfo(
+          workspace_id=self.workspace_id
+        ),
       ),
       f"Could not get logs of model {self.model_id}, only live logs are available",
       False
