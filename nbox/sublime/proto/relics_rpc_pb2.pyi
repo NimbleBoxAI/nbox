@@ -155,11 +155,15 @@ global___ListRelicFilesResponse = ListRelicFilesResponse
 
 class ActivityLogRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    WORKSPACE_ID_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
     USERNAME_FIELD_NUMBER: builtins.int
     FROM_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
     TO_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
+    workspace_id: typing.Text
+    """the workspace id for which we are creating the relic"""
+
     @property
     def relic_id(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
         """the id of the relic"""
@@ -178,13 +182,14 @@ class ActivityLogRequest(google.protobuf.message.Message):
 
     def __init__(self,
         *,
+        workspace_id: typing.Text = ...,
         relic_id: typing.Optional[typing.Iterable[typing.Text]] = ...,
         username: typing.Text = ...,
         from_timestamp_ns: builtins.int = ...,
         to_timestamp_ns: builtins.int = ...,
         page_no: builtins.int = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns",b"from_timestamp_ns","page_no",b"page_no","relic_id",b"relic_id","to_timestamp_ns",b"to_timestamp_ns","username",b"username"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns",b"from_timestamp_ns","page_no",b"page_no","relic_id",b"relic_id","to_timestamp_ns",b"to_timestamp_ns","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___ActivityLogRequest = ActivityLogRequest
 
 class ActivityLog(google.protobuf.message.Message):
