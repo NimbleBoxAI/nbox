@@ -5,12 +5,33 @@ isort:skip_file
 import builtins
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
+import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import proto.relics_pb2
 import typing
 import typing_extensions
 
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
+
+class _Actions:
+    ValueType = typing.NewType('ValueType', builtins.int)
+    V: typing_extensions.TypeAlias = ValueType
+class _ActionsEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_Actions.ValueType], builtins.type):
+    DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
+    NONE: _Actions.ValueType  # 0
+    CREATE: _Actions.ValueType  # 1
+    UPDATE: _Actions.ValueType  # 2
+    DELETE: _Actions.ValueType  # 3
+class Actions(_Actions, metaclass=_ActionsEnumTypeWrapper):
+    """This is a set of generic RPCs which can be used to mark operation type for relics"""
+    pass
+
+NONE: Actions.ValueType  # 0
+CREATE: Actions.ValueType  # 1
+UPDATE: Actions.ValueType  # 2
+DELETE: Actions.ValueType  # 3
+global___Actions = Actions
+
 
 class CreateRelicRequest(google.protobuf.message.Message):
     """things related to general WebAPIs"""
@@ -155,15 +176,18 @@ global___ListRelicFilesResponse = ListRelicFilesResponse
 
 class ActivityLogRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    WORKSPACE_ID_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
     USERNAME_FIELD_NUMBER: builtins.int
     FROM_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
     TO_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
     PAGE_NO_FIELD_NUMBER: builtins.int
-    @property
-    def relic_id(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]:
-        """the id of the relic"""
-        pass
+    workspace_id: typing.Text
+    """the workspace id for which we are creating the relic"""
+
+    relic_id: typing.Text
+    """the id of the relic"""
+
     username: typing.Text
     """the username for which we want to get the logs"""
 
@@ -178,13 +202,14 @@ class ActivityLogRequest(google.protobuf.message.Message):
 
     def __init__(self,
         *,
-        relic_id: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        workspace_id: typing.Text = ...,
+        relic_id: typing.Text = ...,
         username: typing.Text = ...,
         from_timestamp_ns: builtins.int = ...,
         to_timestamp_ns: builtins.int = ...,
         page_no: builtins.int = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns",b"from_timestamp_ns","page_no",b"page_no","relic_id",b"relic_id","to_timestamp_ns",b"to_timestamp_ns","username",b"username"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns",b"from_timestamp_ns","page_no",b"page_no","relic_id",b"relic_id","to_timestamp_ns",b"to_timestamp_ns","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___ActivityLogRequest = ActivityLogRequest
 
 class ActivityLog(google.protobuf.message.Message):
@@ -200,10 +225,10 @@ class ActivityLog(google.protobuf.message.Message):
     relic_id: typing.Text
     """the id of the relic"""
 
-    operation: typing.Text
+    operation: global___Actions.ValueType
     """the operation that was performed"""
 
-    object_size: typing.Text
+    object_size: builtins.float
     """the size of the object that was operated on"""
 
     username: typing.Text
@@ -213,8 +238,8 @@ class ActivityLog(google.protobuf.message.Message):
         *,
         timestamp_ns: builtins.int = ...,
         relic_id: typing.Text = ...,
-        operation: typing.Text = ...,
-        object_size: typing.Text = ...,
+        operation: global___Actions.ValueType = ...,
+        object_size: builtins.float = ...,
         username: typing.Text = ...,
         ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["object_size",b"object_size","operation",b"operation","relic_id",b"relic_id","timestamp_ns",b"timestamp_ns","username",b"username"]) -> None: ...
