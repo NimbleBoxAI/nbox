@@ -202,6 +202,7 @@ class RelicFile(google.protobuf.message.Message):
     RELIC_NAME_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
     CONTENT_TYPE_FIELD_NUMBER: builtins.int
+    DOWNLOAD_FIELD_NUMBER: builtins.int
     URL_FIELD_NUMBER: builtins.int
     HEADERS_FIELD_NUMBER: builtins.int
     BODY_FIELD_NUMBER: builtins.int
@@ -235,6 +236,11 @@ class RelicFile(google.protobuf.message.Message):
     """the name of the parent relic"""
 
     content_type: typing.Text
+    """Type of file content used to render the file in the browser"""
+
+    download: builtins.bool
+    """Used to set content disposition to the download file response."""
+
     url: typing.Text
     """NOTE: these are high index values so they can be expanded in the 1xx range
     this is all for the different clouds
@@ -264,9 +270,10 @@ class RelicFile(google.protobuf.message.Message):
         relic_name: typing.Text = ...,
         relic_id: typing.Text = ...,
         content_type: typing.Text = ...,
+        download: builtins.bool = ...,
         url: typing.Text = ...,
         headers: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         body: typing.Optional[typing.Mapping[typing.Text, typing.Text]] = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","content_type",b"content_type","created_on",b"created_on","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["body",b"body","comment",b"comment","content_type",b"content_type","created_on",b"created_on","download",b"download","headers",b"headers","last_modified",b"last_modified","name",b"name","relic_id",b"relic_id","relic_name",b"relic_name","size",b"size","starred",b"starred","tags",b"tags","type",b"type","url",b"url","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___RelicFile = RelicFile
