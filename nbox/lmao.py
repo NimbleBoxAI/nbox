@@ -2,7 +2,6 @@
 NimbleBox LMAO is our general purpose observability tool for any kind of computation you might have.
 """
 
-# f"{lmao.project_id}/{lmao.run.experiment_id}/model.pkl"
 # drift detection and all
 # run.log_dataset(
 #     dataset_name='train',
@@ -23,7 +22,7 @@ import sys
 import shlex
 import zipfile
 from git import Repo
-from json import dumps
+from json import dumps, loads
 from functools import lru_cache
 from requests import Session
 from typing import Dict, Any, List, Optional, Union
@@ -35,12 +34,12 @@ from nbox import Instance
 from nbox.utils import logger, SimplerTimes
 from nbox.auth import secret, ConfigString
 from nbox.nbxlib.tracer import Tracer
-from nbox.relics import RelicsNBX
+from nbox.relics import Relics
 from nbox.jobs import Job, upload_job_folder
 from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.init import nbox_grpc_stub, nbox_ws_v1
 from nbox.messages import message_to_dict
-from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateJobRequest
+from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateJobRequest, JobRequest
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 
@@ -48,7 +47,7 @@ from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 from nbox.sublime.lmao_rpc_client import (
   LMAO_Stub, # main stub class
   Record, File, FileList, AgentDetails, RunLog,
-  Run, InitRunRequest, ListProjectsRequest
+  Run, InitRunRequest, ListProjectsRequest,
 )
 from nbox.observability.system import SystemMetricsLogger
 
@@ -126,38 +125,25 @@ Client library that the user will use to interact with the LMAO server.
 """
 
 class _lmaoConfig:
+  # _lmaoConfig.kv contains all the objects that the class LMAO needs to work correctly, however
+  # we will also need to take care of the things we want to show 
   kv = {}
   def set(
-    workspace_id: str = "",
-    project_id: Optional[str] = "",
-    project_name: Optional[str] = "",
-    experiment_id: Optional[str] = "",
-    metadata: Dict[str, Any] = {},
-    save_to_relic: bool = False,
-    enable_system_monitoring: bool = False,
-    store_git_details: bool = True,
-    args = (),
-    kwargs = {},
+    project_name: str,
+    project_id: str,
+    experiment_id: str,
+    save_to_relic: bool,
+    enable_system_monitoring: bool,
+    store_git_details: bool,
   ) -> None:
     _lmaoConfig.kv = {
-      "workspace_id": workspace_id,
-      "project_id": project_id,
       "project_name": project_name,
+      "project_id": project_id,
       "experiment_id": experiment_id,
-      "metadata": metadata,
       "save_to_relic": save_to_relic,
       "enable_system_monitoring": enable_system_monitoring,
       "store_git_details": store_git_details,
-      "args": args,
-      "kwargs": kwargs,
     }
-
-  def clear() -> None:
-    _lmaoConfig.kv = {}
-
-  def json() -> str:
-    # return dumps({k:v for k,v in _lmaoConfig.kv.items() if k not in ["args", "kwargs"]})
-    return dumps(_lmaoConfig.kv)
 
 
 class Lmao():
@@ -170,14 +156,13 @@ class Lmao():
     save_to_relic: bool = False,
     enable_system_monitoring: bool = False,
     store_git_details: bool = True,
-    workspace_id: str = "",
   ) -> None:
     """`Lmao` is the client library for using NimbleBox Monitoring. It talks to your monitoring instance running on your build
     and stores the information in the `project_name` or `project_id`. This object inherently doesn't care what you are actually
     logging and rather concerns itself with ensuring storage.
 
-    **Note**: All arguments are optional, if the _lmaoConfig is set.
-    
+    **Note**: All arguments are optional, if the `_lmaoConfig.kv` is set.
+
     Args:
       project_name (str, optional): The name of the project. Defaults to "".
       project_id (str, optional): The id of the project. Defaults to "".
@@ -186,7 +171,6 @@ class Lmao():
       save_to_relic (bool, optional): Whether to save the data to the relic. Defaults to False.
       enable_system_monitoring (bool, optional): Whether to enable system monitoring. Defaults to False.
       store_git_details (bool, optional): Whether to store git details. Defaults to True.
-      workspace_id (str, optional): The id of the workspace. Defaults to "".
     """
 
     self.config = _lmaoConfig.kv
@@ -196,28 +180,23 @@ class Lmao():
       project_name = _lmaoConfig.kv["project_name"]
       project_id = _lmaoConfig.kv["project_id"]
       experiment_id = _lmaoConfig.kv["experiment_id"]
-      metadata = _lmaoConfig.kv["metadata"]
       save_to_relic = _lmaoConfig.kv["save_to_relic"]
       enable_system_monitoring = _lmaoConfig.kv["enable_system_monitoring"]
       store_git_details = _lmaoConfig.kv["store_git_details"]
-      workspace_id = _lmaoConfig.kv["workspace_id"]
 
     self.project_name = project_name
     self.project_id = project_id
     self.experiment_id = experiment_id
-    self.metadata = metadata
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
     self.store_git_details = store_git_details
-    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-    
+    self.workspace_id = secret.get(ConfigString.workspace_id)
+
     # now set the supporting keys
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
     self._total_logged_elements = 0 # this variable keeps track for logging
     self.completed = False
-    self.tracer = None
-    self.username = secret.get("username")
-    self.relic: RelicsNBX = None
+    self.relic: Relics = None
     self.system_monitoring: SystemMetricsLogger = None
     self._nbx_run_id = None
     self._nbx_job_id = None
@@ -301,6 +280,7 @@ class Lmao():
     )
 
     if self.experiment_id:
+      action = "Updated"
       run_details = self.lmao.get_run_details(
         Run(
           workspace_id = self.workspace_id,
@@ -325,6 +305,7 @@ class Lmao():
         if not ack.success:
           raise Exception(f"Failed to update run status! {ack.message}")
     else:
+      action = "Created"
       run_details = self.lmao.init_run(
         InitRunRequest(
           workspace_id = self.workspace_id,
@@ -337,18 +318,19 @@ class Lmao():
 
     self.project_name = project_name
     self.project_id = run_details.project_id
-    self.metadata = config
-
     self.run = run_details
-    logger.info(f"Created a new LMAO run")
-    logger.info(f" project: {self.project_name} ({self.project_id})")
-    logger.info(f"      id: {self.run.experiment_id}")
-    logger.info(f"    link: https://app.nimblebox.ai/workspace/{self.workspace_id}/monitoring/{self.project_id}/{self.run.experiment_id}")
+
+    logger.info(
+      f"{action} LMAO run\n"
+      f" project: {self.project_name} ({self.project_id})\n"
+      f"      id: {self.run.experiment_id}\n"
+      f"    link: https://app.nimblebox.ai/workspace/{self.workspace_id}/monitoring/{self.project_id}/{self.run.experiment_id}\n"
+    )
 
     # now initialize the relic
     if self.save_to_relic:
       # The relic will be the project id
-      self.relic = RelicsNBX(LMAO_RELIC_NAME, self.workspace_id, create = True)
+      self.relic = Relics(LMAO_RELIC_NAME, self.workspace_id, create = True)
       logger.info(f"Will store everything in relic '{LMAO_RELIC_NAME}' folder: {self.experiment_prefix}")
 
     # system metrics monitoring, by default is enabled optionally turn it off
@@ -365,7 +347,7 @@ class Lmao():
   @lru_cache(maxsize=1)
   def get_relic(self):
     """Get the underlying Relic for more advanced usage patterns."""
-    return RelicsNBX(LMAO_RELIC_NAME, self.workspace_id, create = True, prefix = f"{self.project_name}/{self.run.experiment_id}")
+    return Relics(LMAO_RELIC_NAME, self.workspace_id, create = True, prefix = f"{self.experiment_prefix}")
 
   def log(self, y: Dict[str, Union[int, float, str]], step = None, *, log_type: str = RunLog.LogType.USER):
     """Log a single level dictionary to the platform at any given step. This function does not really care about the
@@ -400,12 +382,10 @@ class Lmao():
     Register a file save. User should be aware of some structures that we follow for standardizing the data.
     All the experiments are going to be tracked under the following pattern:
 
-    - `relic_name` is going to be the experiment ID, so any changes to the name will not affect relic storage
-    - `{experiment_id}(_{job_id}@{experiment_id})` is the name of the folder which contains all the artifacts in the experiment.
+    If `save_to_relics` is not set, this function is a no-op.
 
-    If relics is not enabled, this function will simply log to the LMAO DB.
-
-    dk.save_file("foo.t", "/bar/", "baz.t", "/bar/roo/")
+    Args:
+      files: The list of files to save. This can be a list of files or a list of folders. If a folder is passed, all the files in the folder will be uploaded.
     """
     logger.info(f"Saving files: {files}")
 
@@ -415,7 +395,7 @@ class Lmao():
       if os.path.isfile(folder_or_file):
         all_files.append(folder_or_file)
       elif os.path.isdir(folder_or_file):
-        all_files.extend(U.get_files_in_folder(folder_or_file, self.username, self.workspace_id))
+        all_files.extend(U.get_files_in_folder(folder_or_file))
       else:
         raise Exception(f"File or Folder not found: {folder_or_file}")
 
@@ -427,7 +407,6 @@ class Lmao():
       logger.info(f"Uploading files to relic: {relic}")
       for f in all_files:
         relic.put(f)
-
 
   def end(self):
     """End the run to declare it complete. This is more of a convinience function than anything else. For example when you
@@ -458,6 +437,63 @@ lmao open project_name_or_id
 ```
 """
 
+class ExperimentConfig:
+  def __init__(
+    self,
+    run_kwargs: Dict[str, Any],
+    git: Dict[str, Any],
+    resource: Resource,
+    cli_comm: str,
+    save_to_relic: bool = True,
+    enable_system_monitoring: bool = False,
+  ):
+    """In an ideal world this would be a protobuf message, but we are not there yet. This contains all the
+    things that are stored in the DB and FE can use this to render elements in the UI.
+
+    Args:
+      run_kwargs (Dict[str, Any]): All the arguments that the user passed to the `nbx lmao run ...` CLI
+      git (Dict[str, Any]): details for the git repo
+      resource (Resource): Resource pb object that contains the details of the resource
+      cli_comm (str): The CLI command that was used to run the experiment, user can use this to reproduce the experiment
+      save_to_relic (bool): If the user wants to save the experiment to the relic by default
+      enable_system_monitoring (bool): If the user wants to enable system monitoring
+    """
+    self.run_kwargs = run_kwargs
+    self.git = git
+    self.resource = resource
+    self.cli_comm = cli_comm
+    self.save_to_relic = save_to_relic
+    self.enable_system_monitoring = enable_system_monitoring
+
+  def to_dict(self):
+    return {
+      "run_kwargs": self.run_kwargs,
+      "git": self.git,
+      "resource": message_to_dict(self.resource),
+      "cli_comm": self.cli_comm,
+      "save_to_relic": self.save_to_relic,
+      "enable_system_monitoring": self.enable_system_monitoring,
+    }
+
+  def to_json(self):
+    return dumps(self.to_dict())
+
+  @classmethod
+  def from_json(cls, json_str):
+    d = loads(json_str)
+    print(d["resource"])
+    d["resource"] = Resource(
+      cpu = str(d["resource"]["cpu"]),
+      memory = str(d["resource"]["memory"]),
+      disk_size = str(d["resource"]["disk_size"]),
+      gpu = str(d["resource"]["gpu"]),
+      gpu_count = str(d["resource"]["gpu_count"]),
+      timeout = int(d["resource"]["timeout"]),
+      max_retries = int(d["resource"]["max_retries"]),
+    )
+    return cls(**d)
+
+
 @lru_cache()
 def get_project_name_id(project_name_or_id: str, workspace_id: str):
   lmao_stub = get_lmao_stub()
@@ -478,11 +514,13 @@ def get_project_name_id(project_name_or_id: str, workspace_id: str):
 
 class LmaoCLI:
   # This class will only manage the things that need to talk to the DB and everything else is offloaded
-  def upload(
+  def upload(self, **kwargs):
+    raise ValueError("`nbx lmao upload` is not changed to `nbx lmao run`")
+
+  def run(
     self,
     init_path: str,
     project_name_or_id: str,
-    workspace_id: str = "",
     trigger: bool = False,
 
     # all the arguments for the git thing
@@ -513,7 +551,6 @@ class LmaoCLI:
     Args:
       init_path (str): This can be a path to a `folder` or can be optionally of the structure `fp:fn` where `fp` is the path to the file and `fn` is the function name.
       project_name_or_id (str): The name or id of the LMAO project.
-      workspace_id (str, optional): If nor provided, defaults to global config
       trigger (bool, optional): Defaults to False. If True, will trigger the run after uploading.
       untracked (bool, optional): If True, then untracked files below 1MB will also be zipped and uploaded. Defaults to False.
       untracked_no_limit (bool, optional): If True, then all untracked files will also be zipped and uploaded. Defaults to False.
@@ -524,13 +561,14 @@ class LmaoCLI:
       resource_gpu_count (str, optional): Defaults to "0". Number of GPUs allocated to the experiment.
       resource_timeout (int, optional): Defaults to 120_000. The timeout between two consecutive runs, honoured but not guaranteed.
       resource_max_retries (int, optional): Defaults to 2. The maximum number of retries for a run.
-      **run_kwargs: These are the kwargs that will be passed to your Operator.
+      save_to_relic (bool, optional): Defaults to True. If True, will save the files to a relic when lmao.save_file() is called.
+      enable_system_monitoring (bool, optional): Defaults to False. If True, will enable system monitoring.
+      **run_kwargs: These are the kwargs that will be passed to your function.
     """
     # reconstruct the entire CLI command so we can show it in the UI
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+    workspace_id = secret.get(ConfigString.workspace_id)
     reconstructed_cli_comm = (
       f"nbx lmao upload '{init_path}' '{project_name_or_id}'"
-      f" --workspace_id '{workspace_id}'"
       f" --resource_cpu '{resource_cpu}'"
       f" --resource_memory '{resource_memory}'"
       f" --resource_disk_size '{resource_disk_size}'"
@@ -558,7 +596,7 @@ class LmaoCLI:
     # if relics_kwargs:
     #   rks = str(relics_kwargs).replace("'", "")
     #   reconstructed_cli_comm += f" --relics_kwargs '{rks}'"
-    
+
     for k, v in run_kwargs.items():
       if type(v) == bool:
         reconstructed_cli_comm += f" --{k}"
@@ -566,16 +604,24 @@ class LmaoCLI:
         reconstructed_cli_comm += f" --{k} '{v}'"
     logger.debug(f"command: {reconstructed_cli_comm}")
 
-    # clean user args
     resource_gpu_count = str(resource_gpu_count)
     if untracked_no_limit and not untracked:
       logger.debug("untracked_no_limit is True but untracked is False. Setting untracked to True")
       untracked = True
 
-    # first step is to get all the relevant information from the DB
+    # first step is to get all the relevant information from the DB and servers
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
     project_name, project_id = get_project_name_id(project_name_or_id, workspace_id)
+    job_name = "nbxj_" + project_name[:15]
+    try:
+      job = Job(job_name = job_name)
+    except:
+      logger.warn(f"Job not found. Creating a new job: {job_name}")
+      job = nbox_ws_v1.job("post", job_name = job_name, job_description = "automatically created by nbx LMAO for project: " + project_name)
+      job = Job(job_name = job_name)
+
     logger.info(f"Project: {project_name} ({project_id})")
+    lmao_stub = get_lmao_stub()
 
     # create a call init run and get the experiment metadata
     init_folder, _ = os.path.split(init_path)
@@ -585,39 +631,30 @@ class LmaoCLI:
     else:
       git_det = {}
 
-
-    job_name = "nbxj_" + project_name[:15]
-    job = Job(job_name = job_name, workspace_id = workspace_id)
-    lmao_stub = get_lmao_stub()
-
-    _metadata = {
-      "user_config": run_kwargs,
-      "git": git_det,
-      "resource": message_to_dict(Resource(
-        cpu = resource_cpu,
-        memory = resource_memory,
-        disk_size = resource_disk_size,
-        gpu = resource_gpu,
-        gpu_count = resource_gpu_count,
-        timeout = resource_timeout,
-        max_retries = resource_max_retries,
-      )),
-      "cli": reconstructed_cli_comm,
-      "lmao": {
-        "save_to_relic": save_to_relic,
-        "enable_system_monitoring": enable_system_monitoring,
-      }
-    }
-
     run = lmao_stub.init_run(InitRunRequest(
+      workspace_id = workspace_id,
+      project_name = project_name,
+      project_id = project_id,
       agent_details = AgentDetails(
         type = AgentDetails.NBX.JOB,
         nbx_job_id = job.id, # run id will have to be updated from the job
       ),
-      created_at = SimplerTimes.get_now_i64(),
-      config = dumps(_metadata),
-      project_id = project_id,
-      project_name = project_name,
+      config = ExperimentConfig(
+        run_kwargs = run_kwargs,
+        git = git_det,
+        resource = Resource(
+          cpu = str(resource_cpu),
+          memory = str(resource_memory),
+          disk_size = str(resource_disk_size),
+          gpu = str(resource_gpu),
+          gpu_count = str(resource_gpu_count),
+          timeout = int(resource_timeout),
+          max_retries = int(resource_max_retries),
+        ),
+        cli_comm = reconstructed_cli_comm,
+        save_to_relic = save_to_relic,
+        enable_system_monitoring = enable_system_monitoring,
+      ).to_json(),
     ))
     if not project_id:
       logger.info(f"Project {project_name} created with id: {run.project_id}")
@@ -630,7 +667,7 @@ class LmaoCLI:
     if extra_keys:
       logger.error("Unknown arguments found:\n  * " + "\n  * ".join(extra_keys))
       raise RuntimeError("Unknown arguments found in the Relic")
-    relic = RelicsNBX(LMAO_RELIC_NAME, workspace_id = workspace_id, create = True, **relics_kwargs)
+    relic = Relics(LMAO_RELIC_NAME, workspace_id = workspace_id, create = True, **relics_kwargs)
 
     # create a git patch and upload it to relics
     if git_det:
@@ -663,7 +700,7 @@ class LmaoCLI:
     upload_job_folder(
       "job",
       init_folder = init_path,
-      name = "nbxj_" + project_name[:15], # keep only 20 chars
+      id = job.id,
 
       # pass along the resource requirements
       resource_cpu = resource_cpu,
@@ -676,40 +713,15 @@ class LmaoCLI:
     )
 
     if trigger:
-      logger.debug(f"Running job '{job.name}' ({job.id})")
-
-      # create the serialisable config
-      _lmaoConfig.clear()
-      _lmaoConfig.set(
-        workspace_id = workspace_id,
-        project_name = run.project_name,
-        project_id = run.project_id,
-        experiment_id = run.experiment_id,
-        metadata = _metadata,
-        save_to_relic = save_to_relic,
-        enable_system_monitoring = enable_system_monitoring,
-        args = (),
-        kwargs = run_kwargs,
-      )
-      
-      # from pprint import pprint
-      # pprint(_lmaoConfig.kv)
-      # exit()
-
-      # put the items in the relic and create a tag from it
-      fp = f"{project_name}/{run.experiment_id}"
-      relic.put_object(fp+"/init.pkl", _lmaoConfig.kv)
-      tag = f"{LMAO_JOB_TYPE_PREFIX}-{fp}"
-      logger.info(f"Run tag: {tag}")
+      fp = f"{run.project_id}/{run.experiment_id}"
+      tag = f"{LMAO_JOB_TYPE_PREFIX}{fp}"
+      logger.debug(f"Running job '{job.name}' ({job.id}) with tag: {tag}")
       job.trigger(tag)
 
-      # clear so the rest of the program doesn't get affected
-      _lmaoConfig.clear()
-
     # finally print the location of the run where the users can track this
-    logger.info(f"Run location: https://app.nimblebox.ai/workspace/{workspace_id}/monitoring/{project_id}/{run.experiment_id}")
+    logger.info(f"Run location: {secret.get(ConfigString.url)}/workspace/{run.workspace_id}/monitoring/{run.project_id}/{run.experiment_id}")
 
 # do not change these it can become a huge pain later on
 LMAO_RELIC_NAME = "experiments"
-LMAO_JOB_TYPE_PREFIX = "NBXLmao"
+LMAO_JOB_TYPE_PREFIX = "NBXLmao-"
 LMAO_ENV_VAR_PREFIX = "LMAO_"

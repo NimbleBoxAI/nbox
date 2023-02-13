@@ -13,7 +13,7 @@ try:
   from pydantic import create_model
   import uvicorn
 
-  from fastapi import FastAPI, APIRouter
+  from fastapi import FastAPI
   from fastapi.responses import JSONResponse, Response
   from fastapi.middleware.cors import CORSMiddleware
 except ImportError:
@@ -29,13 +29,20 @@ from nbox.operator import Operator
 from nbox.nbxlib.operator_spec import OperatorType
 from nbox.utils import py_from_bs64, py_to_bs64, logger
 
+class SupportedServingTypes():
+  NBOX = "nbox"
+  FASTAPI = "fastapi"
+
+  def all():
+    return [SupportedServingTypes.NBOX, SupportedServingTypes.FASTAPI]
+
+
 def serve_operator(
   op_or_app: Operator,
+  # serving_type: str,
   host: str = "0.0.0.0",
   port: int = 8000,
   *,
-  log_system_metrics: bool = True,
-  log_user_io: bool = False,
   model_name: str = ""
 ):
   """

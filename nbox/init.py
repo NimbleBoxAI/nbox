@@ -90,8 +90,8 @@ def get_model_stub() -> ModelServiceStub:
 
 
 def create_webserver_subway(version: str = "v1", session: requests.Session = None) -> Sub30:
-  """Create a Subway object for the NBX Webserver. This is a wrapper around the
-  OpenAPI spec plublished by NBX Webserver. It loads the JSON object in `Sub30`
+  """Create a Subway object for the NBX Webserver for a given workspace. This is a wrapper
+  around the OpenAPI spec plublished by NBX Webserver. It loads the JSON object in `Sub30`
   which allows accesing REST APIs with python "." (dot) notation. If you find yourself
   using this function, you might want to reconsider your design.
 
@@ -118,7 +118,7 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
   #   f.write(json.dumps(spec, indent=2))
   out = Sub30(_version_specific_url, spec, session)
   logger.debug(f"Connected to webserver at {out}")
-  return out
+  return out.workspace.u(secret.get(ConfigString.workspace_id))
 
 
 def nbox_version_update():

@@ -42,7 +42,7 @@ import traceback
 import randomname
 import cloudpickle
 from uuid import uuid4
-from typing import List
+from typing import List, Any
 from contextlib import contextmanager
 from base64 import b64encode, b64decode
 from datetime import datetime, timezone
@@ -57,27 +57,31 @@ class env:
   Single namespace for all environment variables.
   
   #. `NBOX_LOG_LEVEL`: Logging level for `nbox`, set `NBOX_LOG_LEVEL=info|debug|warning"
-  #. `NBOX_JSON_LOG`: Whether to print json-logs, set `NBOX_JSON_LOG=1`
-  #. `NBOX_JOB_FOLDER`: Folder path for the job, set `NBOX_JOB_FOLDER=/tmp/nbox/jobs"`
+  #. `NBOX_ACCESS_TOKEN`: User token for NimbleBox.ai from [secrets](app.nimblebox.ai/secrets)
   #. `NBOX_NO_AUTH`: If set `secrets = None`, this will break any API request and is good only for local testing
-  #. `NBOX_SSH_NO_HOST_CHECKING`: If set, `ssh` will not check for host key
-  #. `NBOX_HOME_DIR`: By default ~/.nbx folder
-  #. `NBOX_USER_TOKEN`: User token for NimbleBox.ai from <app.nimblebox.ai/secrets>_
   #. `NBOX_NO_LOAD_GRPC`: If set, will not load grpc stub
   #. `NBOX_NO_LOAD_WS`: If set, will not load webserver subway
-  #. `NBOX_LMAO_DISABLE_RELICS`: If set, Monitoring data will be stored on the cloud Relic
-  #. `NBOX_LMAO_DISABLE_SYSTEM_METRICS`: If set, system metrics will not logged in monitoring
+  #. `NBOX_NO_CHECK_VERSION`: If set, will not check for version
+  #. `NBOX_SSH_NO_HOST_CHECKING`: If set, `ssh` will not check for host key
+  #. `NBOX_HOME_DIR`: By default `~/.nbx` folder, avoid changing this, user generally does not need to set this
+  #. `NBOX_JSON_LOG`: Whether to print json-logs, user generally does not need to set this
+  #. `NBOX_JOB_FOLDER`: Folder path for the job, user generally does not need to set this
   """
+  # things user can chose to set if they want
   NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
-  NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
-  NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
-  NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
+  NBOX_ACCESS_TOKEN = lambda x: os.getenv("NBOX_ACCESS_TOKEN", x)
   NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
-  NBOX_HOME_DIR = lambda : os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
-  NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
+
+  # things that are good mostly for testing and development of nbox itself
+  NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
   NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
   NBOX_NO_CHECK_VERSION = lambda: os.getenv("NBOX_NO_CHECK_VERSION", False)
+  
+  # that that should be avoided to change, but provided here for max. control
+  NBOX_HOME_DIR = lambda : os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
+  NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
+  NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
 
   def set(key, value):
     os.environ[key] = value
@@ -119,22 +123,20 @@ def get_logger():
 logger = get_logger() # package wide logger
 
 def log_traceback():
-  f = traceback.format_exc()
-  for _l in f.splitlines():
-    logger.error(_l.rstrip())
-
+  logger.error(traceback.format_exc())
 
 @contextmanager
 def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
   from nbox.version import __version__
-  logger.warning("Deprecation Warning")
-  logger.warning(f"  current: {__version__}")
-  logger.warning(f"  removed: {remove}")
-  logger.warning(f"      msg: {msg}")
+  msg = "Deprecation Warning" \
+    f"\n  current: {__version__}" \
+    f"\n  removed: {remove}" \
+    f"\n      msg: {msg}"
   if replace_by:
-    logger.warning(f"  replace: {replace_by}")
+    msg += f"\n  replace: {replace_by}"
   if help:
-    logger.warning(f"  help: {help}")
+    msg += f"\n  help: {help}"
+  logger.warning(msg)
 
 class FileLogger:
   """Flush logs to a file, useful when we don't want to mess with current logging"""
@@ -246,26 +248,37 @@ def fetch(url, force = False):
     os.rename(fp + ".tmp", fp)
   return dat
 
-def folder(x):
+def folder(x) -> str:
   """get the folder of this file path"""
   return os.path.split(os.path.abspath(x))[0]
 
-def join(x, *args):
+def join(x, *args) -> str:
   """convienience function for os.path.join"""
   return os.path.join(x, *args)
 
 def to_pickle(obj, path):
+  """Save an object to a pickle file
+  
+  Args:
+    obj: object to save
+    path: path to save to
+  """
   with open(path, "wb") as f:
     cloudpickle.dump(obj, f)
 
 def from_pickle(path):
+  """Load an object from a pickle file
+
+  Args:
+    path: path to load from
+  """
   with open(path, "rb") as f:
     return cloudpickle.load(f)
 
-def py_to_bs64(x: str):
+def py_to_bs64(x: Any):
   return b64encode(cloudpickle.dumps(x)).decode("utf-8")
 
-def py_from_bs64(x: str):
+def py_from_bs64(x: bytes):
   return cloudpickle.loads(b64decode(x.encode("utf-8")))
 
 def to_json(x: dict, fp: str = "", indent = 2):
@@ -383,7 +396,7 @@ def threaded_map(fn, inputs, wait: bool = True, max_threads = 20, _name: str = N
 
 # /pool
 
-def _exit_program(code = 0):
+def hard_exit_program(code = 0):
   # why use os._exit over sys.exit:
   # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
   # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
@@ -410,6 +423,9 @@ class SimplerTimes:
     ts = Timestamp_pb()
     ts.GetCurrentTime()
     return ts
+  
+  def get_now_ns() -> int:
+    return SimplerTimes.get_now_pb().ToNanoseconds()
 
   def i64_to_datetime(i64) -> datetime:
     return datetime.fromtimestamp(i64, SimplerTimes.tz)

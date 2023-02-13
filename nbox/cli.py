@@ -26,7 +26,7 @@ from nbox.init import nbox_ws_v1
 from nbox.auth import init_secret, ConfigString, secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
-from nbox.relics import RelicsNBX
+from nbox.relics import Relics
 from nbox.lmao import LmaoCLI
 from nbox.version import __version__ as V
 from nbox.nbxlib.fire import NBXFire
@@ -111,13 +111,18 @@ def version():
 
 
 def why():
-  print("\nWhy we build NimbleBox?\n")
-  print("  * Artificial intelligence will be the most important technology of the 21st century.")
-  print("  * Every major piece of software ever written will need to be upgraded and rewritten.")
-  print("  * Energy spent per code token will increase exponentially to handle the bandwidth of AI.")
-  print("  * AI is still software and software engineering is hard.")
-  print("  * Nimblebox is a general purpose tool to build and manage such operations.")
-  print("\nIf you like what we are building, come work with us.\n\nWith Love,\nNimbleBox.ai\n")
+  print('''
+The time for revolution is upon us!
+
+Get Ready to Embrace the AI Revolution with NimbleBox.
+  
+As we step into the 21st century, it is evident that artificial intelligence will
+be the driving force behind all major industries. That's why NimbleBox was created,
+to make the building and management of AI operations easier. Ensuring companies
+stay ahead of the curve in this rapidly changing landscape.
+
+Join us in this revolution and help us create a brighter future powered by AI.
+''')
 
 
 class NBXWS_CLI(object):
@@ -169,7 +174,7 @@ def main():
     "lmao"    : LmaoCLI,
     "login"   : login,
     "open"    : open_home,
-    "relics"  : RelicsNBX,
+    "relics"  : Relics,
     "serve"   : Serve,
     "tunnel"  : tunnel,
     "version" : version,

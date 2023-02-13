@@ -9,7 +9,7 @@ from json import dumps
 import nbox.utils as U
 from nbox.utils import logger, SimplerTimes
 from nbox.init import nbox_grpc_stub
-from nbox.auth import secret
+from nbox.auth import secret, ConfigString
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.jobs.dag_pb2 import Node
 from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateRunRequest
@@ -32,7 +32,7 @@ class Tracer:
     if local:
       pass
     else:
-      run_data = secret.get("run") # user should never have "run" on their local
+      run_data = secret.get(ConfigString.nbx_pod_run) # user should never have "run" on their local
       if run_data is not None:
         self.init(run_data, start_heartbeat)
 
@@ -58,8 +58,8 @@ class Tracer:
     self.trace_file = open(file, "a")
 
   def init(self, run_data, start_heartbeat):
-    init_folder = U.env.NBOX_JOB_FOLDER(None)
-    if init_folder == None:
+    init_folder = U.env.NBOX_JOB_FOLDER("")
+    if not init_folder:
       raise RuntimeError("NBOX_JOB_FOLDER not set")
     if not os.path.exists(init_folder):
       raise RuntimeError(f"NBOX_JOB_FOLDER {init_folder} does not exist")
@@ -78,12 +78,11 @@ class Tracer:
     self.job_id = run_data.get("job_id", None)
     self.run_id = run_data.get("token", None)
     self.job_proto.id = self.job_id # because when creating a new job, client does not know the ID
-    self.workspace_id = secret.get("workspace_id")
+    self.workspace_id = secret.get(ConfigString._workspace_id)
     self.network_tracer = True
     
     # logger.debug(f"Username: {self.job_proto.auth_info.username}")
-    logger.debug(f"Job Id (Run Id): {self.job_id} ({self.run_id})")
-    logger.debug(f"Workspace Id: {self.workspace_id}")
+    logger.info(f"Job Id (Run Id) [Workspace ID]: {self.job_id} ({self.run_id}) [{self.workspace_id}]")
     self.job_proto.status = JobProto.Status.ACTIVE # automatically first run will
 
     # start heartbeat in a different thread
@@ -99,6 +98,7 @@ class Tracer:
     return f"Tracer() for job {self.job_id}"
 
   def _rpc(self, message: str = ""):
+    try:
       rpc(
         nbox_grpc_stub.UpdateRun,
         UpdateRunRequest(
@@ -108,8 +108,11 @@ class Tracer:
           auth_info = NBXAuthInfo(workspace_id = self.workspace_id)
         ),
         message or f"Could not update job {self.job_proto.id}",
-        raise_on_error = False
+        raise_on_error = True
       )
+    except Exception as e:
+      logger.error(f"Could not update job {self.job_proto.id}\n  Error: {e}\n  Most likely could not commumicate with the server")
+      U.hard_exit_program(1)
 
   def __call__(self, node: Node, verbose: bool = False):
     if self.network_tracer:

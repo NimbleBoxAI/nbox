@@ -60,10 +60,7 @@ def print_status(fields: List[str] = [], *, workspace_id: str = ""):
   """
   logger.info("Getting NBX-Build details")
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-  if not workspace_id:
-    stub_projects = nbox_ws_v1.user.projects
-  else:
-    stub_projects = nbox_ws_v1.workspace.u(workspace_id).projects
+  stub_projects = nbox_ws_v1.projects
 
   fields = fields or Instance.useful_keys
 
@@ -191,10 +188,7 @@ class Instance():
       Instance: The newly created instance.
     """
     workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-    if not workspace_id:
-      stub_all_projects = nbox_ws_v1.user.projects
-    else:
-      stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
+    stub_all_projects = nbox_ws_v1.projects
 
     kwargs_dict = {
       "project_name": project_name,

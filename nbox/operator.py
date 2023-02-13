@@ -133,7 +133,7 @@ from nbox.hyperloop.jobs.dag_pb2 import DAG, Flowchart, Node, RunStatus
 
 from nbox.jobs import Schedule, Job, Serve, _get_job_data
 from nbox.messages import write_binary_to_file
-from nbox.relics import RelicsNBX, RelicLocal
+from nbox.relics import Relics
 from nbox.init import nbox_ws_v1
 from nbox.subway import SpecSubway
 
@@ -285,7 +285,7 @@ class Operator():
     def forward(*args, _wait: bool = True, **kwargs):
       """This is the forward method for a NBX-Job. All the parameters will be passed through Relics."""
       logger.debug(f"Running job '{job_name}' ({job_id})")
-      relic = RelicsNBX("cache", workspace_id, create = True)
+      relic = Relics("cache", workspace_id, create = True)
 
       # determining the put location is very tricky because there is no way to create a sync between the
       # key put here and what the run will pull. This can lead to many weird race conditions. So for now
@@ -631,7 +631,6 @@ class Operator():
     raise ValueError(f"Operator cannot iterate")
 
   def __contains__(self, key):
-
     if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__contains__", key)
     if self._op_type in [ospec.OperatorType.WRAP_CLS]:
@@ -791,7 +790,7 @@ class Operator():
       raise ValueError(f"Cannot deploy a class as a job, only as a serving")
     if deployment_type not in ospec.OperatorType._valid_deployment_types():
       raise ValueError(f"Invalid deployment type: {deployment_type}. Must be one of {ospec.OperatorType._valid_deployment_types()}")
-    if deployment_type == ospec.OperatorType.SERVING.value:
+    if deployment_type == ospec.OperatorType.SERVING:
       if group_id is None:
         raise ValueError("pass deployment_id as group_id for serving deployment")
 
@@ -854,14 +853,14 @@ get_schedule = lambda: None
     init_folder = f"{fp.replace('.py', '')}:{name}"
     logger.debug(f"Upload init_folder: {init_folder}")
 
-    if deployment_type == ospec.OperatorType.JOB.value:
+    if deployment_type == ospec.OperatorType.JOB:
       out = Job.upload(
         init_folder = init_folder,
         id = group_id,
         _ret = True
       )
       return self.from_job(job_id = out.id)
-    elif deployment_type == ospec.OperatorType.SERVING.value:
+    elif deployment_type == ospec.OperatorType.SERVING:
       out = Serve.upload(
         init_folder = init_folder,
         id = group_id,
@@ -869,7 +868,7 @@ get_schedule = lambda: None
       )
 
       # get the serving object
-      stub = nbox_ws_v1.workspace.u(workspace_id).deployments.u(out.id)
+      stub = nbox_ws_v1.deployments.u(out.id)
 
       # we will poll here till the model is not ready and return the latched operator
       done = False
@@ -1032,7 +1031,7 @@ if __name__ == "__main__":
       run_status = {rid: None for rid in run_ids}
       active_runs = {rid for rid, done in run_status.items() if not done}
       pbar = tqdm(total = len(inputs), desc = f"Waiting for runs ({html_path})")
-      relic = RelicsNBX("cache", workspace_id = self._op_spec.workspace_id)
+      relic = Relics("cache", workspace_id = self._op_spec.workspace_id)
 
       def _update_runs():
         # get all runs, filter those in this invocation, update the status

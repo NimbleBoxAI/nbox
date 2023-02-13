@@ -1,4 +1,4 @@
-# Auto generated code by 'nbox deploy/serve upload' command
+# Auto generated code by 'nbox job/serve upload' command
 # created time: {{ created_time }}
 # nbox version: {{ nbox_version }}
 
@@ -36,7 +36,7 @@ def get_op(cloud = False) -> Operator:
   except Exception as e:
     U.log_traceback()
     logger.error(f"Failed to load operator: {e}")
-    U._exit_program(1)
+    U.hard_exit_program(1)
 
   if cloud:
     try:
@@ -46,7 +46,7 @@ def get_op(cloud = False) -> Operator:
     except Exception as e:
       U.log_traceback()
       logger.error(f"Failed to remote initialise operator: {e}")
-      U._exit_program(1)
+      U.hard_exit_program(1)
   return op
 
 if __name__ == "__main__":

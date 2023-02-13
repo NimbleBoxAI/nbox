@@ -13,7 +13,7 @@ from copy import deepcopy
 from subprocess import Popen
 from functools import lru_cache
 
-from nbox.auth import secret
+from nbox.auth import secret, ConfigString
 from nbox.init import nbox_ws_v1
 from nbox.messages import message_to_dict
 from nbox.utils import logger, env, get_mime_type
@@ -26,8 +26,6 @@ from nbox.sublime.relics_rpc_client import (
   ListRelicsRequest,
   BucketMetadata
 )
-from nbox.relics.base import BaseStore
-from nbox.auth import ConfigString, secret
 
 def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
@@ -48,9 +46,9 @@ def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
     }
 
   if "." in fpath_cleaned:
-      content_type = get_mime_type(fpath_cleaned.split(".")[-1], "application/octet-stream")
+    content_type = get_mime_type(fpath_cleaned.split(".")[-1], "application/octet-stream")
   else:
-      content_type = "application/octet-stream"
+    content_type = "application/octet-stream"
 
   return RelicFile(
     name = fpath_cleaned,
@@ -71,7 +69,6 @@ def _get_stub():
   stub = RelicStore_Stub(url, session)
   return stub
 
-
 def print_relics(workspace_id: str = ""):
   stub = _get_stub()
   workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
@@ -83,7 +80,6 @@ def print_relics(workspace_id: str = ""):
     logger.info(l)
 
 
-
 class UserAgentType:
   PYTHON_REQUESTS = "python-requests"
   CURL = "curl"
@@ -92,7 +88,7 @@ class UserAgentType:
     return [UserAgentType.PYTHON_REQUESTS, UserAgentType.CURL,]
 
 
-class RelicsNBX(BaseStore):
+class Relics():
   list = staticmethod(print_relics)
 
   def __init__(
@@ -148,7 +144,6 @@ class RelicsNBX(BaseStore):
     
     self.uat = UserAgentType.PYTHON_REQUESTS
 
-  
   def set_user_agent(self, user_agent_type: str):
     if user_agent_type not in UserAgentType.all():
       raise ValueError(f"Invalid user agent type: {user_agent_type}")
@@ -156,7 +151,9 @@ class RelicsNBX(BaseStore):
     self.uat = user_agent_type
 
   def __repr__(self):
-    return f"RelicStore({self.workspace_id}, {self.relic_name}, {'CONNECTED' if self.relic else 'NOT CONNECTED'})"
+    return f"Relics({self.relic_name}, {'CONNECTED' if self.relic else 'NOT CONNECTED'}" + \
+      (f", prefix={self.prefix}" if self.prefix else "") + \
+      ")"
 
   def _upload_relic_file(self, local_path: str, relic_file: RelicFile):
     if not relic_file.relic_name:
@@ -185,12 +182,9 @@ class RelicsNBX(BaseStore):
       logger.warning(f"Switching to user/agent: cURL for this upload")
       uat = UserAgentType.CURL
 
-    # TODO: @yashbonde use poster to upload files, requests doesn't support multipart uploads
-    # https://stackoverflow.com/questions/15973204/using-python-requests-to-bridge-a-file-without-loading-into-memory
-
     if uat == UserAgentType.PYTHON_REQUESTS:
-      logger.info(f"URL: {out.url}")
-      logger.info(f"body: {out.body}")
+      logger.debug(f"URL: {out.url}")
+      logger.debug(f"body: {out.body}")
       r = requests.post(
         url = out.url,
         data = out.body,
@@ -394,15 +388,20 @@ class RelicsNBX(BaseStore):
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
     logger.debug(f"Listing files in relic {self.relic_name}")
-    out = self.stub.list_relic_files(RelicFile(
-      workspace_id = self.workspace_id,
-      relic_name = self.relic_name,
-      name = path
-    ))
+    for _ in range(2):
+      p = self.prefix
+      if path:
+        p += "/" + path
+      out = self.stub.list_relic_files(ListRelicFilesRequest(
+        workspace_id = self.workspace_id,
+        relic_id = self.relic.id,
+        prefix = p
+      ))
+      if out != None:
+        break
+      time.sleep(1)
+    
     return out.files
 
-  def start_fs():
-    # /my_relic/.....
-    pass
 
 # nbx jobs ... trigger --mount="dataset:/my-dataset/email/,model_master:/model"

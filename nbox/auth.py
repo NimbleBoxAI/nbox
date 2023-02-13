@@ -23,11 +23,15 @@ from nbox.utils import join, logger
 class ConfigString():
   workspace_id = "config.global.workspace_id"
   workspace_name = "config.global.workspace_name"
+  _workspace_id = "workspace_id"
   email = "email"
   cache = "cache"
   username = "username"
   access_token = "access_token"
   url = "nbx_url"
+
+  # things for the pod
+  nbx_pod_run = "run"
 
   def items():
     return [ConfigString.workspace_id, ConfigString.workspace_name, ConfigString.cache]
@@ -40,7 +44,7 @@ class NBXClient:
     os.makedirs(U.env.NBOX_HOME_DIR(), exist_ok=True)
     self.fp = join(U.env.NBOX_HOME_DIR(), "secrets.json")
 
-    access_token = U.env.NBOX_USER_TOKEN("")
+    access_token = U.env.NBOX_ACCESS_TOKEN("")
 
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(self.fp):

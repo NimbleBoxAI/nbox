@@ -10,16 +10,19 @@ manages the quirkyness of our backend and packs multiple steps as one function.
 import os
 import re
 import grpc
+import shlex
 import jinja2
 import fnmatch
 import zipfile
 import requests
+from subprocess import Popen
+from typing import Dict, Union
 from tempfile import gettempdir
 from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
-from nbox.auth import secret
+from nbox.auth import secret, ConfigString
 from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
 from nbox.hyperloop.jobs.dag_pb2 import DAG
@@ -50,9 +53,8 @@ def deploy_serving(
   workspace_id: str = None,
   resource: Resource = None,
   wait_for_deployment: bool = False,
-  exe_jinja_kwargs = {},
-  *,
-  _unittest = False
+  model_metadata: Dict[str, str] = {},
+  exe_jinja_kwargs: Dict[str, str] = {},
 ):
   """Use the NBX-Deploy Infrastructure
 
@@ -64,56 +66,56 @@ def deploy_serving(
     workspace_id (str, optional): Workspace ID. Defaults to None.
     resource (Resource, optional): Resource. Defaults to None.
     wait_for_deployment (bool, optional): Wait for deployment. Defaults to False.
+    model_metadata (dict, optional): Model metadata. Defaults to {}.
     exe_jinja_kwargs (dict, optional): Jinja kwargs. Defaults to {}.
   """
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+  logger.info(f"Deployment ID (Name): {serving_id} ({serving_name})")
 
-  # if resource is not None:
-  #   logger.warning("Resource is coming in the following release!")
   if wait_for_deployment:
-    logger.warning("Wait for deployment is coming in the following release!")
+    logger.warning("Wait for deployment to be implemented, please add your own wait loop for now!")
 
-  # [TODO] - keeping this for now, if file can be zip without serving id then we can remove this
-  logger.info(f"Serving name: {serving_name}")
-  logger.info(f"Serving ID: {serving_id}")
-  # if serving_id is None:
-  #   logger.error("Could not find service ID, creating a new one")
-  #   data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
-  #   serving_id = data["deployment_id"]
-  #   logger.info(f"Serving ID: {serving_id}")
+  model_proto = Model(
+    serving_group_id = serving_id,
+    name = model_name,
+    type = Model.ServingType.SERVING_TYPE_NBOX_OP,
+    metadata = model_metadata,
+    resource = resource
+  )
+  model_proto_fp = U.join(gettempdir(), "model_proto.msg")
+  write_binary_to_file(model_proto, model_proto_fp)
 
   # zip init folder
+  exe_jinja_kwargs.update({"model_name": model_name,})
   zip_path = zip_to_nbox_folder(
     init_folder = init_folder,
     id = serving_id,
     workspace_id = workspace_id,
     type = OT.SERVING,
-
-    # jinja kwargs
-    model_name = model_name,
+    files_to_copy = {model_proto_fp: "model_proto.msg"},
     **exe_jinja_kwargs,
   )
-  return _upload_serving_zip(zip_path, workspace_id, serving_id, model_name, resource)
+  return _upload_serving_zip(
+    zip_path = zip_path,
+    workspace_id = workspace_id,
+    serving_id = serving_id,
+    model_proto = model_proto,
+  )
 
 
-def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name, resource):
-  file_size = os.stat(zip_path).st_size # serving in bytes
+def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model_proto: Model):
+  model_proto.code.MergeFrom(Code(
+    type = Code.Type.ZIP,
+    size = int(max(os.stat(zip_path).st_size/(1024*1024), 1)) # MBs
+  ))
 
   # get bucket URL and upload the data
   response: Model = rpc(
     nbox_model_service_stub.UploadModel,
     ModelRequest(
-      model = Model(
-        serving_group_id = serving_id,
-        name = model_name,
-        code = Code(
-          type = Code.Type.ZIP,
-          size = int(max(file_size/(1024*1024), 1)) # MBs
-        ),
-        type = Model.ServingType.SERVING_TYPE_NBOX_OP
-      ),
+      model = model_proto,
       auth_info = NBXAuthInfo(workspace_id = workspace_id)
     ),
     "Could not get upload URL",
@@ -139,8 +141,6 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name, resource
     use_curl = True
 
   if use_curl:
-    import shlex
-    from subprocess import Popen
     shell_com = f'curl -X POST -F key={s3_meta["key"]} '
     for k,v in s3_meta.items():
       if k == "key":
@@ -169,7 +169,7 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name, resource
       model = Model(
         id = model_id,
         serving_group_id = deployment_id,
-        resource = resource
+        resource = model_proto.resource
       ),
       auth_info = NBXAuthInfo(
         workspace_id = workspace_id
@@ -253,7 +253,8 @@ def deploy_job(
     dag = dag,
     resource = resource
   )
-  write_binary_to_file(job_proto, U.join(init_folder, "job_proto.msg"))
+  job_proto_fp = U.join(gettempdir(), "job_proto.msg")
+  write_binary_to_file(job_proto, job_proto_fp)
 
   if _unittest:
     return job_proto
@@ -264,11 +265,12 @@ def deploy_job(
     id = job_id,
     workspace_id = workspace_id,
     type = OT.JOB,
+    files_to_copy = {job_proto_fp: "job_proto.msg"},
     **exe_jinja_kwargs,
   )
   return _upload_job_zip(zip_path, job_proto,workspace_id)
 
-def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
+def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
     old_job_proto: JobProto = nbox_grpc_stub.GetJob(
@@ -297,7 +299,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
 
   # update the JobProto with file sizes
   job_proto.code.MergeFrom(Code(
-    size = max(int(os.stat(zip_path).st_size / (1024 ** 2)), 1), # jobs in MiB
+    size = max(int(os.stat(zip_path).st_size / (1024 ** 2)), 1), # jobs in MB
     type = Code.Type.ZIP,
   ))
 
@@ -311,20 +313,42 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
   
-  # TODO: @yashbonde migrate requests to curl like Serve
-  logger.info(f"Uploading model to S3 ... (fs: {job_proto.code.size/1024/1024:0.3f} MB)")
-  r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
-  try:
-    r.raise_for_status()
-  except:
-    logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
-    return
+  logger.info(f"Uploading model to S3 ... (fs: {response.code.size:0.3f} MB)")
+  use_curl = False
+  if response.code.size > 10:
+    logger.info(
+      f"File {zip_path} is larger than 10 MB ({response.code.size} MB), this might take a while\n"
+      f"Switching to user/agent: cURL for this upload\n"
+      f"Protip:\n"
+      f"  - if you are constantly uploading large files, take a look at nbox.Relics, that's the right tool for the job"
+    )
+    use_curl = True
+
+  if use_curl:
+    shell_com = f'curl -X POST -F key={s3_meta["key"]} '
+    for k,v in s3_meta.items():
+      if k == "key":
+        continue
+      shell_com += f'-F {k}={v} '
+    shell_com += f'-F file="@{zip_path}" {s3_url}'
+    logger.debug(f"Running shell command: {shell_com}")
+    out = Popen(shlex.split(shell_com)).wait()
+    if out != 0:
+      logger.error(f"Failed to upload model: {out}, please check logs for this")
+      return
+  else:
+    r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
+    try:
+      r.raise_for_status()
+    except:
+      logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
+      return
 
   job_proto.feature_gates.update({
     "UsePipCaching": "", # some string does not honour value
     "EnableAuthRefresh": ""
   })
-  auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get("username"))
+  auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get(ConfigString.username))
   if new_job:
     logger.info("Creating a new job")
     rpc(
@@ -366,7 +390,25 @@ Function related to both NBX-Serving and NBX-Jobs
 """
 #######################################################################################################################
 
-def zip_to_nbox_folder(init_folder, id, workspace_id, type, **jinja_kwargs):
+def zip_to_nbox_folder(
+  init_folder: str,
+  id: str,
+  workspace_id: str,
+  type: Union[OT.JOB, OT.SERVING],
+  files_to_copy: Dict[str, str] = {},
+  **jinja_kwargs
+):
+  """
+  This function creates the zip file that is ulitimately uploaded to NBX-Serving or NBX-Jobs.
+
+  Args:
+    init_folder (str): The folder that contains the files to be zipped
+    id (str): The id of the job or serving
+    workspace_id (str): The workspace id of the job or serving
+    type (OT_TYPE): The type of the job or serving, comes from nbxlib.operator_spec.OT_TYPE
+    files_to_copy (Dict[str, str], optional): A dictionary of source to target filepaths to copy to the zip file. Defaults to {}.
+    **jinja_kwargs: Any additional arguments to be passed to the jinja template
+  """
   # zip all the files folder
   all_f = U.get_files_in_folder(init_folder, followlinks = False)
 
@@ -446,4 +488,7 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, type, **jinja_kwargs):
       zip_file.write(secrets_path, arcname = ".nbx/secrets.json")
 
     zip_file.write(exe_path, arcname = "exe.py")
+    for src, trg in files_to_copy.items():
+      zip_file.write(src, arcname = trg)
+
   return zip_path
