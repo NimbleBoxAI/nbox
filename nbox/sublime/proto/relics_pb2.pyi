@@ -31,6 +31,8 @@ class Relic(google.protobuf.message.Message):
     STARRED_FIELD_NUMBER: builtins.int
     TAGS_FIELD_NUMBER: builtins.int
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
+    PERMISSION_FIELD_NUMBER: builtins.int
+    UI_FIELD_FIELD_NUMBER: builtins.int
     BUCKET_META_FIELD_NUMBER: builtins.int
     id: typing.Text
     """these are the primary fields"""
@@ -46,6 +48,10 @@ class Relic(google.protobuf.message.Message):
         """tags are like labels in NBX-Relics"""
         pass
     workspace_id: typing.Text
+    @property
+    def permission(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]: ...
+    @property
+    def ui_field(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]: ...
     @property
     def bucket_meta(self) -> global___BucketMetadata:
         """there are other things that may not be needed by the FE, think of this as the 
@@ -63,10 +69,12 @@ class Relic(google.protobuf.message.Message):
         starred: builtins.bool = ...,
         tags: typing.Optional[typing.Iterable[typing.Text]] = ...,
         workspace_id: typing.Text = ...,
+        permission: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        ui_field: typing.Optional[typing.Iterable[typing.Text]] = ...,
         bucket_meta: typing.Optional[global___BucketMetadata] = ...,
         ) -> None: ...
     def HasField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","starred",b"starred","tags",b"tags","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","created_on",b"created_on","id",b"id","last_modified",b"last_modified","name",b"name","permission",b"permission","starred",b"starred","tags",b"tags","ui_field",b"ui_field","workspace_id",b"workspace_id"]) -> None: ...
 global___Relic = Relic
 
 class BucketMetadata(google.protobuf.message.Message):
