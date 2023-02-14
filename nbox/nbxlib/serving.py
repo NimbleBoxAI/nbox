@@ -247,7 +247,8 @@ class NbxPyRpc(Operator):
     super().__init__()
     self.wrapped_cls = op
 
-  def forward(self, data, response: Response) -> Dict[str, str]:
+  def forward(self, data, response) -> Dict[str, str]:
+    response: Response = response
     _k = set(tuple(data.keys())) - set(["rpc_name", "key", "value"])
     if _k:
       response.status_code = 400
