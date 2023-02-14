@@ -14,13 +14,13 @@ import json
 import requests
 import webbrowser
 from getpass import getpass
-from enum import Enum
+from functools import lru_cache
 
 import nbox.utils as U
 from nbox.utils import join, logger
 
 
-class ConfigString():
+class AuthConfig():
   workspace_id = "config.global.workspace_id"
   workspace_name = "config.global.workspace_name"
   _workspace_id = "workspace_id"
@@ -34,7 +34,11 @@ class ConfigString():
   nbx_pod_run = "run"
 
   def items():
-    return [ConfigString.workspace_id, ConfigString.workspace_name, ConfigString.cache]
+    return [AuthConfig.workspace_id, AuthConfig.workspace_name, AuthConfig.cache]
+
+# kept for legacy reasons, remove it when this code (see git blame) is > 4 months old
+ConfigString = AuthConfig
+
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -95,17 +99,17 @@ class NBXClient:
 
       # create the objects
       self.secrets = {
-        ConfigString.email: email,
-        ConfigString.access_token: access_token,
-        ConfigString.url: nbx_url,
-        ConfigString.username: username,
+        AuthConfig.email: email,
+        AuthConfig.access_token: access_token,
+        AuthConfig.url: nbx_url,
+        AuthConfig.username: username,
 
         # config values that can be set by the user for convenience
-        ConfigString.workspace_id: workspace_id,
-        ConfigString.workspace_name: workspace_details["workspace_name"],
+        AuthConfig.workspace_id: workspace_id,
+        AuthConfig.workspace_name: workspace_details["workspace_name"],
 
         # now cache the information about this workspace
-        ConfigString.cache: {workspace_id: workspace_details},
+        AuthConfig.cache: {workspace_id: workspace_details},
       }
       # for k,v in self.secrets.items():
       #   print(type(k), k, "::", type(v), v)
@@ -153,6 +157,9 @@ class NBXClient:
       with open(self.fp, "w") as f:
         f.write(repr(self))
 
+  def __call__(self, item, default=None, reload: bool = False):
+    return self.get(item, default, reload)
+
 
 def init_secret():
   """
@@ -161,10 +168,24 @@ def init_secret():
   # add any logic here for creating secrets
   if not U.env.NBOX_NO_AUTH(False):
     secret = NBXClient()
-    logger.info(f"Current workspace id: {secret.get(ConfigString.workspace_id)} ({secret.get(ConfigString.workspace_name)})")
+    logger.info(f"Current workspace id: {secret(AuthConfig.workspace_id)} ({secret(AuthConfig.workspace_name)})")
     return secret
   else:
     logger.info(f"Skipping authentication as NBOX_NO_AUTH is set to True")
   return None
 
 secret = init_secret()
+
+
+@lru_cache()
+def auth_info_pb():
+  """
+  Get the auth token for the current user.
+  """
+  from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
+
+  return NBXAuthInfo(
+    username = secret(AuthConfig.username),
+    workspace_id = secret(AuthConfig.workspace_id) or secret(AuthConfig._workspace_id),
+    access_token = secret(AuthConfig.access_token),
+  )

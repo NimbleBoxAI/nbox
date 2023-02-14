@@ -32,7 +32,7 @@ from google.protobuf.field_mask_pb2 import FieldMask
 import nbox.utils as U
 from nbox import Instance
 from nbox.utils import logger, SimplerTimes
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.nbxlib.tracer import Tracer
 from nbox.relics import Relics
 from nbox.jobs import Job, upload_job_folder
@@ -41,7 +41,6 @@ from nbox.init import nbox_grpc_stub, nbox_ws_v1
 from nbox.messages import message_to_dict
 from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateJobRequest, JobRequest
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
-from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 
 # all the sublime -> hyperloop stuff
 from nbox.sublime.lmao_rpc_client import (
@@ -57,7 +56,7 @@ functional components of LMAO
 """
 
 def get_lmao_stub() -> LMAO_Stub:
-  lmao_stub = LMAO_Stub(url = secret.get(ConfigString.url) + "/monitoring", session = nbox_ws_v1._session)
+  lmao_stub = LMAO_Stub(url = secret(AuthConfig.url) + "/monitoring", session = nbox_ws_v1._session)
   return lmao_stub
 
 def get_record(k: str, v: Union[int, float, str]) -> Record:
@@ -190,7 +189,7 @@ class Lmao():
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
     self.store_git_details = store_git_details
-    self.workspace_id = secret.get(ConfigString.workspace_id)
+    self.workspace_id = secret(AuthConfig.workspace_id)
 
     # now set the supporting keys
     self.nbx_job_folder = U.env.NBOX_JOB_FOLDER("")
@@ -566,7 +565,7 @@ class LmaoCLI:
       **run_kwargs: These are the kwargs that will be passed to your function.
     """
     # reconstruct the entire CLI command so we can show it in the UI
-    workspace_id = secret.get(ConfigString.workspace_id)
+    workspace_id = secret(AuthConfig.workspace_id)
     reconstructed_cli_comm = (
       f"nbx lmao upload '{init_path}' '{project_name_or_id}'"
       f" --resource_cpu '{resource_cpu}'"
@@ -610,15 +609,14 @@ class LmaoCLI:
       untracked = True
 
     # first step is to get all the relevant information from the DB and servers
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+    workspace_id = workspace_id or secret(AuthConfig.workspace_id)
     project_name, project_id = get_project_name_id(project_name_or_id, workspace_id)
     job_name = "nbxj_" + project_name[:15]
     try:
       job = Job(job_name = job_name)
     except:
       logger.warn(f"Job not found. Creating a new job: {job_name}")
-      job = nbox_ws_v1.job("post", job_name = job_name, job_description = "automatically created by nbx LMAO for project: " + project_name)
-      job = Job(job_name = job_name)
+      job = Job.new(job_name = job_name, description = "automatically created by nbx LMAO for project: " + project_name)
 
     logger.info(f"Project: {project_name} ({project_id})")
     lmao_stub = get_lmao_stub()
@@ -714,14 +712,14 @@ class LmaoCLI:
 
     if trigger:
       fp = f"{run.project_id}/{run.experiment_id}"
-      tag = f"{LMAO_JOB_TYPE_PREFIX}{fp}"
+      tag = f"{LMAO_RM_PREFIX}{fp}"
       logger.debug(f"Running job '{job.name}' ({job.id}) with tag: {tag}")
       job.trigger(tag)
 
     # finally print the location of the run where the users can track this
-    logger.info(f"Run location: {secret.get(ConfigString.url)}/workspace/{run.workspace_id}/monitoring/{run.project_id}/{run.experiment_id}")
+    logger.info(f"Run location: {secret(AuthConfig.url)}/workspace/{run.workspace_id}/monitoring/{run.project_id}/{run.experiment_id}")
 
 # do not change these it can become a huge pain later on
 LMAO_RELIC_NAME = "experiments"
-LMAO_JOB_TYPE_PREFIX = "NBXLmao-"
-LMAO_ENV_VAR_PREFIX = "LMAO_"
+LMAO_RM_PREFIX = "NBXLmao-"
+LMAO_ENV_VAR_PREFIX = "NBX_LMAO_"

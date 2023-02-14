@@ -119,7 +119,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import nbox.utils as U
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig
 from nbox.utils import logger, SimplerTimes
 from nbox.nbxlib import operator_spec as ospec
 from nbox.nbxlib.tracer import Tracer
@@ -268,7 +268,7 @@ class Operator():
     # implement this when we have the client-server that allows us to get the metadata for the job
     if (not job_name and not job_id) or (job_name and job_id):
       raise ValueError("Either job_name or job_id must be specified")
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+    workspace_id = workspace_id or secret(AuthConfig.workspace_id)
     if not workspace_id:
       raise DeprecationWarning("workspace_id cannot be none. Reauth yourself with `nbx login`")
     job_id, job_name = _get_job_data(
@@ -284,15 +284,20 @@ class Operator():
 
     def forward(*args, _wait: bool = True, **kwargs):
       """This is the forward method for a NBX-Job. All the parameters will be passed through Relics."""
-      logger.debug(f"Running job '{job_name}' ({job_id})")
-      relic = Relics("cache", workspace_id, create = True)
+      from nbox.lib.dist import RAW_DIST_RM_PREFIX, RAW_DIST_RELIC_NAME
+
+      run_unk = U.get_random_name(True).split("-")[0]
+      tag = f"{RAW_DIST_RM_PREFIX}{run_unk}"
+      logger.debug(f"Running job '{job_name}' ({job_id}): tag = {tag}")
 
       # determining the put location is very tricky because there is no way to create a sync between the
       # key put here and what the run will pull. This can lead to many weird race conditions. So for now
       # I am going to rely on the fact that we cannot have two parallel runs with same tag. Thus at any given
       # moment there can be only one file at /{job_id}/args_kwargs_{tag}.pkl
-      tag = U.get_random_name(True).split("-")[0]
-      relic.put_object(f"{job_id}/args_kwargs_{tag}", (args, kwargs))
+      relic = Relics(RAW_DIST_RELIC_NAME, create = True)
+      _pkl_id_in = run_unk + "_in"
+      _pkl_id_out = run_unk + "_out"
+      relic.put_object(_pkl_id_in, (args, kwargs))
 
       # and then we will trigger the job with that specific tag and wait for the run to complete
       job.trigger(tag = tag)
@@ -302,11 +307,10 @@ class Operator():
         # even though we are returning the run_id, this cannot be trusted when making parallel call because of
         # the race condition on top run, which is the case when .map() method is called on the operator. 
         # return tag, latest_run["id"]
-        return tag, latest_run["id"]
+        return tag, latest_run["id"], _pkl_id_in, _pkl_id_out
 
       # if required wait else just return the 
       max_retries = latest_run['resource']['max_retries']
-
       max_polls = 600  # about 10 mins
       poll_count = 0
       while latest_run["retry_count"] <= max_retries:
@@ -365,7 +369,7 @@ class Operator():
       # this is deployment on a Build instance, there's a catch though without knowing the
       session.headers.update({
         "NBX-TOKEN": token,
-        "X-NBX-USERNAME": secret.get("username"),
+        "X-NBX-USERNAME": secret("username"),
       })
       serving_id = url
     else:
@@ -754,6 +758,28 @@ class Operator():
     dag.flowchart.CopyFrom(Flowchart(nodes = _nodes, edges = _edges))
     return dag
 
+  # def deploy_as_job(
+  #   self,
+  #   job_id: str = "",
+  #   **kwargs,
+  # ):
+  #   return self.deploy(
+  #     group_id = job_id,
+  #     deployment_type = ospec.OperatorType.JOB,
+  #     **kwargs,
+  #   )
+
+  # def deploy_as_serving(
+  #   self,
+  #   serving_id: str = "",
+  #   **kwargs,
+  # ):
+  #   return self.deploy(
+  #     group_id = serving_id,
+  #     deployment_type = ospec.OperatorType.SERVING,
+  #     **kwargs,
+  #   )
+
   def deploy(
     self,
     group_id: str,
@@ -777,7 +803,7 @@ class Operator():
     """
 
     if not workspace_id:
-      workspace_id = secret.get(ConfigString.workspace_id)
+      workspace_id = secret(AuthConfig.workspace_id)
       logger.info(f"Using workspace_id: {workspace_id}")
 
     # go over reasonable checks for deployment
@@ -989,10 +1015,13 @@ if __name__ == "__main__":
       return results
 
     elif self._op_type == ospec.OperatorType.JOB:
+      from nbox.lib.dist import RAW_DIST_RELIC_NAME
+
       # now this is simple enough, we need to implement a waiting queue that's it
       _start_time = monotonic()
       run_tags = []
       run_tag_to_input_idx = {}
+      run_tag_to_out_files = {}
 
       # though the threadpool is a faster method, cannot trust the run_id because of the race condition on top run
       with ThreadPoolExecutor(min(len(inputs), 10)) as exe:
@@ -1000,9 +1029,10 @@ if __name__ == "__main__":
         results = {exe.submit(trigger, i, x) for i,x in enumerate(inputs)}
         for future in as_completed(results):
           try:
-            i, (tag, run_id) = future.result()
+            (i, tag, _pkl_id_in, _pkl_id_out) = future.result()
             run_tags.append(tag)
             run_tag_to_input_idx[tag] = i
+            run_tag_to_out_files[tag] = _pkl_id_out
           except Exception as e:
             raise Exception(e)
 
@@ -1031,15 +1061,14 @@ if __name__ == "__main__":
       run_status = {rid: None for rid in run_ids}
       active_runs = {rid for rid, done in run_status.items() if not done}
       pbar = tqdm(total = len(inputs), desc = f"Waiting for runs ({html_path})")
-      relic = Relics("cache", workspace_id = self._op_spec.workspace_id)
+      relic = Relics(RAW_DIST_RELIC_NAME, workspace_id = self._op_spec.workspace_id)
 
       def _update_runs():
         # get all runs, filter those in this invocation, update the status
         files_ = {}
-        for t in run_tags:
-          files_[t] = (
-            relic.has(f"{self._op_spec.job_id}/return_{tag}"),
-          )
+        for t, _pkl_id_out in run_tag_to_out_files.items():
+          files_[t] = relic.has(_pkl_id_out)
+
         out = self._op_spec.job.last_n_runs(len(inputs))
         # print(out)
         if not isinstance(out, (list, tuple)):

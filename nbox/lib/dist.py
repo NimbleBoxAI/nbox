@@ -13,14 +13,14 @@ import nbox.utils as U
 from nbox.utils import logger
 from nbox.relics import Relics
 from nbox.operator import Operator
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig
 from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.jobs.job_pb2 import Job
-from nbox.nbxlib.serving import serve_operator, SupportedServingTypes as SST, ServingMetadata
+from nbox.nbxlib.serving import serve_operator, SupportedServingTypes as SST
 from nbox.messages import read_file_to_binary
 from nbox.hyperloop.deploy.serve_pb2 import Model as ModelProto
 
-from nbox.lmao import LMAO_JOB_TYPE_PREFIX, _lmaoConfig, get_lmao_stub, ExperimentConfig
+from nbox.lmao import LMAO_RM_PREFIX, _lmaoConfig, get_lmao_stub, ExperimentConfig
 from nbox.sublime.proto.lmao_pb2 import Run, ListProjectsRequest, ListProjectsResponse
 
 # Manager
@@ -57,9 +57,9 @@ class NBXLet(Operator):
       workspace_id = tracer.workspace_id
       logger.info(f"Workspace Id: {workspace_id}")
 
-      # this is important since nbox uses ConfigString.workspace_id place to get workspace_id from while the init_container
+      # this is important since nbox uses AuthConfig.workspace_id place to get workspace_id from while the init_container
       # might place it at a different place. as of this writing, init_container -> "workspace_id" and nbox -> "config.global.workspace_id"
-      secret.put(ConfigString.workspace_id, workspace_id, True) 
+      secret.put(AuthConfig.workspace_id, workspace_id, True) 
 
       job_id = tracer.job_id
       self.op.propagate(_tracer = tracer)
@@ -71,12 +71,13 @@ class NBXLet(Operator):
       # in the NimbleBox system we provide tags for each key which essentially tells what is the behaviour
       # of the job. For example if it contains the string LMAO which means we need to initialise a couple
       # of things, or this can be any other job type
-      if run_tag.startswith(LMAO_JOB_TYPE_PREFIX):
+      args, kwargs = (), {}
+      if run_tag.startswith(LMAO_RM_PREFIX):
         # originally we had a strategy to use Relics to store the information about the initialisation and passed args
         # however we are not removing that because we don't want to spend access money when we are anyways storing all
         # the information in the LMAO DB. so now we get the details of the run and get all the information from there.
         _lmao_stub = get_lmao_stub()
-        project_id, exp_id = run_tag[len(LMAO_JOB_TYPE_PREFIX):].split("/")
+        project_id, exp_id = run_tag[len(LMAO_RM_PREFIX):].split("/")
         logger.info(f"Project name (Experiment ID): {project_id} ({exp_id})")
 
         # get details for the project and the run
@@ -109,31 +110,23 @@ class NBXLet(Operator):
         args = ()
         kwargs = exp_config.run_kwargs
 
-      else:
-        # check if there is a specific relic for this job
-        relic = Relics("cache", workspace_id)
-        _in = f"{job_id}/args_kwargs"
-        if run_tag:
-          _in += f"_{run_tag}"
-        logger.info(f"Looking for init.pkl at {_in}")
-        if relic.relic is not None and relic.has(_in):
-          (args, kwargs) = relic.get_object(_in)
-        else:
-          args, kwargs = (), {}
+      elif run_tag.startswith(RAW_DIST_RM_PREFIX):
+        relic = Relics(RAW_DIST_RELIC_NAME, workspace_id)
+        _pkl_id_in = run_tag[len(RAW_DIST_RM_PREFIX):] + "_in"
+        logger.info(f"Looking for init.pkl at {_pkl_id_in}")
+        (args, kwargs) = relic.get_object(_pkl_id_in)
 
       # call the damn thing
       out = self.op(*args, **kwargs)
 
       # save the output to the relevant place, LMAO jobs are not saved to the relic
-      if run_tag.startswith(LMAO_JOB_TYPE_PREFIX):
+      if run_tag.startswith(LMAO_RM_PREFIX):
         logger.info("NBX-LMAO runs does not store function returns in Relics")
-      else:
-        _out = f"{job_id}/return"
-        if run_tag:
-          _out += f"_{run_tag}"
-        logger.info(f"Saving output to {_out}")
-        if relic.relic is not None:
-          relic.put_object(_out, out)
+
+      elif run_tag.startswith(RAW_DIST_RM_PREFIX):
+        _pkl_id_out = run_tag[len(RAW_DIST_RM_PREFIX):] + "_out"
+        logger.info(f"Storing for output at {_pkl_id_out}")
+        relic.put_object(_pkl_id_out, out)
 
       # last step mark as completed
       status = Job.Status.COMPLETED
@@ -177,3 +170,7 @@ class NBXLet(Operator):
       U.log_traceback()
       logger.error(f"Failed to serve operator: {e}")
       U.hard_exit_program()
+
+RAW_DIST_RELIC_NAME = "tmp_cache"
+RAW_DIST_RM_PREFIX = "NBXOperatorRawDist-"
+RAW_DIST_ENV_VAR_PREFIX = "NBX_OperatorRawDist_"

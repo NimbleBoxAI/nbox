@@ -22,13 +22,13 @@ from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
 from nbox.hyperloop.jobs.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub, nbox_model_service_stub
 from nbox.hyperloop.jobs.job_pb2 import  Job as JobProto
-from nbox.hyperloop.common.common_pb2 import NBXAuthInfo, Resource, Code
+from nbox.hyperloop.common.common_pb2 import Resource, Code
 from nbox.hyperloop.deploy.serve_pb2 import ModelRequest, Model
 from nbox.messages import rpc, write_binary_to_file
 from nbox.jobs import Schedule, Serve, Job
@@ -116,7 +116,7 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
     nbox_model_service_stub.UploadModel,
     ModelRequest(
       model = model_proto,
-      auth_info = NBXAuthInfo(workspace_id = workspace_id)
+      auth_info = auth_info_pb()
     ),
     "Could not get upload URL",
     raise_on_error = True
@@ -171,9 +171,7 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
         serving_group_id = deployment_id,
         resource = model_proto.resource
       ),
-      auth_info = NBXAuthInfo(
-        workspace_id = workspace_id
-      )
+      auth_info = auth_info_pb()
     ),
     "Could not deploy model",
     raise_on_error=True
@@ -184,13 +182,13 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
   # _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
   # _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
   # _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
-  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
+  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/deploy/{serving_id}"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
   # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   logger.info(f"  [page] - {_webpage}")
 
-  return Serve(serving_id = serving_id, model_id = model_id, workspace_id = workspace_id)
+  return Serve(serving_id = serving_id, model_id = model_id)
 
 
 #######################################################################################################################
@@ -239,7 +237,7 @@ def deploy_job(
   logger.info(f"Job ID: {job_id}")
 
   # intialise the console logger
-  URL = secret.get("nbx_url")
+  URL = secret("nbx_url")
   logger.debug(f"Schedule: {schedule}")
   logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
@@ -274,7 +272,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
     old_job_proto: JobProto = nbox_grpc_stub.GetJob(
-      JobRequest(job = JobProto(id = job_proto.id), auth_info = NBXAuthInfo(workspace_id = workspace_id))
+      JobRequest(job = JobProto(id = job_proto.id), auth_info = auth_info_pb())
     )
     new_job = old_job_proto.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
   except grpc.RpcError as e:
@@ -294,7 +292,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
       paths.append("schedule.cron")
     logger.debug(f"Updating fields: {paths}")
     nbox_grpc_stub.UpdateJob(
-      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths), auth_info=auth_info_pb()),
     )
 
   # update the JobProto with file sizes
@@ -306,7 +304,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   # UploadJobCode is responsible for uploading the code of the job
   response: JobProto = rpc(
     nbox_grpc_stub.UploadJobCode,
-    JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    JobRequest(job = job_proto, auth_info=auth_info_pb()),
     f"Failed to upload job: {job_proto.id} | {job_proto.name}"
   )
   job_proto.MergeFrom(response)
@@ -348,7 +346,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
     "UsePipCaching": "", # some string does not honour value
     "EnableAuthRefresh": ""
   })
-  auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get(ConfigString.username))
+  auth_info = auth_info_pb()
   if new_job:
     logger.info("Creating a new job")
     rpc(
@@ -370,16 +368,16 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
   # _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
-  # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  # _curl = f"curl -X POST {secret(AuthConfig.url)}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
 
-  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/jobs/{job_proto.id}"
+  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/jobs/{job_proto.id}"
   logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
-  return Job(job_id = job_proto.id, workspace_id = workspace_id)
+  return Job(job_id = job_proto.id)
 
 
 #######################################################################################################################

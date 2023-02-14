@@ -9,11 +9,10 @@ from json import dumps
 import nbox.utils as U
 from nbox.utils import logger, SimplerTimes
 from nbox.init import nbox_grpc_stub
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.jobs.dag_pb2 import Node
 from nbox.hyperloop.jobs.nbox_ws_pb2 import UpdateRunRequest
-from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 from nbox.messages import rpc, read_file_to_binary, read_file_to_string, message_to_dict
 
 class Tracer:
@@ -32,7 +31,7 @@ class Tracer:
     if local:
       pass
     else:
-      run_data = secret.get(ConfigString.nbx_pod_run) # user should never have "run" on their local
+      run_data = secret(AuthConfig.nbx_pod_run) # user should never have "run" on their local
       if run_data is not None:
         self.init(run_data, start_heartbeat)
 
@@ -78,7 +77,7 @@ class Tracer:
     self.job_id = run_data.get("job_id", None)
     self.run_id = run_data.get("token", None)
     self.job_proto.id = self.job_id # because when creating a new job, client does not know the ID
-    self.workspace_id = secret.get(ConfigString._workspace_id)
+    self.workspace_id = secret(AuthConfig._workspace_id)
     self.network_tracer = True
     
     # logger.debug(f"Username: {self.job_proto.auth_info.username}")
@@ -105,7 +104,7 @@ class Tracer:
           token = self.run_id,
           job = self.job_proto,
           updated_at = SimplerTimes.get_now_pb(),
-          auth_info = NBXAuthInfo(workspace_id = self.workspace_id)
+          auth_info = auth_info_pb()
         ),
         message or f"Could not update job {self.job_proto.id}",
         raise_on_error = True

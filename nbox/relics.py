@@ -13,7 +13,7 @@ from copy import deepcopy
 from subprocess import Popen
 from functools import lru_cache
 
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig
 from nbox.init import nbox_ws_v1
 from nbox.messages import message_to_dict
 from nbox.utils import logger, env, get_mime_type
@@ -28,7 +28,7 @@ from nbox.sublime.relics_rpc_client import (
 )
 
 def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
   # assert os.path.exists(fpath), f"File {fpath} does not exist"
   # assert os.path.isfile(fpath), f"File {fpath} is not a file"
 
@@ -63,7 +63,7 @@ def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
 @lru_cache()
 def _get_stub():
   # url = "http://0.0.0.0:8081/relics" # debug mode
-  url = secret.get("nbx_url") + "/relics"
+  url = secret("nbx_url") + "/relics"
   logger.debug("Connecting to RelicStore at: " + url)
   session = deepcopy(nbox_ws_v1._session)
   stub = RelicStore_Stub(url, session)
@@ -71,7 +71,7 @@ def _get_stub():
 
 def print_relics(workspace_id: str = ""):
   stub = _get_stub()
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
   req = ListRelicsRequest(workspace_id = workspace_id,)
   out = stub.list_relics(req)
   headers = ["relic_id", "relic_name",]
@@ -112,9 +112,9 @@ class Relics():
       create (bool): Create the relic if it does not exist.
       prefix (str): The prefix to use for all files in this relic. If provided all the files are uploaded and downloaded with this prefix.
     """
-    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+    self.workspace_id = workspace_id or secret(AuthConfig.workspace_id)
     self.relic_name = relic_name
-    self.username = secret.get("username") # if its in the job then this part will automatically be filled
+    self.username = secret("username") # if its in the job then this part will automatically be filled
     self.prefix = prefix.strip("/")
     self.stub = _get_stub()
     for _ in range(2):

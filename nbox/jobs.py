@@ -14,7 +14,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.utils import logger
 from nbox.version import __version__
 from nbox.messages import rpc, streaming_rpc
@@ -24,10 +24,20 @@ from nbox.nbxlib.astea import Astea, IndexTypes as IT
 from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.jobs.dag_pb2 import DAG as DAGProto
-from nbox.hyperloop.common.common_pb2 import NBXAuthInfo, Resource
+from nbox.hyperloop.common.common_pb2 import Resource, Code
 from nbox.hyperloop.jobs.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
 from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto, UpdateModelRequest
 
+
+DEFAULT_RESOURCE = Resource(
+  cpu = "128m",         # 100mCPU
+  memory = "256Mi",     # MiB
+  disk_size = "3Gi",    # GiB
+  gpu = "none",         # keep "none" for no GPU
+  gpu_count = "0",      # keep "0" when no GPU
+  timeout = 120_000,    # 2 minutes between attempts
+  max_retries = 2,      # third times the charm :P
+)
 
 
 class Schedule:
@@ -246,7 +256,7 @@ def upload_job_folder(
   _curdir = os.getcwd()
   os.chdir(init_folder)
 
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
 
   # Now that we have the init_folder and function name, we can throw relevant errors
   perform_tea = True
@@ -322,7 +332,7 @@ def upload_job_folder(
   )
 
   # common to both, kept out here because these two will eventually merge
-  nbx_auth_info = NBXAuthInfo(workspace_id = workspace_id, access_token = secret.get(ConfigString.access_token))
+  nbx_auth_info = auth_info_pb()
   if method == ospec.OperatorType.JOB:
     # since user has not passed any arguments, we will need to check if the job already exists
     job_proto: JobProto = nbox_grpc_stub.GetJob(
@@ -407,12 +417,15 @@ def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""
     logger.warning("Must provide either name or id")
     return None, None
   # filter and get "id" and "name"
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
 
   # get the deployment
   serving: Serving = rpc(
     nbox_serving_service_stub.GetServing,
-    ServingRequest(serving=Serving(name=name, id=id),auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    ServingRequest(
+      serving=Serving(name=name, id=id),
+      auth_info = auth_info_pb()
+    ),
     "Could not get deployment",
     raise_on_error=True
   )
@@ -430,10 +443,13 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
   all_deployments: ServingListResponse = rpc(
     nbox_serving_service_stub.ListServings,
-    ServingListRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),limit=10),
+    ServingListRequest(
+      auth_info=auth_info_pb(),
+      limit=10
+    ),
     "Could not get deployments",
     raise_on_error=True
   )
@@ -468,7 +484,7 @@ class Serve:
     """
     self.id = serving_id
     self.model_id = model_id
-    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+    self.workspace_id = workspace_id or secret(AuthConfig.workspace_id)
     if workspace_id is None:
       raise DeprecationWarning("Personal workspace does not support serving")
     else:
@@ -493,7 +509,8 @@ class Serve:
           serving_group_id = self.serving_id,
           pin_status = ModelProto.PinStatus.PIN_STATUS_PINNED
         ),
-        auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        auth_info = auth_info_pb()
+      ),
       "Could not pin model",
       raise_on_error = True
     )
@@ -514,7 +531,8 @@ class Serve:
           serving_group_id = self.serving_id,
           pin_status = ModelProto.PinStatus.PIN_STATUS_UNPINNED
         ),
-        auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        auth_info = auth_info_pb(),
+      ),
       "Could not unpin model",
       raise_on_error = True
     )
@@ -540,7 +558,8 @@ class Serve:
           replicas=replicas
         ),
         update_mask=FieldMask(paths=["replicas"]),
-        auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
+        auth_info = auth_info_pb()
+      ),
       "Could not scale deployment",
       raise_on_error = True
     )
@@ -551,7 +570,7 @@ class Serve:
     Args:
       f (file, optional): File to write the logs to. Defaults to sys.stdout.
     """
-    logger.debug(f"Streaming logs of job '{self.model_id}'")
+    logger.debug(f"Streaming logs of model '{self.model_id}'")
     for model_log in streaming_rpc(
       nbox_model_service_stub.ModelLogs,
       ModelRequest(
@@ -559,9 +578,7 @@ class Serve:
           id = self.model_id,
           serving_group_id = self.serving_id
         ),
-        auth_info = NBXAuthInfo(
-          workspace_id=self.workspace_id
-        ),
+        auth_info = auth_info_pb(),
       ),
       f"Could not get logs of model {self.model_id}, only live logs are available",
       False
@@ -605,14 +622,14 @@ def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *,
     logger.info(f"Please either pass job_id '{id}' or name '{name}'")
     return None, None
   # get stub
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
   if workspace_id == None:
     workspace_id = "personal"
 
   job: JobProto = rpc(
     nbox_grpc_stub.GetJob,
     JobRequest(
-      auth_info = NBXAuthInfo(workspace_id=workspace_id),
+      auth_info = auth_info_pb(),
       job = JobProto(id=id, name=name)
     ),
     "Could not find job with ID: {}".format(id),
@@ -633,15 +650,14 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
   Args:
     sort (str, optional): Sort key. Defaults to "name".
   """
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
 
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
-  auth_info = NBXAuthInfo(workspace_id = workspace_id)
   out: ListJobsResponse = rpc(
     nbox_grpc_stub.ListJobs,
-    ListJobsRequest(auth_info = auth_info),
+    ListJobsRequest(auth_info = auth_info_pb()),
     "Could not get job list",
   )
 
@@ -677,17 +693,20 @@ class Job:
   status = staticmethod(get_job_list)
   upload: 'Job' = staticmethod(partial(upload_job_folder, "job"))
 
-  def __init__(self, job_name: str = "", job_id: str = "", *, workspace_id: str = ""):
-    """Python wrapper for NBX-Jobs gRPC API
+  def __init__(self, job_name: str = "", job_id: str = ""):
+    """Python wrapper for NBX-Jobs gRPC API, when both arguments are not passed,
+    an unintialiased object is created.
 
     Args:
       job_name (str, optional): Job name. Defaults to "".
       job_id (str, optional): Job ID. Defaults to "".
     """
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-    self.id, self.name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
-    self.workspace_id = workspace_id
-    self.auth_info = NBXAuthInfo(workspace_id = workspace_id)
+    if job_name == "" and job_id == "":
+      return
+
+    self.id, self.name = _get_job_data(job_name, job_id)
+    self.workspace_id = secret(AuthConfig.workspace_id)
+    self.auth_info = auth_info_pb()
     self.job_proto = JobProto(id = self.id)
 
     self.run_stub = None
@@ -705,31 +724,39 @@ class Job:
     return self.id is not None
 
   @classmethod
-  def create(cls, job_name: str, *, workspace_id: str = ""):
+  def new(cls, job_name: str, description: str = ""):
     """Create a new job
 
     Args:
       job_name (str): Job name
-      workspace_id (str, optional): Workspace ID. Defaults to "".
+      description (str, optional): Job description. Defaults to "".
 
     Returns:
       Job: Job object
     """
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-
-    from nbox.messages import message_to_json
-    print(message_to_json(JobRequest(
-        auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get(ConfigString.username)),
-        job = JobProto(name = job_name, id = "NEW")
-      )))
-
-    job_proto = nbox_grpc_stub.CreateJob(
-      JobRequest(
-        auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get(ConfigString.username)),
-        job = JobProto(name = job_name, id = "NEW")
-      ),
-    )
-    return cls(job_id = job_proto.id, workspace_id = workspace_id)
+    job = nbox_ws_v1.job("post", job_name = job_name, job_description = description)
+    job_id = job["job_id"]
+    # job_proto: JobProto = nbox_grpc_stub.CreateJob(
+    #   JobRequest(
+    #     auth_info = auth_info_pb(),
+    #     job = JobProto(
+    #       name = job_name,
+    #       code = Code(
+    #         size = 1,
+    #         type = Code.Type.NOT_SET,
+    #       ),
+    #       resource = DEFAULT_RESOURCE,
+    #       schedule = JobProto.Schedule(
+    #         cron = "0 0 * * *",
+    #         end = Timestamp(seconds = 0),
+    #       ),
+    #       status = JobProto.Status.NOT_SET,
+    #       paused = False,
+    #     ),
+    #   )
+    # )
+    logger.info(f"Created a new job with name (ID): {job_name} ({job_id})")
+    return cls(job_id = job_id)
 
   def change_schedule(self, new_schedule: Schedule):
     """Change schedule this job
@@ -789,7 +816,7 @@ class Job:
       JobRequest(auth_info=self.auth_info, job = self.job_proto),
       f"Could not get job {self.job_proto.id}"
     )
-    self.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
+    self.auth_info.CopyFrom(auth_info_pb())
     logger.debug(f"Updated job '{self.job_proto.id}'")
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]

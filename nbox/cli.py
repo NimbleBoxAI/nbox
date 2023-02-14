@@ -23,7 +23,7 @@ from typing import Dict, Any
 import nbox.utils as U
 from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
-from nbox.auth import init_secret, ConfigString, secret
+from nbox.auth import init_secret, AuthConfig, secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import Relics
@@ -38,7 +38,7 @@ class Config(object):
   def update(self, workspace_id: str):
     """Set global config for `nbox`"""
     secret = init_secret()
-    data = secret.get(ConfigString.cache)
+    data = secret(AuthConfig.cache)
     redo = not data or (workspace_id not in data)
     if redo:
       workspaces = nbox_ws_v1.workspace()
@@ -48,7 +48,7 @@ class Config(object):
         raise Exception("Invalid workspace ID")
       workspace_details = workspace_details[0]
       workspace_name = workspace_details["workspace_name"]
-      secret.secrets[ConfigString.cache].update({
+      secret.secrets[AuthConfig.cache].update({
         workspace_id: {
           "workspace_id": workspace_id,
           "workspace_name": workspace_name
@@ -58,26 +58,26 @@ class Config(object):
       data = data[workspace_id]
       workspace_name = data["workspace_name"]
 
-    secret.put(ConfigString.workspace_id, workspace_id, True)
-    secret.put(ConfigString.workspace_name, workspace_name, True)
+    secret.put(AuthConfig.workspace_id, workspace_id, True)
+    secret.put(AuthConfig.workspace_name, workspace_name, True)
     logger.info(f"Global Workspace: {workspace_name}")
 
   def show(self):
     """Pretty print global config for `nbox`"""
     logger.info(
       "\nnbox config:\n" \
-      f"  workspace_name: {secret.get(ConfigString.workspace_name)}\n" \
-      f"    workspace_id: {secret.get(ConfigString.workspace_id)}\n" \
-      f"        username: {secret.get(ConfigString.username)}\n" \
+      f"  workspace_name: {secret(AuthConfig.workspace_name)}\n" \
+      f"    workspace_id: {secret(AuthConfig.workspace_id)}\n" \
+      f"        username: {secret(AuthConfig.username)}\n" \
       f"    nbox version: {V}\n" \
-      f"             URL: {secret.get('nbx_url')}"
+      f"             URL: {secret('nbx_url')}"
     )
 
 def open_home():
   """Open current NBX platform"""
   from .auth import secret
   import webbrowser
-  webbrowser.open(secret.get("nbx_url"))
+  webbrowser.open(secret("nbx_url"))
 
 
 def get(api_end: str, no_pp: bool = False, **kwargs):
@@ -153,7 +153,7 @@ class NBXWS_CLI(object):
     return res
 
   # def rapidoc(self):
-  #   openapi = secret.get("openapi_spec", None)
+  #   openapi = secret("openapi_spec", None)
   #   if openapi == None:
   #     raise RuntimeError("Not connected to NimbleBox.ai webserver")
   #   fp = U.join(U.folder(__file__), "assets", "rapidoc.html")
