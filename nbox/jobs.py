@@ -322,13 +322,13 @@ def upload_job_folder(
 
   # creation of resources, we first need to check if any resource arguments are passed, if they are
   resource = Resource(
-    cpu = resource_cpu,
-    memory = resource_memory,
-    disk_size = resource_disk_size,
-    gpu = resource_gpu,
-    gpu_count = resource_gpu_count,
-    timeout = resource_timeout,
-    max_retries = resource_max_retries,
+    cpu = str(resource_cpu),
+    memory = str(resource_memory),
+    disk_size = str(resource_disk_size),
+    gpu = str(resource_gpu),
+    gpu_count = str(resource_gpu_count),
+    timeout = int(resource_timeout),
+    max_retries = int(resource_max_retries),
   )
 
   # common to both, kept out here because these two will eventually merge

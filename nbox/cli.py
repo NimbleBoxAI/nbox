@@ -14,8 +14,6 @@ nbx tunnel 8000 -i "instance-id"
 
 import os
 import fire
-import jinja2
-import tempfile
 import webbrowser
 from json import dumps
 from typing import Dict, Any
@@ -75,9 +73,7 @@ class Config(object):
 
 def open_home():
   """Open current NBX platform"""
-  from .auth import secret
-  import webbrowser
-  webbrowser.open(secret("nbx_url"))
+  webbrowser.open(secret(AuthConfig.url))
 
 
 def get(api_end: str, no_pp: bool = False, **kwargs):
@@ -99,11 +95,15 @@ def get(api_end: str, no_pp: bool = False, **kwargs):
   else:
     return res
 
-def login():
+def login(force: bool = False):
   """Re authenticate `nbox`. NOTE: Will remove all added keys to `secrets`"""
-  fp = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
-  os.remove(fp)
-  init_secret()
+  if force:
+    fp = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
+    os.remove(fp)
+    init_secret()
+    return
+  else:
+    logger.info("Already logged in, to re-login use `nbx login --force`")
 
 def version():
   logger.info("NimbleBox.ai Client Library")
@@ -112,16 +112,13 @@ def version():
 
 def why():
   print('''
-The time for revolution is upon us!
+Embrace the Future of Business with NimbleBox!
 
-Get Ready to Embrace the AI Revolution with NimbleBox.
-  
-As we step into the 21st century, it is evident that artificial intelligence will
-be the driving force behind all major industries. That's why NimbleBox was created,
-to make the building and management of AI operations easier. Ensuring companies
-stay ahead of the curve in this rapidly changing landscape.
+Artificial intelligence is the key to unlocking new opportunities in the 21st century.
+With NimbleBox, you can simplify the building and management of AI operations and stay
+ahead of the competition.
 
-Join us in this revolution and help us create a brighter future powered by AI.
+Join the AI revolution and seize the future!
 ''')
 
 

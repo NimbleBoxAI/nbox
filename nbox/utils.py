@@ -314,10 +314,10 @@ def hash_(item, fn="md5"):
 
 
 @lru_cache()
-def get_mime_type(x: str, defualt = "application/octet-stream"):
+def get_mime_type(fp: str, defualt = "application/octet-stream"):
   with open(join(get_assets_folder(), "ex2mime.json"), "r") as f:
     mimes = json.load(f)
-  return mimes.get(x, defualt)
+  return mimes.get(os.path.splitext(fp)[1].lower(), defualt)
 
 
 # /misc

@@ -44,12 +44,7 @@ def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
       "last_modified": int(file_stat.st_mtime), # int
       "size": max(1, file_stat.st_size),        # bytes
     }
-
-  if "." in fpath_cleaned:
-    content_type = get_mime_type(fpath_cleaned.split(".")[-1], "application/octet-stream")
-  else:
-    content_type = "application/octet-stream"
-
+  content_type = get_mime_type(fpath_cleaned, "application/octet-stream")
   return RelicFile(
     name = fpath_cleaned,
     username = username,
@@ -383,7 +378,7 @@ class Relics():
     logger.warning(f"Deleting relic {self.relic_name}")
     self.stub.delete_relic(self.relic)
 
-  def list_files(self, path: str = "") -> List[RelicFile]:
+  def list_files(self, path: str = "") -> RelicFile:
     """List all the files in the relic at path"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
@@ -401,7 +396,7 @@ class Relics():
         break
       time.sleep(1)
     
-    return out.files
+    return out
 
 
 # nbx jobs ... trigger --mount="dataset:/my-dataset/email/,model_master:/model"
