@@ -14,8 +14,10 @@ nbx tunnel 8000 -i "instance-id"
 
 import os
 import fire
+import requests
 import webbrowser
 from json import dumps
+from shutil import rmtree
 from typing import Dict, Any
 
 import nbox.utils as U
@@ -39,7 +41,11 @@ class Config(object):
     data = secret(AuthConfig.cache)
     redo = not data or (workspace_id not in data)
     if redo:
-      workspaces = nbox_ws_v1.workspace()
+      workspaces = requests.get(
+        secret(AuthConfig.url) + f"/api/v1/workspace",
+        headers = nbox_ws_v1._session.headers
+      ).json()["data"]
+      # workspaces = nbox_ws_v1.workspace()
       workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
       if len(workspace_details) == 0:
         logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
@@ -52,6 +58,7 @@ class Config(object):
           "workspace_name": workspace_name
         }
       })
+      secret.put(AuthConfig.cache)
     else:
       data = data[workspace_id]
       workspace_name = data["workspace_name"]
@@ -70,6 +77,12 @@ class Config(object):
       f"    nbox version: {V}\n" \
       f"             URL: {secret('nbx_url')}"
     )
+
+  def clear(self):
+    cp = U.join(U.env.NBOX_HOME_DIR(), ".cache")
+    logger.info(f"Clearing: {cp}")
+    rmtree(cp)
+    os.makedirs(cp)
 
 def open_home():
   """Open current NBX platform"""

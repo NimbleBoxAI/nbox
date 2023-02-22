@@ -3,6 +3,7 @@
 # nbox version: {{ nbox_version }}
 
 import os
+os.environ["NBOX_JSON_LOG"] = '1' # since we finally have a pretty logging on the dashboard
 os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
 os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 

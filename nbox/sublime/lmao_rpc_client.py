@@ -5,7 +5,7 @@ import requests
 from functools import partial
 
 from google.protobuf.timestamp_pb2 import *
-from nbox.sublime.proto.lmao_pb2 import *
+from nbox.sublime.proto.lmao_v2_pb2 import *
 
 from nbox.sublime._yql.rest_pb2 import Echo
 from nbox.sublime._yql.common import *
@@ -19,330 +19,343 @@ class LMAO_Stub:
     self.status = partial(call_rpc, sess = self.session, url = f"{url}/")
     self.protos = partial(call_rpc, sess = self.session, url = f"{url}/protos")
 
-  def init_run(self, _lmao_InitRunRequest: InitRunRequest) -> Run:
+  def init_project(self, _lmao_v2_InitProjectRequest: InitProjectRequest) -> InitProjectResponse:
     echo_resp: Echo = call_rpc(
       self.session,
-      f"{self.url}/init_run",
-      Echo(message = "InitRunRequest", base64_string=message_to_b64(_lmao_InitRunRequest), rpc_name = "init_run")
+      f"{self.url}/init_project",
+      Echo(message = "InitProjectRequest", base64_string=message_to_b64(_lmao_v2_InitProjectRequest), rpc_name = "init_project")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Run = Run() # predefine the output proto
-    _lmao_Run = b64_to_message(echo_resp.base64_string, _lmao_Run)
-    return _lmao_Run
+    _lmao_v2_InitProjectResponse = InitProjectResponse() # predefine the output proto
+    _lmao_v2_InitProjectResponse = b64_to_message(echo_resp.base64_string, _lmao_v2_InitProjectResponse)
+    return _lmao_v2_InitProjectResponse
 
-  def update_run_status(self, _lmao_Run: Run) -> Acknowledge:
+  def get_project(self, _lmao_v2_Project: Project) -> Project:
     echo_resp: Echo = call_rpc(
       self.session,
-      f"{self.url}/update_run_status",
-      Echo(message = "Run", base64_string=message_to_b64(_lmao_Run), rpc_name = "update_run_status")
+      f"{self.url}/get_project",
+      Echo(message = "Project", base64_string=message_to_b64(_lmao_v2_Project), rpc_name = "get_project")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
+    _lmao_v2_Project = Project() # predefine the output proto
+    _lmao_v2_Project = b64_to_message(echo_resp.base64_string, _lmao_v2_Project)
+    return _lmao_v2_Project
 
-  def on_log(self, _lmao_RunLog: RunLog) -> Acknowledge:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/on_log",
-      Echo(message = "RunLog", base64_string=message_to_b64(_lmao_RunLog), rpc_name = "on_log")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
-
-  def on_save(self, _lmao_FileList: FileList) -> Acknowledge:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/on_save",
-      Echo(message = "FileList", base64_string=message_to_b64(_lmao_FileList), rpc_name = "on_save")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
-
-  def on_train_end(self, _lmao_Run: Run) -> Acknowledge:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/on_train_end",
-      Echo(message = "Run", base64_string=message_to_b64(_lmao_Run), rpc_name = "on_train_end")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
-
-  def list_projects(self, _lmao_ListProjectsRequest: ListProjectsRequest) -> ListProjectsResponse:
+  def list_projects(self, _lmao_v2_ListProjectsRequest: ListProjectsRequest) -> ListProjectsResponse:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/list_projects",
-      Echo(message = "ListProjectsRequest", base64_string=message_to_b64(_lmao_ListProjectsRequest), rpc_name = "list_projects")
+      Echo(message = "ListProjectsRequest", base64_string=message_to_b64(_lmao_v2_ListProjectsRequest), rpc_name = "list_projects")
     )
     if echo_resp is None:
       return None
 
-    _lmao_ListProjectsResponse = ListProjectsResponse() # predefine the output proto
-    _lmao_ListProjectsResponse = b64_to_message(echo_resp.base64_string, _lmao_ListProjectsResponse)
-    return _lmao_ListProjectsResponse
+    _lmao_v2_ListProjectsResponse = ListProjectsResponse() # predefine the output proto
+    _lmao_v2_ListProjectsResponse = b64_to_message(echo_resp.base64_string, _lmao_v2_ListProjectsResponse)
+    return _lmao_v2_ListProjectsResponse
 
-  def list_runs(self, _lmao_ListRunsRequest: ListRunsRequest) -> ListRunsResponse:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/list_runs",
-      Echo(message = "ListRunsRequest", base64_string=message_to_b64(_lmao_ListRunsRequest), rpc_name = "list_runs")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_ListRunsResponse = ListRunsResponse() # predefine the output proto
-    _lmao_ListRunsResponse = b64_to_message(echo_resp.base64_string, _lmao_ListRunsResponse)
-    return _lmao_ListRunsResponse
-
-  def get_experiment_table(self, _lmao_GetExperimentTableRequest: GetExperimentTableRequest) -> ExperimentTable:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/get_experiment_table",
-      Echo(message = "GetExperimentTableRequest", base64_string=message_to_b64(_lmao_GetExperimentTableRequest), rpc_name = "get_experiment_table")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_ExperimentTable = ExperimentTable() # predefine the output proto
-    _lmao_ExperimentTable = b64_to_message(echo_resp.base64_string, _lmao_ExperimentTable)
-    return _lmao_ExperimentTable
-
-  def get_run_details(self, _lmao_Run: Run) -> Run:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/get_run_details",
-      Echo(message = "Run", base64_string=message_to_b64(_lmao_Run), rpc_name = "get_run_details")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_Run = Run() # predefine the output proto
-    _lmao_Run = b64_to_message(echo_resp.base64_string, _lmao_Run)
-    return _lmao_Run
-
-  def get_run_log(self, _lmao_RunLogRequest: RunLogRequest) -> RunLog:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/get_run_log",
-      Echo(message = "RunLogRequest", base64_string=message_to_b64(_lmao_RunLogRequest), rpc_name = "get_run_log")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_RunLog = RunLog() # predefine the output proto
-    _lmao_RunLog = b64_to_message(echo_resp.base64_string, _lmao_RunLog)
-    return _lmao_RunLog
-
-  def list_files(self, _lmao_Run: Run) -> FileList:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/list_files",
-      Echo(message = "Run", base64_string=message_to_b64(_lmao_Run), rpc_name = "list_files")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_FileList = FileList() # predefine the output proto
-    _lmao_FileList = b64_to_message(echo_resp.base64_string, _lmao_FileList)
-    return _lmao_FileList
-
-  def delete_experiment(self, _lmao_Run: Run) -> Acknowledge:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/delete_experiment",
-      Echo(message = "Run", base64_string=message_to_b64(_lmao_Run), rpc_name = "delete_experiment")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
-
-  def delete_project(self, _lmao_Project: Project) -> Acknowledge:
+  def delete_project(self, _lmao_v2_Project: Project) -> Acknowledge:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/delete_project",
-      Echo(message = "Project", base64_string=message_to_b64(_lmao_Project), rpc_name = "delete_project")
+      Echo(message = "Project", base64_string=message_to_b64(_lmao_v2_Project), rpc_name = "delete_project")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
 
-  def init_serving(self, _lmao_InitRunRequest: InitRunRequest) -> Serving:
+  def init_run(self, _lmao_v2_InitRunRequest: InitRunRequest) -> Run:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/init_run",
+      Echo(message = "InitRunRequest", base64_string=message_to_b64(_lmao_v2_InitRunRequest), rpc_name = "init_run")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Run = Run() # predefine the output proto
+    _lmao_v2_Run = b64_to_message(echo_resp.base64_string, _lmao_v2_Run)
+    return _lmao_v2_Run
+
+  def update_run_status(self, _lmao_v2_Run: Run) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/update_run_status",
+      Echo(message = "Run", base64_string=message_to_b64(_lmao_v2_Run), rpc_name = "update_run_status")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
+
+  def on_log(self, _lmao_v2_RunLog: RunLog) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/on_log",
+      Echo(message = "RunLog", base64_string=message_to_b64(_lmao_v2_RunLog), rpc_name = "on_log")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
+
+  def on_train_end(self, _lmao_v2_Run: Run) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/on_train_end",
+      Echo(message = "Run", base64_string=message_to_b64(_lmao_v2_Run), rpc_name = "on_train_end")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
+
+  def list_runs(self, _lmao_v2_ListRunsRequest: ListRunsRequest) -> ListRunsResponse:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/list_runs",
+      Echo(message = "ListRunsRequest", base64_string=message_to_b64(_lmao_v2_ListRunsRequest), rpc_name = "list_runs")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_ListRunsResponse = ListRunsResponse() # predefine the output proto
+    _lmao_v2_ListRunsResponse = b64_to_message(echo_resp.base64_string, _lmao_v2_ListRunsResponse)
+    return _lmao_v2_ListRunsResponse
+
+  def get_run_details(self, _lmao_v2_Run: Run) -> Run:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/get_run_details",
+      Echo(message = "Run", base64_string=message_to_b64(_lmao_v2_Run), rpc_name = "get_run_details")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Run = Run() # predefine the output proto
+    _lmao_v2_Run = b64_to_message(echo_resp.base64_string, _lmao_v2_Run)
+    return _lmao_v2_Run
+
+  def get_run_log(self, _lmao_v2_RunLogRequest: RunLogRequest) -> RunLog:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/get_run_log",
+      Echo(message = "RunLogRequest", base64_string=message_to_b64(_lmao_v2_RunLogRequest), rpc_name = "get_run_log")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_RunLog = RunLog() # predefine the output proto
+    _lmao_v2_RunLog = b64_to_message(echo_resp.base64_string, _lmao_v2_RunLog)
+    return _lmao_v2_RunLog
+
+  def get_experiment_table(self, _lmao_v2_GetExperimentTableRequest: GetExperimentTableRequest) -> ExperimentTable:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/get_experiment_table",
+      Echo(message = "GetExperimentTableRequest", base64_string=message_to_b64(_lmao_v2_GetExperimentTableRequest), rpc_name = "get_experiment_table")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_ExperimentTable = ExperimentTable() # predefine the output proto
+    _lmao_v2_ExperimentTable = b64_to_message(echo_resp.base64_string, _lmao_v2_ExperimentTable)
+    return _lmao_v2_ExperimentTable
+
+  def delete_experiment(self, _lmao_v2_Run: Run) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/delete_experiment",
+      Echo(message = "Run", base64_string=message_to_b64(_lmao_v2_Run), rpc_name = "delete_experiment")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
+
+  def init_serving(self, _lmao_v2_InitRunRequest: InitRunRequest) -> Serving:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/init_serving",
-      Echo(message = "InitRunRequest", base64_string=message_to_b64(_lmao_InitRunRequest), rpc_name = "init_serving")
+      Echo(message = "InitRunRequest", base64_string=message_to_b64(_lmao_v2_InitRunRequest), rpc_name = "init_serving")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Serving = Serving() # predefine the output proto
-    _lmao_Serving = b64_to_message(echo_resp.base64_string, _lmao_Serving)
-    return _lmao_Serving
+    _lmao_v2_Serving = Serving() # predefine the output proto
+    _lmao_v2_Serving = b64_to_message(echo_resp.base64_string, _lmao_v2_Serving)
+    return _lmao_v2_Serving
 
-  def on_serving_log(self, _lmao_LogBuffer: LogBuffer) -> Acknowledge:
+  def update_serving_status(self, _lmao_v2_Serving: Serving) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/update_serving_status",
+      Echo(message = "Serving", base64_string=message_to_b64(_lmao_v2_Serving), rpc_name = "update_serving_status")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
+
+  def on_serving_log(self, _lmao_v2_RunLog: RunLog) -> Acknowledge:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/on_serving_log",
-      Echo(message = "LogBuffer", base64_string=message_to_b64(_lmao_LogBuffer), rpc_name = "on_serving_log")
+      Echo(message = "RunLog", base64_string=message_to_b64(_lmao_v2_RunLog), rpc_name = "on_serving_log")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
 
-  def on_serving_end(self, _lmao_Serving: Serving) -> Acknowledge:
+  def on_serving_end(self, _lmao_v2_Serving: Serving) -> Acknowledge:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/on_serving_end",
-      Echo(message = "Serving", base64_string=message_to_b64(_lmao_Serving), rpc_name = "on_serving_end")
+      Echo(message = "Serving", base64_string=message_to_b64(_lmao_v2_Serving), rpc_name = "on_serving_end")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
 
-  def list_deployments(self, _lmao_ListDeploymentsRequest: ListDeploymentsRequest) -> ListDeploymentsResponse:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/list_deployments",
-      Echo(message = "ListDeploymentsRequest", base64_string=message_to_b64(_lmao_ListDeploymentsRequest), rpc_name = "list_deployments")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_ListDeploymentsResponse = ListDeploymentsResponse() # predefine the output proto
-    _lmao_ListDeploymentsResponse = b64_to_message(echo_resp.base64_string, _lmao_ListDeploymentsResponse)
-    return _lmao_ListDeploymentsResponse
-
-  def list_servings(self, _lmao_ListServingsRequest: ListServingsRequest) -> ListServingsResponse:
+  def list_servings(self, _lmao_v2_ListServingsRequest: ListServingsRequest) -> ListServingsResponse:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/list_servings",
-      Echo(message = "ListServingsRequest", base64_string=message_to_b64(_lmao_ListServingsRequest), rpc_name = "list_servings")
+      Echo(message = "ListServingsRequest", base64_string=message_to_b64(_lmao_v2_ListServingsRequest), rpc_name = "list_servings")
     )
     if echo_resp is None:
       return None
 
-    _lmao_ListServingsResponse = ListServingsResponse() # predefine the output proto
-    _lmao_ListServingsResponse = b64_to_message(echo_resp.base64_string, _lmao_ListServingsResponse)
-    return _lmao_ListServingsResponse
+    _lmao_v2_ListServingsResponse = ListServingsResponse() # predefine the output proto
+    _lmao_v2_ListServingsResponse = b64_to_message(echo_resp.base64_string, _lmao_v2_ListServingsResponse)
+    return _lmao_v2_ListServingsResponse
 
-  def get_serving_details(self, _lmao_Serving: Serving) -> Serving:
+  def get_serving_details(self, _lmao_v2_Serving: Serving) -> Serving:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/get_serving_details",
-      Echo(message = "Serving", base64_string=message_to_b64(_lmao_Serving), rpc_name = "get_serving_details")
+      Echo(message = "Serving", base64_string=message_to_b64(_lmao_v2_Serving), rpc_name = "get_serving_details")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Serving = Serving() # predefine the output proto
-    _lmao_Serving = b64_to_message(echo_resp.base64_string, _lmao_Serving)
-    return _lmao_Serving
+    _lmao_v2_Serving = Serving() # predefine the output proto
+    _lmao_v2_Serving = b64_to_message(echo_resp.base64_string, _lmao_v2_Serving)
+    return _lmao_v2_Serving
 
-  def get_serving_log(self, _lmao_Serving: Serving) -> LogBuffer:
+  def get_serving_log(self, _lmao_v2_ServingLogRequest: ServingLogRequest) -> ServingLogResponse:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/get_serving_log",
-      Echo(message = "Serving", base64_string=message_to_b64(_lmao_Serving), rpc_name = "get_serving_log")
+      Echo(message = "ServingLogRequest", base64_string=message_to_b64(_lmao_v2_ServingLogRequest), rpc_name = "get_serving_log")
     )
     if echo_resp is None:
       return None
 
-    _lmao_LogBuffer = LogBuffer() # predefine the output proto
-    _lmao_LogBuffer = b64_to_message(echo_resp.base64_string, _lmao_LogBuffer)
-    return _lmao_LogBuffer
+    _lmao_v2_ServingLogResponse = ServingLogResponse() # predefine the output proto
+    _lmao_v2_ServingLogResponse = b64_to_message(echo_resp.base64_string, _lmao_v2_ServingLogResponse)
+    return _lmao_v2_ServingLogResponse
 
-  def create_rule(self, _lmao_Rule: Rule) -> Rule:
+  def delete_serving(self, _lmao_v2_Serving: Serving) -> Acknowledge:
     echo_resp: Echo = call_rpc(
       self.session,
-      f"{self.url}/create_rule",
-      Echo(message = "Rule", base64_string=message_to_b64(_lmao_Rule), rpc_name = "create_rule")
+      f"{self.url}/delete_serving",
+      Echo(message = "Serving", base64_string=message_to_b64(_lmao_v2_Serving), rpc_name = "delete_serving")
     )
     if echo_resp is None:
       return None
 
-    _lmao_Rule = Rule() # predefine the output proto
-    _lmao_Rule = b64_to_message(echo_resp.base64_string, _lmao_Rule)
-    return _lmao_Rule
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
 
-  def list_rules(self, _lmao_ListRules: ListRules) -> ListRules:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/list_rules",
-      Echo(message = "ListRules", base64_string=message_to_b64(_lmao_ListRules), rpc_name = "list_rules")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_ListRules = ListRules() # predefine the output proto
-    _lmao_ListRules = b64_to_message(echo_resp.base64_string, _lmao_ListRules)
-    return _lmao_ListRules
-
-  def delete_rule(self, _lmao_Rule: Rule) -> Acknowledge:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/delete_rule",
-      Echo(message = "Rule", base64_string=message_to_b64(_lmao_Rule), rpc_name = "delete_rule")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
-
-  def update_rule(self, _lmao_Rule: Rule) -> Acknowledge:
-    echo_resp: Echo = call_rpc(
-      self.session,
-      f"{self.url}/update_rule",
-      Echo(message = "Rule", base64_string=message_to_b64(_lmao_Rule), rpc_name = "update_rule")
-    )
-    if echo_resp is None:
-      return None
-
-    _lmao_Acknowledge = Acknowledge() # predefine the output proto
-    _lmao_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_Acknowledge)
-    return _lmao_Acknowledge
-
-  def get_rule_builder(self, _lmao_RuleBuilder: RuleBuilder) -> RuleBuilder:
+  def get_rule_builder(self, _lmao_v2_RuleBuilder: RuleBuilder) -> RuleBuilder:
     echo_resp: Echo = call_rpc(
       self.session,
       f"{self.url}/get_rule_builder",
-      Echo(message = "RuleBuilder", base64_string=message_to_b64(_lmao_RuleBuilder), rpc_name = "get_rule_builder")
+      Echo(message = "RuleBuilder", base64_string=message_to_b64(_lmao_v2_RuleBuilder), rpc_name = "get_rule_builder")
     )
     if echo_resp is None:
       return None
 
-    _lmao_RuleBuilder = RuleBuilder() # predefine the output proto
-    _lmao_RuleBuilder = b64_to_message(echo_resp.base64_string, _lmao_RuleBuilder)
-    return _lmao_RuleBuilder
+    _lmao_v2_RuleBuilder = RuleBuilder() # predefine the output proto
+    _lmao_v2_RuleBuilder = b64_to_message(echo_resp.base64_string, _lmao_v2_RuleBuilder)
+    return _lmao_v2_RuleBuilder
+
+  def create_rule(self, _lmao_v2_Rule: Rule) -> Rule:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/create_rule",
+      Echo(message = "Rule", base64_string=message_to_b64(_lmao_v2_Rule), rpc_name = "create_rule")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Rule = Rule() # predefine the output proto
+    _lmao_v2_Rule = b64_to_message(echo_resp.base64_string, _lmao_v2_Rule)
+    return _lmao_v2_Rule
+
+  def list_rules(self, _lmao_v2_ListRules: ListRules) -> ListRules:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/list_rules",
+      Echo(message = "ListRules", base64_string=message_to_b64(_lmao_v2_ListRules), rpc_name = "list_rules")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_ListRules = ListRules() # predefine the output proto
+    _lmao_v2_ListRules = b64_to_message(echo_resp.base64_string, _lmao_v2_ListRules)
+    return _lmao_v2_ListRules
+
+  def delete_rule(self, _lmao_v2_Rule: Rule) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/delete_rule",
+      Echo(message = "Rule", base64_string=message_to_b64(_lmao_v2_Rule), rpc_name = "delete_rule")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
+
+  def update_rule(self, _lmao_v2_Rule: Rule) -> Acknowledge:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/update_rule",
+      Echo(message = "Rule", base64_string=message_to_b64(_lmao_v2_Rule), rpc_name = "update_rule")
+    )
+    if echo_resp is None:
+      return None
+
+    _lmao_v2_Acknowledge = Acknowledge() # predefine the output proto
+    _lmao_v2_Acknowledge = b64_to_message(echo_resp.base64_string, _lmao_v2_Acknowledge)
+    return _lmao_v2_Acknowledge
 
 
 # ------ End Stub ------ #

@@ -13,6 +13,7 @@ import os
 import json
 import requests
 import webbrowser
+from typing import Dict
 from getpass import getpass
 from functools import lru_cache
 
@@ -32,6 +33,7 @@ class AuthConfig():
 
   # things for the pod
   nbx_pod_run = "run"
+  # nbx_pod_deploy = "deploy"
 
   def items():
     return [AuthConfig.workspace_id, AuthConfig.workspace_name, AuthConfig.cache]
@@ -39,6 +41,10 @@ class AuthConfig():
 # kept for legacy reasons, remove it when this code (see git blame) is > 4 months old
 ConfigString = AuthConfig
 
+
+class JobDetails(object):
+  job_id: str
+  run_id: str
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -109,7 +115,10 @@ class NBXClient:
         AuthConfig.workspace_name: workspace_details["workspace_name"],
 
         # now cache the information about this workspace
-        AuthConfig.cache: {workspace_id: workspace_details},
+        AuthConfig.cache: {workspace_id: {
+          "workspace_name": workspace_details["workspace_name"],
+          "workspace_id": workspace_id,
+        }},
       }
       # for k,v in self.secrets.items():
       #   print(type(k), k, "::", type(v), v)
@@ -143,22 +152,35 @@ class NBXClient:
         self.secrets = json.load(f)
     return self.secrets.get(item, default)
 
-  def put(self, item, value, persist: bool = False):
+  def put(self, item, value = None, persist: bool = False):
     """
-    Put the value of the item in the secrets file.
+    Put the value of the item in the secrets file. If no `value` or `persist` is specified,
+    this is a no-op.
 
     Args:
       item (str): The item to put the value for
       value (any): The value to put
       persist (bool): If True, persist the secrets file after putting the value
     """
-    self.secrets[item] = value
+    if value:
+      self.secrets[item] = value
     if persist:
       with open(self.fp, "w") as f:
         f.write(repr(self))
 
   def __call__(self, item, default=None, reload: bool = False):
     return self.get(item, default, reload)
+
+  def get_agent_details(self) -> Dict[str, str]:
+    if ConfigString.nbx_pod_run in self.secrets:
+      run_data = self.secrets[ConfigString.nbx_pod_run]
+      jd = JobDetails()
+      jd.job_id = run_data.get("job_id", None)
+      jd.run_id = run_data.get("token", None)
+      return jd
+    # elif ConfigString.nbx_pod_deploy in self.secrets:
+    #   return self.secrets[ConfigString.nbx_pod_deploy]
+    return {}
 
 
 def init_secret():

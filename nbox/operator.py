@@ -105,13 +105,14 @@ run in distributed fashion.
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # modifications: research@nimblebox.ai 2022
 
-from functools import partial
-import json
 import os
 import re
+import json
 import inspect
+import asyncio
 import requests
 from tqdm import tqdm
+from tabulate import tabulate
 from functools import partial
 from time import sleep, monotonic
 from collections import OrderedDict
@@ -279,7 +280,7 @@ class Operator():
     )
     if job_id is None:
       raise ValueError(f"No serving found with name {job_name}")
-    job = Job(job_id = job_id, workspace_id = workspace_id)
+    job = Job(job_id = job_id)
     logger.debug(f"Latching to job '{job_name}' ({job_id})")
 
     def forward(*args, _wait: bool = True, **kwargs):
@@ -1023,18 +1024,20 @@ if __name__ == "__main__":
       run_tag_to_input_idx = {}
       run_tag_to_out_files = {}
 
-      # though the threadpool is a faster method, cannot trust the run_id because of the race condition on top run
-      with ThreadPoolExecutor(min(len(inputs), 10)) as exe:
-        trigger = lambda i, x: [i, self(*x, _wait = False)]
-        results = {exe.submit(trigger, i, x) for i,x in enumerate(inputs)}
-        for future in as_completed(results):
-          try:
-            (i, tag, _pkl_id_in, _pkl_id_out) = future.result()
-            run_tags.append(tag)
-            run_tag_to_input_idx[tag] = i
-            run_tag_to_out_files[tag] = _pkl_id_out
-          except Exception as e:
-            raise Exception(e)
+      loop = asyncio.get_event_loop()
+      futures = []
+      for i,x in enumerate(inputs):
+        async def call_self():
+          tag, _est_run_id, _pkl_id_in, _pkl_id_out = self(*x, _wait = False)
+          run_tags.append(tag)
+          run_tag_to_input_idx[tag] = i
+          run_tag_to_out_files[tag] = _pkl_id_out
+        
+        futures.append(call_self())
+      gather_task = asyncio.gather(*futures)
+      loop.run_until_complete(gather_task)
+      loop.close()
+      
 
       run_tag_to_input_idx = {k:v for k,v in sorted(run_tag_to_input_idx.items(), key = lambda x: x[1])}
       sleep(1) # sleep for a bit before requesting the webserver, this sleep matters now that we have the threadpool
@@ -1046,21 +1049,10 @@ if __name__ == "__main__":
       # print("run_tag_to_input_idx:", run_tag_to_input_idx)
       # print("inputs:", inputs, len(inputs))
 
-      proc_hash = U.hash_(",".join(run_tags), "sha256")[:8]
       logger.info(f"Waiting for {len(run_ids)} processes to finish, this may take a while...")
-      html_path = U.join(U.env.NBOX_HOME_DIR(), ".cache", f"{proc_hash}.html")
-
-      def _write_html_page(data, headers = ["created_at", "end_time", "input_id", "run_id", "status", "tag", "files"]):
-        with open(U.join(U.folder(__file__), "assets", "run_status.jinja"), "r") as src, open(html_path, "w") as dst:
-          import jinja2
-          template = jinja2.Template(src.read())
-          dst.write(template.render(data = data, headers = headers))
-
-      _write_html_page([[] for _ in range(len(inputs))])
-
       run_status = {rid: None for rid in run_ids}
       active_runs = {rid for rid, done in run_status.items() if not done}
-      pbar = tqdm(total = len(inputs), desc = f"Waiting for runs ({html_path})")
+      pbar = tqdm(total = len(inputs), desc = f"Waiting for runs to complete")
       relic = Relics(RAW_DIST_RELIC_NAME, workspace_id = self._op_spec.workspace_id)
 
       def _update_runs():
@@ -1076,23 +1068,28 @@ if __name__ == "__main__":
         proc_runs = list(filter(lambda x: x["id"] in run_ids, out))
         data = [
           [
-            x["created_at"],
-            x["end_time"],
+            # x["created_at"],
+            # x["end_time"],
             run_tag_to_input_idx[t],
+            t,
             x["id"],
             x["status"],
-            t,
-            sum(files_[t])
+            int(files_[t])
           ] for x, t in zip(proc_runs, run_tags)
         ]
-        data = sorted(data, key = lambda x: x[2])
-        _write_html_page(data)
-
+        data = sorted(data, key = lambda x: x[0])
+        table_string = tabulate(
+          data,
+          headers = [
+            # "created_at", "end_time",
+            "input_id", "tag", "run_id (not accurate)", "status", "output found"
+          ],
+          tablefmt = "fancy_grid"
+        )
+        print(table_string)
         _active_runs = {x["id"] for x in proc_runs if x["status"] not in ["COMPLETED", "ERROR"]}
         pbar.update(len(active_runs) - len(_active_runs))
-
-        all_files_ready = sum([sum(files_[t]) for t in run_tags]) == len(run_tags)
-
+        all_files_ready = sum([int(files_[t]) for t in run_tags]) == len(run_tags)
         return _active_runs, all_files_ready
 
       while len(active_runs) > 0:
@@ -1106,7 +1103,8 @@ if __name__ == "__main__":
       # load the results in memory in the exact order of the inputs
       results = []
       for tag, _idx in run_tag_to_input_idx.items():
-        obj = relic.get_object(f"{self._op_spec.job_id}/return_{tag}")
+        _pkl_id_out = run_tag_to_out_files[tag]
+        obj = relic.get_object(_pkl_id_out)
         results.append(obj)
 
       _end_time = monotonic()

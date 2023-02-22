@@ -242,9 +242,20 @@ def upload_job_folder(
     )
     raise ValueError("Old style upload is not supported anymore")
 
-  # go with the new flow: style of `file_path:fn_name` where we need to upload the entire thing as if
-  # it is done programmatically (i.e. no `nbx_user.py` file)
-  fn_file, fn_name = init_folder.split(":")
+  # In order to upload we can either chose to upload the entire folder, but can we implement a style where
+  # only that specific function is uploaded? This is useful for raw distributed compute style.
+  commands = init_folder.split(":")
+  if len(commands) == 2:
+    fn_file, fn_name = commands
+    mode = "folder"
+  elif len(commands) == 3:
+    mode, fn_file, fn_name = commands
+    if mode not in ["file", "folder"]:
+      raise ValueError(f"Invalid mode: '{mode}' in upload command, should be either 'file' or 'folder'")
+  else:
+    raise ValueError(f"Invalid init_folder: {init_folder}")
+  if mode != "folder":
+    raise NotImplementedError(f"Only folder mode is supported, got: {mode}")
   if not os.path.exists(fn_file+".py"):
     raise ValueError(f"File {fn_file}.py does not exist")
   init_folder, file_name = os.path.split(fn_file)

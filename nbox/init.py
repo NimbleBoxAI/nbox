@@ -102,7 +102,7 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
   Returns:
     Sub30: A Subway object for the NBX Webserver.
   """
-  _version_specific_url = secret("nbx_url") + f"/api/{version}"
+  _version_specific_url = secret(AuthConfig.url) + f"/api/{version}"
   session = session if session != None else nbox_session  # select correct session
   r = session.get(_version_specific_url + "/openapi.json")
   try:

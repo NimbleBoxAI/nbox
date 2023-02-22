@@ -112,10 +112,7 @@ class Instance():
     sess = Session()
     sess.headers.update({"Authorization": f"Bearer {secret('access_token')}"})
     stub_ws_instance = create_webserver_subway("v1", sess)
-    if self.workspace_id == None:
-      stub_projects = stub_ws_instance.user.projects
-    else:
-      stub_projects = stub_ws_instance.workspace.u(self.workspace_id).instances
+    stub_projects = stub_ws_instance.instances
 
     # filter and get the data
     project_details = stub_projects()["project_details"]
