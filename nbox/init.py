@@ -118,7 +118,7 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
   #   f.write(json.dumps(spec, indent=2))
   out = Sub30(_version_specific_url, spec, session)
   logger.debug(f"Connected to webserver at {out}")
-  return out.workspace.u(secret(AuthConfig.workspace_id))
+  return out.workspace.u(secret.workspace_id)
 
 
 def nbox_version_update():

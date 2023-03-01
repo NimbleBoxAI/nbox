@@ -46,6 +46,8 @@ class JobDetails(object):
   job_id: str
   run_id: str
 
+# class DeployDetails(object):
+
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
     """
@@ -181,6 +183,10 @@ class NBXClient:
     # elif ConfigString.nbx_pod_deploy in self.secrets:
     #   return self.secrets[ConfigString.nbx_pod_deploy]
     return {}
+  
+  @property
+  def workspace_id(self) -> str:
+    return self.get(AuthConfig.workspace_id) or self.get(AuthConfig._workspace_id)
 
 
 def init_secret():
@@ -211,3 +217,6 @@ def auth_info_pb():
     workspace_id = secret(AuthConfig.workspace_id) or secret(AuthConfig._workspace_id),
     access_token = secret(AuthConfig.access_token),
   )
+
+def inside_pod():
+  return secret(AuthConfig.nbx_pod_run, False)

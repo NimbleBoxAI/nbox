@@ -30,9 +30,8 @@ from nbox.relics import Relics
 from nbox.lmao import LmaoCLI
 from nbox.version import __version__ as V
 from nbox.nbxlib.fire import NBXFire
-
-logger = U.get_logger()
-
+from nbox.projects import Project
+from nbox.utils import logger, lo
 
 class Config(object):
   def update(self, workspace_id: str):
@@ -69,14 +68,14 @@ class Config(object):
 
   def show(self):
     """Pretty print global config for `nbox`"""
-    logger.info(
-      "\nnbox config:\n" \
-      f"  workspace_name: {secret(AuthConfig.workspace_name)}\n" \
-      f"    workspace_id: {secret(AuthConfig.workspace_id)}\n" \
-      f"        username: {secret(AuthConfig.username)}\n" \
-      f"    nbox version: {V}\n" \
-      f"             URL: {secret('nbx_url')}"
-    )
+    logger.info(lo(
+      "nbox config:",
+      workspace_name = secret(AuthConfig.workspace_name),
+      workspace_id = secret(AuthConfig.workspace_id),
+      username = secret(AuthConfig.username),
+      nbox = V,
+      URL = secret(AuthConfig.url),
+    ))
 
   def clear(self):
     cp = U.join(U.env.NBOX_HOME_DIR(), ".cache")
@@ -119,8 +118,7 @@ def login(force: bool = False):
     logger.info("Already logged in, to re-login use `nbx login --force`")
 
 def version():
-  logger.info("NimbleBox.ai Client Library")
-  logger.info(f"    nbox version: {V}")
+  logger.info(f"NimbleBox.ai Client Library\n    nbox version: {V}")
 
 
 def why():
@@ -177,19 +175,20 @@ class NBXWS_CLI(object):
 
 def main():
   component = {
-    "build"   : Instance,
-    "config"  : Config,
-    "get"     : get,
-    "jobs"    : Job,
-    "lmao"    : LmaoCLI,
-    "login"   : login,
-    "open"    : open_home,
-    "relics"  : Relics,
-    "serve"   : Serve,
-    "tunnel"  : tunnel,
-    "version" : version,
-    "why"     : why,
-    "ws"      : NBXWS_CLI,
+    "build"    : Instance,
+    "config"   : Config,
+    "get"      : get,
+    "jobs"     : Job,
+    "lmao"     : LmaoCLI,
+    "login"    : login,
+    "open"     : open_home,
+    "projects" : Project,
+    "relics"   : Relics,
+    "serve"    : Serve,
+    "tunnel"   : tunnel,
+    "version"  : version,
+    "why"      : why,
+    "ws"       : NBXWS_CLI,
   }
 
   fire.Fire(component)

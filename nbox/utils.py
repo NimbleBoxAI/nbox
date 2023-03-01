@@ -27,6 +27,7 @@ This has a couple of cool things:
 ############################################################
 # This file is d0 meaning that this has no dependencies!
 # Do not import anything from rest of nbox here!
+# only exception is `nbox.nbxlib.logger`
 ############################################################
 
 # this file has bunch of functions that are used everywhere
@@ -34,7 +35,6 @@ This has a couple of cool things:
 import os
 import sys
 import json
-import logging
 import hashlib
 import requests
 import tempfile
@@ -46,11 +46,12 @@ from typing import List, Any
 from contextlib import contextmanager
 from base64 import b64encode, b64decode
 from datetime import datetime, timezone
-from pythonjsonlogger import jsonlogger
 from functools import partial, lru_cache
 from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from google.protobuf.timestamp_pb2 import Timestamp as Timestamp_pb
+
+from nbox.nbxlib.logger import get_logger, lo
 
 class env:
   """
@@ -90,39 +91,12 @@ class env:
     return os.environ.get(key, default)
 
 # logger /
-
-logger = None
-
-def get_logger():
-  # add some handling so files can use functional way of getting logger
-  global logger
-  if logger is not None:
-    return logger
-
-  logger = logging.getLogger("utils")
-  lvl = env.NBOX_LOG_LEVEL("info").upper()
-  logger.setLevel(getattr(logging, lvl))
-
-  if env.NBOX_JSON_LOG(False):
-    logHandler = logging.StreamHandler()
-    logHandler.setFormatter(jsonlogger.JsonFormatter(
-      '%(timestamp)s %(levelname)s %(message)s ',
-      timestamp=True
-    ))
-    logger.addHandler(logHandler)
-  else:
-    logHandler = logging.StreamHandler()
-    logHandler.setFormatter(logging.Formatter(
-      '[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s',
-      datefmt = "%Y-%m-%dT%H:%M:%S%z"
-    ))
-    logger.addHandler(logHandler)
-
-  return logger
-
-logger = get_logger() # package wide logger
+logger = get_logger(env) # package wide logger
+# logger = NBXUnifiedLogger(env) # package wide logger
 
 def log_traceback():
+  # for l in traceback.format_exc().splitlines():
+  #   logger.error(l)
   logger.error(traceback.format_exc())
 
 @contextmanager

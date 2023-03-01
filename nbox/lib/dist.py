@@ -6,22 +6,18 @@ process managements. The code here is tested along with `nbox.Relic` to perform 
 """
 
 import os
-import json
-from pprint import pformat
 
 import nbox.utils as U
-from nbox.utils import logger
+from nbox.utils import logger, lo
 from nbox.relics import Relics
 from nbox.operator import Operator
 from nbox.auth import secret, AuthConfig
 from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.jobs.job_pb2 import Job
-from nbox.nbxlib.serving import serve_operator, SupportedServingTypes as SST
-from nbox.messages import read_file_to_binary
-from nbox.hyperloop.deploy.serve_pb2 import Model as ModelProto
+from nbox.nbxlib.serving import serve_operator
 
-from nbox.lmao import LMAO_RM_PREFIX, _lmaoConfig, get_lmao_stub, ExperimentConfig
-from nbox.sublime.proto.lmao_pb2 import Run, ListProjectsRequest, ListProjectsResponse
+from nbox.lmao import ExperimentConfig, LMAO_RM_PREFIX
+from nbox.projects import Project, ProjectState
 
 # Manager
 class LocalNBXLet(Operator):
@@ -76,37 +72,23 @@ class NBXLet(Operator):
         # originally we had a strategy to use Relics to store the information about the initialisation and passed args
         # however we are not removing that because we don't want to spend access money when we are anyways storing all
         # the information in the LMAO DB. so now we get the details of the run and get all the information from there.
-        _lmao_stub = get_lmao_stub()
+        #
+        # update (27/02/23): We completed the integration of LMAO with NBX-Projects to get beautifully simple interface
+        #   for your entire MLOps pipeline. So copying the style from LMAO, we have something called ProjectState that
+        #   has some variables that simplify the client side code when they don't have to pass any ids, it's all
+        #   inferred.
+
         project_id, exp_id = run_tag[len(LMAO_RM_PREFIX):].split("/")
         logger.info(f"Project name (Experiment ID): {project_id} ({exp_id})")
+        ProjectState.project_id = project_id
+        ProjectState.experiment_id = exp_id
 
-        # get details for the project and the run
-        lmao_project = _lmao_stub.list_projects(ListProjectsRequest(
-          workspace_id = workspace_id,
-          project_id_or_name = project_id
-        )).projects[0]
-        lmao_run = _lmao_stub.get_run_details(Run(
-          workspace_id = workspace_id,
-          project_id = project_id,
-          experiment_id = exp_id
-        ))
-
-        # create the experiment config and set all the values in the _lmaoConfig object that will be passed
-        # to the LMAO class despite multiple initialisations, this ensures that when the user also uses LMAO
-        # class all the values are already filled up.
+        # create the central project class and get the experiment tracker
+        proj = Project()
+        logger.info(lo("Project data:", **proj.data))
+        exp_tracker = proj.get_exp_tracker()
+        lmao_run = exp_tracker.run
         exp_config = ExperimentConfig.from_json(lmao_run.config)
-        _lmaoConfig.set(
-          project_name = lmao_project.project_name,
-          project_id = lmao_run.project_id,
-          experiment_id = exp_id,
-          save_to_relic = exp_config.save_to_relic,
-          enable_system_monitoring = exp_config.enable_system_monitoring,
-          store_git_details = True,
-        )
-        logger.info("LMAO Config:\n" + pformat({
-          "kv": _lmaoConfig.kv,
-          "experiment": exp_config.to_dict()
-        }, compact=True))
         args = ()
         kwargs = exp_config.run_kwargs
 
@@ -117,11 +99,15 @@ class NBXLet(Operator):
         (args, kwargs) = relic.get_object(_pkl_id_in)
 
       # call the damn thing
+      st = U.SimplerTimes.get_now_i64()
       out = self.op(*args, **kwargs)
 
       # save the output to the relevant place, LMAO jobs are not saved to the relic
       if run_tag.startswith(LMAO_RM_PREFIX):
-        logger.info("NBX-LMAO runs does not store function returns in Relics")
+        logger.info(lo(
+          "NBXLet: LMAO job completed, here's some stats:",
+          time_taken = U.SimplerTimes.get_now_i64() - st
+        ))
 
       elif run_tag.startswith(RAW_DIST_RM_PREFIX):
         _pkl_id_out = run_tag[len(RAW_DIST_RM_PREFIX):] + "_out"

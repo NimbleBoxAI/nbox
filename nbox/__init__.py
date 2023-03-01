@@ -8,6 +8,8 @@ from nbox.operator import Operator, operator
 from nbox.jobs import Job, Serve, Schedule
 from nbox.instance import Instance
 from nbox.relics import Relics
-from nbox.lmao import Lmao
+from nbox.lmao import Lmao, LmaoLive
 from nbox.version import __version__
 from nbox.hyperloop.common.common_pb2 import Resource
+from nbox.nbxlib.logger import lo
+from nbox.projects import Project

@@ -30,6 +30,7 @@ class Project(google.protobuf.message.Message):
     TAGS_FIELD_NUMBER: builtins.int
     CREATED_AT_FIELD_NUMBER: builtins.int
     IS_DELETED_FIELD_NUMBER: builtins.int
+    RELIC_ID_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
     """the workspace this is part of"""
 
@@ -67,6 +68,9 @@ class Project(google.protobuf.message.Message):
     is_deleted: builtins.bool
     """if this project is deleted"""
 
+    relic_id: typing.Text
+    """the relic ID for this project"""
+
     def __init__(self,
         *,
         workspace_id: typing.Text = ...,
@@ -80,8 +84,9 @@ class Project(google.protobuf.message.Message):
         tags: typing.Optional[typing.Iterable[typing.Text]] = ...,
         created_at: builtins.int = ...,
         is_deleted: builtins.bool = ...,
+        relic_id: typing.Text = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["config_metrics",b"config_metrics","created_at",b"created_at","is_deleted",b"is_deleted","log_metrics",b"log_metrics","project_id",b"project_id","project_name",b"project_name","serving_metrics",b"serving_metrics","tags",b"tags","total_runs",b"total_runs","total_servings",b"total_servings","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["config_metrics",b"config_metrics","created_at",b"created_at","is_deleted",b"is_deleted","log_metrics",b"log_metrics","project_id",b"project_id","project_name",b"project_name","relic_id",b"relic_id","serving_metrics",b"serving_metrics","tags",b"tags","total_runs",b"total_runs","total_servings",b"total_servings","workspace_id",b"workspace_id"]) -> None: ...
 global___Project = Project
 
 class InitProjectRequest(google.protobuf.message.Message):

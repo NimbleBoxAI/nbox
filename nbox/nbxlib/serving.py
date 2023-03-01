@@ -91,6 +91,9 @@ def serve_operator(
   elif type(op_or_app) == FastAPI:
     app.mount("/x", op_or_app)
 
+  else:
+    raise ValueError(f"op_or_app must be an Operator or FastAPI app, got: {op_or_app}")
+
   uvicorn.run(app, host = host, port = port)
 
 

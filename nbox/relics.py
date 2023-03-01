@@ -23,8 +23,9 @@ from nbox.sublime.relics_rpc_client import (
   Relic as RelicProto,
   CreateRelicRequest,
   ListRelicFilesRequest,
+  ListRelicFilesResponse,
   ListRelicsRequest,
-  BucketMetadata
+  BucketMetadata,
 )
 
 def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
@@ -88,11 +89,11 @@ class Relics():
 
   def __init__(
     self,
-    relic_name: str,
-    workspace_id: str = "",
-    create: bool = False,
+    relic_name: str = "",
+    id: str = "",
     prefix: str = "",
     *,
+    create: bool = False,
     bucket_name: str = "",
     region: str = "",
     nbx_resource_id: str = "",
@@ -107,37 +108,52 @@ class Relics():
       create (bool): Create the relic if it does not exist.
       prefix (str): The prefix to use for all files in this relic. If provided all the files are uploaded and downloaded with this prefix.
     """
-    self.workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+    self.workspace_id = secret(AuthConfig.workspace_id)
+
+    if not relic_name and not id:
+      raise ValueError("Either relic_name or id must be provided")
+    if relic_name and id:
+      raise ValueError("Only one of relic_name or id must be provided")
+
     self.relic_name = relic_name
     self.username = secret("username") # if its in the job then this part will automatically be filled
     self.prefix = prefix.strip("/")
     self.stub = _get_stub()
+    rp = RelicProto(workspace_id=self.workspace_id)
+    if id:
+      rp.id = id
+    if relic_name:
+      rp.name = relic_name
     for _ in range(2):
-      _relic = self.stub.get_relic_details(RelicProto(workspace_id=self.workspace_id, name=relic_name,))
+      _relic = self.stub.get_relic_details(rp)
       if _relic != None:
         break
       time.sleep(1)
 
     # print("asdfasdfasdfasdf", _relic, not _relic and create)
-    if not _relic and create:
-      # this means that a new one will have to be created
-      logger.debug(f"Creating new relic {relic_name}")
-      self.relic = self.stub.create_relic(CreateRelicRequest(
-        workspace_id=self.workspace_id,
-        name = relic_name,
-        bucket_meta = BucketMetadata(
-          bucket_name = bucket_name,
-          region = region,
-          backend = BucketMetadata.Backend.AWS_S3,
-        ),
-        nbx_resource_id = nbx_resource_id,
-        nbx_integration_token = nbx_integration_token,
-      ))
-      logger.debug(f"Created new relic {self.relic}")
+    if not _relic:
+      if create:
+        # this means that a new one will have to be created
+        logger.debug(f"Creating new relic {relic_name}")
+        self.relic = self.stub.create_relic(CreateRelicRequest(
+          workspace_id=self.workspace_id,
+          name = relic_name,
+          bucket_meta = BucketMetadata(
+            bucket_name = bucket_name,
+            region = region,
+            backend = BucketMetadata.Backend.AWS_S3,
+          ),
+          nbx_resource_id = nbx_resource_id,
+          nbx_integration_token = nbx_integration_token,
+        ))
+        logger.debug(f"Created new relic {self.relic}")
+      else:
+        raise ValueError(f"Relic {relic_name} does not exist")
     else:
       self.relic = _relic
     
     self.uat = UserAgentType.PYTHON_REQUESTS
+    self.relic_name = self.relic.name
 
   def set_user_agent(self, user_agent_type: str):
     if user_agent_type not in UserAgentType.all():
@@ -147,12 +163,10 @@ class Relics():
 
   def __repr__(self):
     return f"Relics({self.relic_name}, {'CONNECTED' if self.relic else 'NOT CONNECTED'}" + \
-      (f", prefix={self.prefix}" if self.prefix else "") + \
+      (f", prefix='{self.prefix}'" if self.prefix else "") + \
       ")"
 
   def _upload_relic_file(self, local_path: str, relic_file: RelicFile):
-    if not relic_file.relic_name:
-      raise ValueError("relic_name not set in RelicFile")
     if self.prefix:
       relic_file.name = f"{self.prefix}/{relic_file.name}"
 
@@ -204,7 +218,6 @@ class Relics():
     if old_uat != uat:
       logger.warning(f"Restoring user/agent to {old_uat}")
       self.set_user_agent(old_uat)
-
 
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
     if self.relic is None:
@@ -296,16 +309,38 @@ class Relics():
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
     logger.debug(f"Getting file: {local_path} from {remote_path}")
-    relic_file = RelicFile(name = remote_path.strip("./"),)
-    relic_file.relic_name = self.relic_name
-    relic_file.workspace_id = self.workspace_id
-    self._download_relic_file(local_path, relic_file)
+
+    files = self.list_files(remote_path)
+    file_ = list(filter(
+      lambda x: x.name == remote_path, files.files
+    ))
+    if not file_:
+      raise ValueError(f"File {remote_path} does not exist in the relic")
+    file_ = file_[0]
+    if file_.type == RelicFile.RelicType.FOLDER:
+      files = self.ls(remote_path + "/", recurse=True)
+      if not os.path.isdir(local_path):
+        os.makedirs(local_path)
+      all_files = []
+      for fx in files:
+        lp = os.path.join(local_path, fx.name)
+        all_files.append((lp.replace(remote_path+"/", ""), fx))
+    else:
+      all_files = [(local_path, file_)]
+
+    for (lp, fx) in all_files:
+      if fx.type == RelicFile.RelicType.FOLDER:
+        continue
+      relic_file = RelicFile(name = fx.name.strip("./"),)
+      relic_file.relic_name = self.relic_name
+      relic_file.workspace_id = self.workspace_id
+      self._download_relic_file(lp, relic_file)
 
   def rm(self, remote_path: str):
     """Delete the file at this path from the relic"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.debug(f"Getting file: {remote_path}")
+    logger.warning(f"Deleting file: {remote_path}")
     relic_file = get_relic_file(remote_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     for _ in range(2):
@@ -318,7 +353,7 @@ class Relics():
       logger.error(out.message)
       raise ValueError("Could not delete file")
 
-  def has(self, path: str):
+  def has(self, path: str) -> bool:
     prefix, file_name = os.path.split(path)
     for _ in range(2):
       out = self.stub.list_relic_files(
@@ -378,11 +413,11 @@ class Relics():
     logger.warning(f"Deleting relic {self.relic_name}")
     self.stub.delete_relic(self.relic)
 
-  def list_files(self, path: str = "") -> RelicFile:
+  def list_files(self, path: str = "", recurse: bool = False) -> ListRelicFilesResponse:
     """List all the files in the relic at path"""
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.debug(f"Listing files in relic {self.relic_name}")
+    logger.debug(f"Listing files in relic {self.relic_name}:{self.prefix}:{path}")
     for _ in range(2):
       p = self.prefix
       if path:
@@ -395,8 +430,43 @@ class Relics():
       if out != None:
         break
       time.sleep(1)
-    
+
+    if recurse:
+      for f in out.files:
+        if f.name == path:
+          continue
+        if f.type == RelicFile.RelicType.FOLDER:
+          fl = self.list_files(f.name + "/", recurse=recurse)
+          out.files.extend(fl.files)
     return out
+  
+  def ls(self, path: str = "", recurse: bool = False):
+    """Iterate over all the files at the path"""
+    if self.relic is None:
+      raise ValueError("Relic does not exist, pass create=True")
+    logger.debug(f"Listing files in relic {self.relic_name}:{self.prefix}:{path}")
+    for _ in range(2):
+      p = self.prefix
+      if path:
+        p += "/" + path
+      out = self.stub.list_relic_files(ListRelicFilesRequest(
+        workspace_id = self.workspace_id,
+        relic_id = self.relic.id,
+        prefix = p
+      ))
+      if out != None:
+        break
+      time.sleep(1)
+
+    for f in out.files:
+      yield f
+    
+    if recurse:
+      for f in out.files:
+        if f.name == path:
+          continue
+        if f.type == RelicFile.RelicType.FOLDER:
+          yield from self.ls(f.name + "/", recurse=recurse)
 
 
 # nbx jobs ... trigger --mount="dataset:/my-dataset/email/,model_master:/model"

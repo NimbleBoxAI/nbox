@@ -332,15 +332,18 @@ def upload_job_folder(
       f.write("\n".join(_igp))
 
   # creation of resources, we first need to check if any resource arguments are passed, if they are
-  resource = Resource(
-    cpu = str(resource_cpu),
-    memory = str(resource_memory),
-    disk_size = str(resource_disk_size),
-    gpu = str(resource_gpu),
-    gpu_count = str(resource_gpu_count),
-    timeout = int(resource_timeout),
-    max_retries = int(resource_max_retries),
-  )
+  def __common_resource(db: Resource) -> Resource:
+    # get a common resource based on what the user has said, what the db has and defaults if nothing is given
+    resource = Resource(
+      cpu = str(resource_cpu) or db.cpu or ospec.DEFAULT_RESOURCE.cpu,
+      memory = str(resource_memory) or db.memory or ospec.DEFAULT_RESOURCE.memory,
+      disk_size = str(resource_disk_size) or db.disk_size or ospec.DEFAULT_RESOURCE.disk_size,
+      gpu = str(resource_gpu) or db.gpu or ospec.DEFAULT_RESOURCE.gpu,
+      gpu_count = str(resource_gpu_count) or db.gpu_count or ospec.DEFAULT_RESOURCE.gpu_count,
+      timeout = int(resource_timeout) or db.timeout or ospec.DEFAULT_RESOURCE.timeout,
+      max_retries = int(resource_max_retries) or db.max_retries or ospec.DEFAULT_RESOURCE.max_retries,
+    )
+    return resource
 
   # common to both, kept out here because these two will eventually merge
   nbx_auth_info = auth_info_pb()
@@ -352,6 +355,7 @@ def upload_job_folder(
         job = JobProto(id = id)
       )
     )
+    resource = __common_resource(job_proto.resource)
     out: Job = deploy_job(
       init_folder = init_folder,
       job_id = job_proto.id,
@@ -442,7 +446,6 @@ def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""
   )
 
   return serving.id, serving.name
-
 
 def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
   """
@@ -653,7 +656,6 @@ def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *,
   job_id = job.id
   logger.info(f"Found job with ID '{job_id}' and name '{job_name}'")
   return job_id, job_name
-
 
 def get_job_list(sort: str = "name", *, workspace_id: str = ""):
   """Get list of jobs

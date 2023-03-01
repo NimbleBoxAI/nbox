@@ -80,16 +80,24 @@ def streaming_rpc(stub: callable, message, err_msg: str, raise_on_error: bool = 
     if raise_on_error:
       raise e
 
-def message_to_json(message):
+def message_to_json(
+  message,
+  including_default_value_fields=True,
+  preserving_proto_field_name=True,
+  indent=2,
+  sort_keys=False,
+  use_integers_for_enums=True,
+  float_precision=4
+):
   """convert message to json"""
   return MessageToJson(
     message=message,
-    including_default_value_fields=True,
-    preserving_proto_field_name=True,
-    indent=2,
-    sort_keys=False,
-    use_integers_for_enums=True,
-    float_precision=4
+    including_default_value_fields = including_default_value_fields,
+    preserving_proto_field_name = preserving_proto_field_name,
+    indent = indent,
+    sort_keys = sort_keys,
+    use_integers_for_enums = use_integers_for_enums,
+    float_precision = float_precision
   )
 
 def message_to_dict(message):

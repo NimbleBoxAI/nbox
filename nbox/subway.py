@@ -32,7 +32,7 @@ from json import dumps as json_dumps
 
 from nbox.utils import logger
 
-from nbox.sublime.proto import lmao_pb2
+from nbox.sublime.proto import lmao_v2_pb2
 
 TIMEOUT_CALLS = 60
 
@@ -414,7 +414,7 @@ class SublimeRPCSubway:
   def _to_sublime(self, message: Message) -> Message:
     """function to convert the incoming message to sublime format"""
     if self.sn == self.SERVICE_LMAO:
-      # match the message type to one in lmao_pb2
+      # match the message type to one in lmao_v2_pb
       # if type(message) == Message:
       #   return message
       pass

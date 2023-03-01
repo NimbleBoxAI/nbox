@@ -1,0 +1,80 @@
+"""
+NimbleBox LMAO is our general purpose observability tool for any kind of computation you might have.
+"""
+
+from typing import Optional
+from dateparser import parse as parse_date
+from google.protobuf.timestamp_pb2 import Timestamp
+
+from nbox.utils import logger
+from nbox.auth import secret, AuthConfig
+from nbox import messages as mpb
+
+# all the sublime -> hyperloop stuff
+from nbox.sublime.lmao_rpc_client import (
+  ServingLogRequest, ServingLogResponse
+)
+from nbox.lmao import common
+
+
+class LmaoCLI:
+  def serving_logs(
+    project_id: str,
+    serving_id: str,
+    key: str,
+    after: Optional[str] = "",
+    before: Optional[str] = "",
+    limit: int = 100,
+    f: str = "",
+  ):
+    stub = common.get_lmao_stub()
+    req = ServingLogRequest(
+      workspace_id = secret(AuthConfig.workspace_id),
+      project_id = project_id,
+      serving_id = serving_id,
+      key = key,
+    )
+
+    # date things
+    if after:
+      after_parsed = parse_date(after, settings={'TIMEZONE': 'UTC'})
+      if after_parsed is None:
+        raise ValueError(f"Invalid date format for `after` argument: {after}")
+      t = Timestamp()
+      t.FromDatetime(after_parsed)
+      req.after.CopyFrom(t)
+      logger.info(f"Will get logs from after: {after_parsed}")
+    if before:
+      before_parsed = parse_date(before, settings={'TIMEZONE': 'UTC'})
+      if before_parsed is None:
+        raise ValueError(f"Invalid date format for `before` argument: {before}")
+      t = Timestamp()
+      t.FromDatetime(before_parsed)
+      req.before.CopyFrom(t)
+      logger.info(f"Will get logs from before: {before_parsed}")
+    if after and before:
+      if after_parsed > before_parsed:
+        raise ValueError(f"`after` date cannot be greater than `before` date")
+
+    # limit things
+    if limit < 0:
+      raise ValueError("`limit` cannot be negative")
+    req.limit = int(limit)
+
+    logs: ServingLogResponse = stub.get_serving_log(req)
+    logs_json = mpb.message_to_json(
+      message = logs,
+      including_default_value_fields = False,
+      sort_keys = True,
+      use_integers_for_enums = False
+    )
+    if not f:
+      print(logs_json)
+      return
+    logger.info(f"Writing logs to {f}")
+    with open(f, "w") as _f:
+      _f.write(logs_json)
+
+  logs = {
+    "serving": serving_logs,
+  }
