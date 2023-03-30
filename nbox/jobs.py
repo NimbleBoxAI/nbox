@@ -381,7 +381,7 @@ def upload_job_folder(
         serving = Serving(id=id),
       )
     )
-
+    resource = __common_resource(serving_proto.resource)
     out: Serve = deploy_serving(
       init_folder = init_folder,
       serving_id = serving_proto.id,

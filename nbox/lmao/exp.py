@@ -13,7 +13,7 @@ from nbox.auth import secret, AuthConfig, JobDetails
 from nbox.relics import Relics
 
 # all the sublime -> hyperloop stuff
-from nbox.sublime.lmao_rpc_client import (
+from nbox.lmao.lmao_rpc_client import (
   AgentDetails,
   RunLog,
   Run,
@@ -138,7 +138,7 @@ class Lmao():
     # this is the config value that is used to store data on the plaform, user cannot be allowed to have
     # like a full access to config values
     log_config: Dict[str, Any] = {
-      "user_config": metadata
+      "run_kwargs": metadata
     }
 
     # check if the current folder from where this code is being executed has a .git folder
@@ -194,10 +194,10 @@ class Lmao():
       )
 
     logger.info(
-      f"{action} LMAO run\n"
+      f"{action} experiment tracker\n"
       f" project: {project_id}\n"
       f"      id: {run_details.experiment_id}\n"
-      f"    link: {secret(AuthConfig.url)}/workspace/{self.workspace_id}/monitoring/{project_id}/{run_details.experiment_id}\n"
+      f"    link: {secret(AuthConfig.url)}/workspace/{self.workspace_id}/projects/{project_id}#Experiments\n"
     )
 
     return run_details
@@ -217,7 +217,7 @@ class Lmao():
     if self.completed:
       raise Exception("Run already completed, cannot log more data!")
 
-    step = step if step is not None else SimplerTimes.get_now_i64()
+    step = step or self._total_logged_elements
     if step < 0:
       raise Exception("Step must be >= 0")
     run_log = RunLog(
@@ -227,7 +227,7 @@ class Lmao():
       log_type=log_type
     )
     for k,v in y.items():
-      # TODO:@yashbonde replace Record with RecordColumn
+      # TODO: @yashbonde replace Record with RecordColumn
       record = get_record(k, v)
       record.step = step
       run_log.data.append(record)

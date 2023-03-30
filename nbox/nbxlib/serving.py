@@ -89,7 +89,10 @@ def serve_operator(
       app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
   
   elif type(op_or_app) == FastAPI:
-    app.mount("/x", op_or_app)
+    # app.mount("/x", op_or_app)
+    app.add_api_route("/x", op_or_app, methods=["POST"], response_class=JSONResponse)
+
+  # TODO: @yashbonde can we mount flask/django? https://fastapi.tiangolo.com/advanced/wsgi/
 
   else:
     raise ValueError(f"op_or_app must be an Operator or FastAPI app, got: {op_or_app}")

@@ -173,6 +173,22 @@ class NBXClient:
   def __call__(self, item, default=None, reload: bool = False):
     return self.get(item, default, reload)
 
+  @property
+  def workspace_id(self) -> str:
+    return self.get(AuthConfig.workspace_id) or self.get(AuthConfig._workspace_id)
+
+  @property
+  def nbx_url(self) -> str:
+    return self.get(AuthConfig.url)
+
+  @property
+  def access_token(self) -> str:
+    return self.get(AuthConfig.access_token)
+  
+  @property
+  def username(self) -> str:
+    return self.get(AuthConfig.username)
+
   def get_agent_details(self) -> Dict[str, str]:
     if ConfigString.nbx_pod_run in self.secrets:
       run_data = self.secrets[ConfigString.nbx_pod_run]
@@ -183,10 +199,6 @@ class NBXClient:
     # elif ConfigString.nbx_pod_deploy in self.secrets:
     #   return self.secrets[ConfigString.nbx_pod_deploy]
     return {}
-  
-  @property
-  def workspace_id(self) -> str:
-    return self.get(AuthConfig.workspace_id) or self.get(AuthConfig._workspace_id)
 
 
 def init_secret():

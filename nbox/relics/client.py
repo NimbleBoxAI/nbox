@@ -1,79 +1,23 @@
-"""
-This is the code for NBX-Relics which is a simple file system for your organisation.
-"""
 import os
 import time
-import json
 import cloudpickle
 import requests
-import tabulate
 from hashlib import md5
-from typing import List
-from copy import deepcopy
-from subprocess import Popen
-from functools import lru_cache
 
+from subprocess import Popen
 from nbox.auth import secret, AuthConfig
-from nbox.init import nbox_ws_v1
-from nbox.messages import message_to_dict
-from nbox.utils import logger, env, get_mime_type
-from nbox.sublime.relics_rpc_client import (
-  RelicStore_Stub,
-  RelicFile,
-  Relic as RelicProto,
+from nbox.utils import logger, env
+from nbox.relics.proto.relics_rpc_pb2 import (
   CreateRelicRequest,
   ListRelicFilesRequest,
   ListRelicFilesResponse,
-  ListRelicsRequest,
+)
+from nbox.relics.proto.relics_pb2 import (
+  RelicFile,
+  Relic as RelicProto,
   BucketMetadata,
 )
-
-def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
-  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
-  # assert os.path.exists(fpath), f"File {fpath} does not exist"
-  # assert os.path.isfile(fpath), f"File {fpath} is not a file"
-
-  # clean up fpath, remove any trailing slashes
-  # trim any . or / from prefix and suffix
-  fpath_cleaned = fpath.strip("./")
-
-  extra = {}
-  if os.path.exists(fpath):
-    file_stat = os.stat(fpath)
-    extra = {
-      "created_on": int(file_stat.st_mtime),    # int
-      "last_modified": int(file_stat.st_mtime), # int
-      "size": max(1, file_stat.st_size),        # bytes
-    }
-  content_type = get_mime_type(fpath_cleaned, "application/octet-stream")
-  return RelicFile(
-    name = fpath_cleaned,
-    username = username,
-    type = RelicFile.RelicType.FILE,
-    workspace_id = workspace_id,
-    content_type=content_type,
-    **extra
-  )
-
-
-@lru_cache()
-def _get_stub():
-  # url = "http://0.0.0.0:8081/relics" # debug mode
-  url = secret("nbx_url") + "/relics"
-  logger.debug("Connecting to RelicStore at: " + url)
-  session = deepcopy(nbox_ws_v1._session)
-  stub = RelicStore_Stub(url, session)
-  return stub
-
-def print_relics(workspace_id: str = ""):
-  stub = _get_stub()
-  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
-  req = ListRelicsRequest(workspace_id = workspace_id,)
-  out = stub.list_relics(req)
-  headers = ["relic_id", "relic_name",]
-  rows = [[r.id, r.name,] for r in out.relics]
-  for l in tabulate.tabulate(rows, headers).splitlines():
-    logger.info(l)
+from nbox.relics.utils import print_relics, get_relics_stub, get_relic_file
 
 
 class UserAgentType:
@@ -118,7 +62,7 @@ class Relics():
     self.relic_name = relic_name
     self.username = secret("username") # if its in the job then this part will automatically be filled
     self.prefix = prefix.strip("/")
-    self.stub = _get_stub()
+    self.stub = get_relics_stub()
     rp = RelicProto(workspace_id=self.workspace_id)
     if id:
       rp.id = id
@@ -305,7 +249,7 @@ class Relics():
     self._download_relic_file(local_path, relic_file)
 
   def get_from(self, local_path: str, remote_path: str, unzip: bool = False) -> None:
-    # TODO:@yashbonde add support for unzipping
+    # TODO: @yashbonde add support for unzipping
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
     logger.debug(f"Getting file: {local_path} from {remote_path}")
@@ -468,5 +412,3 @@ class Relics():
         if f.type == RelicFile.RelicType.FOLDER:
           yield from self.ls(f.name + "/", recurse=recurse)
 
-
-# nbx jobs ... trigger --mount="dataset:/my-dataset/email/,model_master:/model"

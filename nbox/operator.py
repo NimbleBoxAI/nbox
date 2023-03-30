@@ -86,8 +86,6 @@ certainly if we come up with that high abstraction we will refactor this:
   determined by the order of the operators in the tree. DAGs are fundamentally just trees with some nodes spun together,
   to execute only once.
 - deploy, ...: All the services in NBX-Jobs.
-- get_nbx_flow: which is the static code analysis system to understand true user intent and if possible (and permission of
-  the user) optimise the logic.
 
 ## Tips
 
@@ -107,7 +105,6 @@ run in distributed fashion.
 
 import os
 import re
-import json
 import inspect
 import asyncio
 import requests
@@ -116,7 +113,6 @@ from tabulate import tabulate
 from functools import partial
 from time import sleep, monotonic
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import nbox.utils as U
@@ -126,11 +122,9 @@ from nbox.nbxlib import operator_spec as ospec
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
 from nbox.sub_utils.latency import log_latency
-from nbox.framework.on_functions import get_nbx_flow
-from nbox.framework import AirflowMixin, PrefectMixin
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.common.common_pb2 import Resource
-from nbox.hyperloop.jobs.dag_pb2 import DAG, Flowchart, Node, RunStatus
+from nbox.hyperloop.jobs.dag_pb2 import DAG, Node, RunStatus
 
 from nbox.jobs import Schedule, Job, Serve, _get_job_data
 from nbox.messages import write_binary_to_file
@@ -725,38 +719,7 @@ class Operator():
   # nbx/
   def _get_dag(self) -> DAG:
     """Get the DAG for this Operator including all the nested ones."""
-    dag = get_nbx_flow(self.forward)
-    all_child_nodes = {}
-    all_edges = {}
-    for child_id, child_node in dag.flowchart.nodes.items():
-      name = child_node.name
-      if name.startswith("self."):
-        name = name[5:]
-      operator_name = "CodeBlock" # default
-      cls_item = getattr(self, name, None)
-      if cls_item is not None and cls_item.__class__.__base__ == Operator:
-        # this node is an operator
-        operator_name = cls_item.__class__.__name__
-        child_dag: DAG = cls_item._get_dag() # call this function recursively
-
-        # update the child nodes with parent node id
-        for _child_id, _child_node in child_dag.flowchart.nodes.items():
-          if _child_node.parent_node_id == "":
-            _child_node.parent_node_id = child_id # if there is already a parent_node_id set is child's child
-          all_child_nodes[_child_id] = _child_node
-          all_edges.update(child_dag.flowchart.edges)
-      
-      # update the child nodes name with the operator name
-      child_node.operator = operator_name
-
-    # update the root dag with new children and edges
-    _nodes = {k:v for k,v in dag.flowchart.nodes.items()}
-    _edges = {k:v for k,v in dag.flowchart.edges.items()}
-    _nodes.update(all_child_nodes)
-    _edges.update(all_edges)
-
-    # because updating map in protobuf is hard
-    dag.flowchart.CopyFrom(Flowchart(nodes = _nodes, edges = _edges))
+    dag = DAG()
     return dag
 
   # def deploy_as_job(

@@ -1,3 +1,12 @@
+"""
+Contains our custom logger and formatters so you can log things like a pro.
+It can generate both inline logs as well as JSON logs (easier to consume by other tools).
+Json logs go really well with our custom logger for jobs and deploy where you can
+logs arbitrary objects and have them nicely formatted in the console.
+
+Parts of this code are taken from the awesome `pyjsonlogger` library
+([Pypi](https://pypi.org/project/jsonformatter/))
+"""
 # BSD 2-Clause License
 # 
 # Copyright (c) 2019, MyColorfulDays
@@ -61,7 +70,6 @@ class _LogObject:
     self.msg = msg
 
 def lo(msg, /, *args, **kwargs):
-  print(args)
   if args:
     msg += " " + " ".join([str(a) for a in args])
   return _LogObject(kwargs, msg)

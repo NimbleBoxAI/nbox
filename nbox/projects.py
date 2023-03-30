@@ -10,6 +10,7 @@ from nbox.utils import logger
 from nbox import utils as U
 from nbox.auth import secret, AuthConfig
 from nbox.init import nbox_ws_v1
+from nbox import messages as mpb
 from nbox.lmao import (
   Lmao,
   LmaoLive,
@@ -20,8 +21,8 @@ from nbox.lmao import (
   LMAO_RM_PREFIX
 )
 from nbox.relics import Relics
-from nbox.sublime.lmao_rpc_client import LMAO_Stub
-from nbox.jobs import Job
+from nbox.lmao.lmao_rpc_client import LMAO_Stub
+from nbox.jobs import Job, Serve
 from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.nbxlib.astea import Astea
 
@@ -35,6 +36,8 @@ class ProjectState:
 class Project:
   def __init__(self, id: str = ""):
     id = id or ProjectState.project_id
+    if not id:
+      raise ValueError("Project ID is not set")
     logger.info(f"Connecting to Project: {id}")
     self.stub = nbox_ws_v1.projects.u(id)
     self.data = self.stub()
@@ -44,11 +47,19 @@ class Project:
       workspace_id = secret.workspace_id,
       project_id = self.pid
     ))
+    if self.project is None:
+      raise ValueError("Could not connect to Monitoring backend.")
     self.relic = Relics(id = self.project.relic_id)
     self.workspace_id = secret.workspace_id
 
   def __repr__(self) -> str:
     return f"Project({self.pid})"
+
+  @property
+  def metadata(self):
+    """A NimbleBox project is a very large entity and its components are in multiple places.
+    `metadata` is a dictionary that contains all the information about the project."""
+    return {"details": self.data, "lmao": mpb.MessageToDict(self.project, including_default_value_fields=True)}
 
   def put_settings(self, project_name: str = "", project_description: str = ""):
     self.stub(
@@ -59,18 +70,27 @@ class Project:
     self.data["project_name"] = project_name or self.data["project_name"]
     self.data["project_description"] = project_description or self.data["project_description"]
 
-  def get(self, k):
-    return self.data.get(k)
-
   def get_lmao_stub(self) -> LMAO_Stub:
     return self.lmao_stub
 
-  def get_exp_tracker(self, experiment_id: str = "") -> Lmao:
-    lmao = Lmao(project_id = self.pid, experiment_id = experiment_id or ProjectState.experiment_id)
+  def get_exp_tracker(
+      self,
+      experiment_id: str = "",
+      **kwargs,
+    ) -> Lmao:
+    lmao = Lmao(
+      project_id = self.pid,
+      experiment_id = experiment_id or ProjectState.experiment_id,
+      **kwargs,
+    )
     return lmao
 
-  def get_live_tracker(self, serving_id: str = "") -> LmaoLive:
-    lmao = LmaoLive(self.pid, serving_id = serving_id or ProjectState.serving_id)
+  def get_live_tracker(self, serving_id: str = "", metadata = {}) -> LmaoLive:
+    lmao = LmaoLive(
+      project_id = self.pid,
+      serving_id = serving_id or ProjectState.serving_id,
+      metadata = metadata,
+    )
     return lmao
 
   def get_relic(self) -> Relics:
@@ -267,3 +287,50 @@ class Project:
 
     # finally print the location of the run where the users can track this
     logger.info(f"Run location: {secret(AuthConfig.url)}/workspace/{run.workspace_id}/projects/{run.project_id}#Experiments")
+
+  def serve(
+    self,
+    init_path: str,
+
+    # all the things for resources
+    resource_cpu: str = "",
+    resource_memory: str = "",
+    resource_disk_size: str = "",
+    resource_gpu: str = "",
+    resource_gpu_count: str = "",
+    resource_max_retries: int = 0,
+
+    # any other things to pass to the function / class being called
+    **serving_kwargs,
+  ):
+    workspace_id = secret(AuthConfig.workspace_id)
+
+    # fix data type conversion caused by the CLI
+    resource_cpu = str(resource_cpu)
+    resource_memory = str(resource_memory)
+    resource_disk_size = str(resource_disk_size)
+    resource_gpu = str(resource_gpu)
+    resource_gpu_count = str(resource_gpu_count)
+    resource_max_retries = int(resource_max_retries)
+
+    # reconstruct the entire CLI command so we can show it in the UI
+    reconstructed_cli_comm = (
+      f"nbx projects --id '{self.pid}' - run '{init_path}'" +
+      (f" --resource_cpu '{resource_cpu}'" if resource_cpu else "") +
+      (f" --resource_memory '{resource_memory}'" if resource_memory else "") +
+      (f" --resource_disk_size '{resource_disk_size}'" if resource_disk_size else "") +
+      (f" --resource_gpu '{resource_gpu}'" if resource_gpu else "") +
+      (f" --resource_gpu_count '{resource_gpu_count}'" if resource_gpu_count else "") +
+      (f" --resource_max_retries {resource_max_retries}" if resource_max_retries else "")
+    )
+    for k, v in serving_kwargs.items():
+      if type(v) == bool:
+        reconstructed_cli_comm += f" --{k}"
+      else:
+        reconstructed_cli_comm += f" --{k} '{v}'"
+    logger.debug(f"command: {reconstructed_cli_comm}")
+
+    # 
+    Serve.upload(
+      
+    )

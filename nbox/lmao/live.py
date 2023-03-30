@@ -25,7 +25,7 @@ from nbox.utils import logger
 from nbox.auth import secret, AuthConfig
 
 # all the sublime -> hyperloop stuff
-from nbox.sublime.lmao_rpc_client import (
+from nbox.lmao.lmao_rpc_client import (
   InitRunRequest,
   RunLog,
   Project as ProjectProto,
@@ -37,7 +37,6 @@ from nbox.sublime.lmao_rpc_client import (
 from nbox.lmao.common import get_lmao_stub, get_record
 
 # functional parts
-
 def get_serving_log(
   project_id: str,
   serving_id: str = "",
@@ -46,6 +45,21 @@ def get_serving_log(
   before: Timestamp = None,
   limit: int = 100,
 ) -> ServingLogResponse:
+  """
+  Get a single log by key from the serving. Logs are stored in the following format:
+  `<project_id>/<serving_id>/<key>`
+
+  Args:
+    project_id: ID of the project to which the serving belongs.
+    serving_id: ID of the serving to which the log belongs.
+    key: Key of the log to get.
+    after: Return only logs after this timestamp.
+    before: Return only logs before this timestamp.
+    limit: Maximum number of logs to return.
+
+  Returns:
+    The log.
+  """
   lmao = get_lmao_stub()
   req = ServingLogRequest(
     workspace_id = secret(AuthConfig.workspace_id),
@@ -71,32 +85,36 @@ class LmaoLive():
     serving_id: str = "",
     metadata: Dict[str, Any] = {},
   ):
+    """
+    {% CallOut variant="warning" label="This is experimental and not ready for production use, can be removed without notice" /%}
+    
+    Client module for LMAO Live monitoring pipeline, eventually this will be merged with the LMAO client
+    which is used for experiment tracking, into a single combined client.
+    """
     self.workspace_id = secret(AuthConfig.workspace_id)
     self.project_id = project_id
     self.serving_id = serving_id
     
     # get the stub
     self.lmao = get_lmao_stub()
-    self.project = self.lmao.get_project(ProjectProto(
+    p = ProjectProto(
       workspace_id = self.workspace_id,
       project_id = self.project_id
-    ))
+    )
+    print(p)
+    self.project = self.lmao.get_project(p)
     if self.project is None:
-      raise Exception(f"Project with id {self.project_id} does not exist")
+      raise Exception("Could not connect to LMAO, please check your credentials")
     
     agent_details = AgentDetails(
       workspace_id = self.workspace_id,
       nbx_serving_id = "local",
       nbx_model_id = U.SimplerTimes.get_now_str(),
     )
-    # if type(self.agent) == JobDetails:
-    #   a: JobDetails = self.agent
-    #   agent_details.type = AgentDetails.NBX.JOB
-    #   agent_details.nbx_job_id = a.job_id
-    #   agent_details.nbx_run_id = a.run_id
     self.agent = agent_details
 
     if serving_id:
+      action = "Updating"
       s = ServingProto(
         workspace_id = self.workspace_id,
         project_id = self.project_id,
@@ -110,15 +128,21 @@ class LmaoLive():
       out = self.lmao.update_serving_status(s)
       if out is None:
         raise Exception(f"Failed to update serving {serving_id}, does this serving exist?")
-      logger.info("Updated serving with id: " + s.serving_id)
     else:
+      action = "Creating"
       s: ServingProto = self.lmao.init_serving(InitRunRequest(
         workspace_id = self.workspace_id,
         project_id = self.project_id,
         config = dumps(metadata),
         agent_details = self.agent,
       ))
-      logger.info("Created new serving with id: " + s.serving_id)
+
+    logger.info(
+      f"{action} live tracker\n"
+      f" project: {project_id}\n"
+      f"      id: {s.serving_id}\n"
+      f"    link: {secret(AuthConfig.url)}/workspace/{self.workspace_id}/projects/{project_id}/#Live\n"
+    )
 
     self.serving = s
     self._total_logged_elements  = 0 # total number of elements logged
@@ -131,7 +155,7 @@ class LmaoLive():
       log_type = RunLog.LogType.USER
     )
     for k,v in y.items():
-      # TODO:@yashbonde replace Record with RecordColumn
+      # TODO: @yashbonde replace Record with RecordColumn
       record = get_record(k, v)
       run_log.data.append(record)
 
@@ -141,37 +165,3 @@ class LmaoLive():
       raise Exception("Server Error")
 
     self._total_logged_elements += 1
-
-
-class __LmaoBundle:
-  # files = Dict[str, Any]
-  def __init__(self, name: str, meta: Dict[str, Any]):
-    # bundle = LmaoBundle("bundle_name")
-    # bundle = LmaoBundle("bundle_name", {"key": "value"})
-    pass
-
-  def add_files() -> None:
-    # bundle.add_files("model.pt")
-    # bundle.add_files("model/*.pt")
-    # bundle.add_files("model/config.json", "model/tokenizer.json")
-    pass
-
-  def upload() -> None:
-    # bundle.upload()
-    pass
-
-  def download() -> str:
-    # bundle.download() -> "nbx_bundle_{id}" directory downloaded
-    # bundle.download("model.pt") -> "nbx_bundle_{id}/model.pt"
-    # bundle.download(to = "this_folder/") -> "this_folder"
-    # bundle.download("model.pt", to = "this_folder/") -> "this_folder/model.pt"
-    pass
-
-  def trail() -> List[str]:
-    # return a list of all the modifier of artifacts
-    pass
-
-  def verify() -> bool:
-    # bundle.verify("local_folder/") -> True
-    # bundle.verify("modified_local_folder/") -> False
-    pass

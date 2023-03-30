@@ -11,22 +11,43 @@ from nbox.auth import secret, AuthConfig
 from nbox import messages as mpb
 
 # all the sublime -> hyperloop stuff
-from nbox.sublime.lmao_rpc_client import (
+from nbox.lmao.lmao_rpc_client import (
   ServingLogRequest, ServingLogResponse
 )
 from nbox.lmao import common
 
 
 class LmaoCLI:
+
   def serving_logs(
     project_id: str,
     serving_id: str,
-    key: str,
+    key: str = "",
     after: Optional[str] = "",
     before: Optional[str] = "",
     limit: int = 100,
     f: str = "",
   ):
+    """
+    Get your logs from a serving by key and time range.
+
+    ```bash
+    nbx lmao serving logs '229dj92' '0283-nice-summer' key 'last 12 hours'
+    nbx lmao serving logs '229dj92' '0283-nice-summer' '2021-01-01' '2021-01-02'
+    nbx lmao serving logs '229dj92' '0283-nice-summer' key '2021-01-01 12:00:00' '2021-01-02 12:00:00'
+    nbx lmao serving logs '229dj92' '0283-nice-summer' --limit 1000
+    nbx lmao serving logs '229dj92' '0283-nice-summer' key --limit 1000 --f logs.json
+    ```
+
+    Args:
+      project_id: ID of the project to which the serving belongs.
+      serving_id: ID of the serving to which the log belongs.
+      key: Key of the log to get.
+      after: Return only logs after this timestamp.
+      before: Return only logs before this timestamp.
+      limit: Maximum number of logs to return.
+      f: File to write logs to. If not provided, logs will be printed to stdout.
+    """
     stub = common.get_lmao_stub()
     req = ServingLogRequest(
       workspace_id = secret(AuthConfig.workspace_id),
@@ -75,6 +96,7 @@ class LmaoCLI:
     with open(f, "w") as _f:
       _f.write(logs_json)
 
+  # add all the CLIs at the bottom here:
   logs = {
     "serving": serving_logs,
   }

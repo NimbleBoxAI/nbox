@@ -4,9 +4,9 @@ import os
 import requests
 from functools import partial
 
-from nbox.sublime.proto.relics_pb2 import *
-from nbox.sublime.proto.common_pb2 import *
-from nbox.sublime.proto.relics_rpc_pb2 import *
+from nbox.relics.proto.relics_pb2 import *
+from nbox.relics.proto.common_pb2 import *
+from nbox.relics.proto.relics_rpc_pb2 import *
 
 from nbox.sublime._yql.rest_pb2 import Echo
 from nbox.sublime._yql.common import *
@@ -111,11 +111,11 @@ class RelicStore_Stub:
     _ListRelicFilesResponse = b64_to_message(echo_resp.base64_string, _ListRelicFilesResponse)
     return _ListRelicFilesResponse
 
-  def delete_relic_file(self, _RelicFile: RelicFile) -> Acknowledge:
+  def delete_multi_files(self, _RelicFiles: RelicFiles) -> Acknowledge:
     echo_resp: Echo = call_rpc(
       self.session,
-      f"{self.url}/delete_relic_file",
-      Echo(message = "RelicFile", base64_string=message_to_b64(_RelicFile), rpc_name = "delete_relic_file")
+      f"{self.url}/delete_multi_files",
+      Echo(message = "RelicFiles", base64_string=message_to_b64(_RelicFiles), rpc_name = "delete_multi_files")
     )
     if echo_resp is None:
       return None
@@ -149,6 +149,19 @@ class RelicStore_Stub:
     _ActivityLogResponse = ActivityLogResponse() # predefine the output proto
     _ActivityLogResponse = b64_to_message(echo_resp.base64_string, _ActivityLogResponse)
     return _ActivityLogResponse
+
+  def list_buckets(self, _ListBucketRequest: ListBucketRequest) -> ListBucketResponse:
+    echo_resp: Echo = call_rpc(
+      self.session,
+      f"{self.url}/list_buckets",
+      Echo(message = "ListBucketRequest", base64_string=message_to_b64(_ListBucketRequest), rpc_name = "list_buckets")
+    )
+    if echo_resp is None:
+      return None
+
+    _ListBucketResponse = ListBucketResponse() # predefine the output proto
+    _ListBucketResponse = b64_to_message(echo_resp.base64_string, _ListBucketResponse)
+    return _ListBucketResponse
 
 
 # ------ End Stub ------ #

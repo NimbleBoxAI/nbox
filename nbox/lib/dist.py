@@ -1,6 +1,6 @@
 """
-With NimbleBox you can run cluster wide workloads from anywhere. This requires capabilities around distributed computing,
-process managements. The code here is tested along with `nbox.Relic` to perform distributed local and cloud processing.
+With NimbleBox you can run multi-cluster wide workloads from anywhere. This requires capabilities around distributed computing,
+process management. The code here is tested along with `nbox.Relic` to perform distributed local and cloud processing.
 
 {% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
 """
@@ -62,7 +62,7 @@ class NBXLet(Operator):
 
       # get the user defined tag 
       run_tag = os.getenv("NBOX_RUN_METADATA", "")
-      logger.info(f"Tag: {run_tag}")
+      logger.info(f"Run Tag: {run_tag}")
 
       # in the NimbleBox system we provide tags for each key which essentially tells what is the behaviour
       # of the job. For example if it contains the string LMAO which means we need to initialise a couple
@@ -89,7 +89,6 @@ class NBXLet(Operator):
         exp_tracker = proj.get_exp_tracker()
         lmao_run = exp_tracker.run
         exp_config = ExperimentConfig.from_json(lmao_run.config)
-        args = ()
         kwargs = exp_config.run_kwargs
 
       elif run_tag.startswith(RAW_DIST_RM_PREFIX):
@@ -98,18 +97,24 @@ class NBXLet(Operator):
         logger.info(f"Looking for init.pkl at {_pkl_id_in}")
         (args, kwargs) = relic.get_object(_pkl_id_in)
 
+      elif run_tag.startswith(SILK_RM_PREFIX):
+        # 27/03/2023: We are adding a new job type called Silk
+        trace_id = run_tag[len(SILK_RM_PREFIX):]
+        logger.info(f"Running trace: {trace_id}")
+        kwargs = {"trace_id": trace_id}
+
       # call the damn thing
       st = U.SimplerTimes.get_now_i64()
       out = self.op(*args, **kwargs)
 
       # save the output to the relevant place, LMAO jobs are not saved to the relic
-      if run_tag.startswith(LMAO_RM_PREFIX):
-        logger.info(lo(
-          "NBXLet: LMAO job completed, here's some stats:",
-          time_taken = U.SimplerTimes.get_now_i64() - st
-        ))
+      time_taken = U.SimplerTimes.get_now_i64() - st
+      logger.info(lo(
+        f"NBXLet: {run_tag} job completed, here's some stats:",
+        time_taken = time_taken
+      ))
 
-      elif run_tag.startswith(RAW_DIST_RM_PREFIX):
+      if run_tag.startswith(RAW_DIST_RM_PREFIX):
         _pkl_id_out = run_tag[len(RAW_DIST_RM_PREFIX):] + "_out"
         logger.info(f"Storing for output at {_pkl_id_out}")
         relic.put_object(_pkl_id_out, out)
@@ -127,6 +132,9 @@ class NBXLet(Operator):
 
   def serve(self, host: str = "0.0.0.0", port: int = 8000, *, model_name: str = None):
     """Run a serving API endpoint"""
+
+    run_tag = os.getenv("NBOX_RUN_METADATA", "")
+    logger.info(f"Run Tag: {run_tag}")
 
     # Unlike a run above where it is only going to be triggered once and all the metadata is already indexed
     # in the DB, this is not the case with deploy. But with deploy we can get away with something much simpler
@@ -157,6 +165,13 @@ class NBXLet(Operator):
       logger.error(f"Failed to serve operator: {e}")
       U.hard_exit_program()
 
+# Here's all the different tags that we use
+# 
+# Raw dist system uses Relics as an intermediate storage and jobs as compute nodes
+# this is not the most optimal way but this is technology demonstration
 RAW_DIST_RELIC_NAME = "tmp_cache"
 RAW_DIST_RM_PREFIX = "NBXOperatorRawDist-"
 RAW_DIST_ENV_VAR_PREFIX = "NBX_OperatorRawDist_"
+
+# Silk is a production grade pipeline execution engine that can run any python code
+SILK_RM_PREFIX = "ComputeSilk/"

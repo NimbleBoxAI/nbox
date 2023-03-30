@@ -5,7 +5,7 @@ import requests
 from functools import partial
 
 from google.protobuf.timestamp_pb2 import *
-from nbox.sublime.proto.lmao_v2_pb2 import *
+from nbox.lmao.proto.lmao_v2_pb2 import *
 
 from nbox.sublime._yql.rest_pb2 import Echo
 from nbox.sublime._yql.common import *

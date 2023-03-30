@@ -7,7 +7,7 @@ import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
-import proto.relics_pb2
+import nbox.relics.proto.relics_pb2
 import typing
 import typing_extensions
 
@@ -39,20 +39,15 @@ class CreateRelicRequest(google.protobuf.message.Message):
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     NAME_FIELD_NUMBER: builtins.int
     REGION_FIELD_NUMBER: builtins.int
-    NBX_INTEGRATION_TOKEN_FIELD_NUMBER: builtins.int
-    NBX_RESOURCE_ID_FIELD_NUMBER: builtins.int
+    AUTH_FIELD_NUMBER: builtins.int
     BUCKET_META_FIELD_NUMBER: builtins.int
     workspace_id: typing.Text
     """the workspace id for which we are creating the relic"""
 
     name: typing.Text
     region: typing.Text
-    nbx_integration_token: typing.Text
-    """deprecated, will be removed soon"""
-
-    nbx_resource_id: typing.Text
-    """this is the resource id for which will be paired with integration token"""
-
+    @property
+    def auth(self) -> proto.relics_pb2.BackendInfo: ...
     @property
     def bucket_meta(self) -> proto.relics_pb2.BucketMetadata:
         """If the bucket is in their platform then they tell us that they want one there
@@ -64,12 +59,11 @@ class CreateRelicRequest(google.protobuf.message.Message):
         workspace_id: typing.Text = ...,
         name: typing.Text = ...,
         region: typing.Text = ...,
-        nbx_integration_token: typing.Text = ...,
-        nbx_resource_id: typing.Text = ...,
+        auth: typing.Optional[proto.relics_pb2.BackendInfo] = ...,
         bucket_meta: typing.Optional[proto.relics_pb2.BucketMetadata] = ...,
         ) -> None: ...
-    def HasField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta"]) -> builtins.bool: ...
-    def ClearField(self, field_name: typing_extensions.Literal["bucket_meta",b"bucket_meta","name",b"name","nbx_integration_token",b"nbx_integration_token","nbx_resource_id",b"nbx_resource_id","region",b"region","workspace_id",b"workspace_id"]) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["auth",b"auth","bucket_meta",b"bucket_meta"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["auth",b"auth","bucket_meta",b"bucket_meta","name",b"name","region",b"region","workspace_id",b"workspace_id"]) -> None: ...
 global___CreateRelicRequest = CreateRelicRequest
 
 class ListRelicsRequest(google.protobuf.message.Message):
@@ -178,6 +172,7 @@ class ActivityLogRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     WORKSPACE_ID_FIELD_NUMBER: builtins.int
     RELIC_ID_FIELD_NUMBER: builtins.int
+    RELIC_NAME_FIELD_NUMBER: builtins.int
     USERNAME_FIELD_NUMBER: builtins.int
     FROM_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
     TO_TIMESTAMP_NS_FIELD_NUMBER: builtins.int
@@ -186,6 +181,9 @@ class ActivityLogRequest(google.protobuf.message.Message):
     """the workspace id for which we are creating the relic"""
 
     relic_id: typing.Text
+    """the id of the relic"""
+
+    relic_name: typing.Text
     """the id of the relic"""
 
     username: typing.Text
@@ -204,12 +202,13 @@ class ActivityLogRequest(google.protobuf.message.Message):
         *,
         workspace_id: typing.Text = ...,
         relic_id: typing.Text = ...,
+        relic_name: typing.Text = ...,
         username: typing.Text = ...,
         from_timestamp_ns: builtins.int = ...,
         to_timestamp_ns: builtins.int = ...,
         page_no: builtins.int = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns",b"from_timestamp_ns","page_no",b"page_no","relic_id",b"relic_id","to_timestamp_ns",b"to_timestamp_ns","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["from_timestamp_ns",b"from_timestamp_ns","page_no",b"page_no","relic_id",b"relic_id","relic_name",b"relic_name","to_timestamp_ns",b"to_timestamp_ns","username",b"username","workspace_id",b"workspace_id"]) -> None: ...
 global___ActivityLogRequest = ActivityLogRequest
 
 class ActivityLog(google.protobuf.message.Message):
@@ -219,6 +218,7 @@ class ActivityLog(google.protobuf.message.Message):
     OPERATION_FIELD_NUMBER: builtins.int
     OBJECT_SIZE_FIELD_NUMBER: builtins.int
     USERNAME_FIELD_NUMBER: builtins.int
+    OBJECT_NAME_FIELD_NUMBER: builtins.int
     timestamp_ns: builtins.int
     """the timestamp at which the logs were created"""
 
@@ -234,6 +234,9 @@ class ActivityLog(google.protobuf.message.Message):
     username: typing.Text
     """the username of the user who performed the operation"""
 
+    object_name: typing.Text
+    """the name of the object that was operated on"""
+
     def __init__(self,
         *,
         timestamp_ns: builtins.int = ...,
@@ -241,8 +244,9 @@ class ActivityLog(google.protobuf.message.Message):
         operation: global___Actions.ValueType = ...,
         object_size: builtins.float = ...,
         username: typing.Text = ...,
+        object_name: typing.Text = ...,
         ) -> None: ...
-    def ClearField(self, field_name: typing_extensions.Literal["object_size",b"object_size","operation",b"operation","relic_id",b"relic_id","timestamp_ns",b"timestamp_ns","username",b"username"]) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["object_name",b"object_name","object_size",b"object_size","operation",b"operation","relic_id",b"relic_id","timestamp_ns",b"timestamp_ns","username",b"username"]) -> None: ...
 global___ActivityLog = ActivityLog
 
 class ActivityLogResponse(google.protobuf.message.Message):
@@ -256,3 +260,33 @@ class ActivityLogResponse(google.protobuf.message.Message):
         ) -> None: ...
     def ClearField(self, field_name: typing_extensions.Literal["logs",b"logs"]) -> None: ...
 global___ActivityLogResponse = ActivityLogResponse
+
+class ListBucketRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    WORKSPACE_ID_FIELD_NUMBER: builtins.int
+    AUTH_FIELD_NUMBER: builtins.int
+    workspace_id: typing.Text
+    """the workspace id for which we are creating the relic"""
+
+    @property
+    def auth(self) -> proto.relics_pb2.BackendInfo: ...
+    def __init__(self,
+        *,
+        workspace_id: typing.Text = ...,
+        auth: typing.Optional[proto.relics_pb2.BackendInfo] = ...,
+        ) -> None: ...
+    def HasField(self, field_name: typing_extensions.Literal["auth",b"auth"]) -> builtins.bool: ...
+    def ClearField(self, field_name: typing_extensions.Literal["auth",b"auth","workspace_id",b"workspace_id"]) -> None: ...
+global___ListBucketRequest = ListBucketRequest
+
+class ListBucketResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    BUCKETS_FIELD_NUMBER: builtins.int
+    @property
+    def buckets(self) -> google.protobuf.internal.containers.RepeatedScalarFieldContainer[typing.Text]: ...
+    def __init__(self,
+        *,
+        buckets: typing.Optional[typing.Iterable[typing.Text]] = ...,
+        ) -> None: ...
+    def ClearField(self, field_name: typing_extensions.Literal["buckets",b"buckets"]) -> None: ...
+global___ListBucketResponse = ListBucketResponse

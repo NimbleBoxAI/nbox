@@ -24,7 +24,7 @@ from typing import Union, Dict, Any
 from nbox.utils import logger
 from nbox.auth import secret, AuthConfig
 from nbox.init import nbox_ws_v1
-from nbox.sublime.lmao_rpc_client import (
+from nbox.lmao.lmao_rpc_client import (
   LMAO_Stub, # main stub class
   Record,
   ListProjectsRequest,
@@ -38,6 +38,7 @@ functional components of LMAO
 """
 
 def get_lmao_stub() -> LMAO_Stub:
+  # lmao_stub = LMAO_Stub(url = "http://localhost:8080/monitoring", session = nbox_ws_v1._session)
   lmao_stub = LMAO_Stub(url = secret(AuthConfig.url) + "/monitoring", session = nbox_ws_v1._session)
   return lmao_stub
 

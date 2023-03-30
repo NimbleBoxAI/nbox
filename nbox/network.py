@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
+from nbox import messages as mpb
 from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
@@ -30,7 +31,6 @@ from nbox.init import nbox_ws_v1, nbox_grpc_stub, nbox_model_service_stub
 from nbox.hyperloop.jobs.job_pb2 import  Job as JobProto
 from nbox.hyperloop.common.common_pb2 import Resource, Code
 from nbox.hyperloop.deploy.serve_pb2 import ModelRequest, Model
-from nbox.messages import rpc, write_binary_to_file
 from nbox.jobs import Schedule, Serve, Job
 from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest, UpdateJobRequest
 from nbox.nbxlib.operator_spec import OperatorType as OT
@@ -55,6 +55,8 @@ def deploy_serving(
   wait_for_deployment: bool = False,
   model_metadata: Dict[str, str] = {},
   exe_jinja_kwargs: Dict[str, str] = {},
+  *,
+  _only_zip: bool = False,
 ):
   """Use the NBX-Deploy Infrastructure
 
@@ -85,7 +87,7 @@ def deploy_serving(
     resource = resource
   )
   model_proto_fp = U.join(gettempdir(), "model_proto.msg")
-  write_binary_to_file(model_proto, model_proto_fp)
+  mpb.write_binary_to_file(model_proto, model_proto_fp)
 
   # zip init folder
   exe_jinja_kwargs.update({"model_name": model_name,})
@@ -97,12 +99,16 @@ def deploy_serving(
     files_to_copy = {model_proto_fp: "model_proto.msg"},
     **exe_jinja_kwargs,
   )
-  return _upload_serving_zip(
-    zip_path = zip_path,
-    workspace_id = workspace_id,
-    serving_id = serving_id,
-    model_proto = model_proto,
-  )
+  if _only_zip:
+    logger.info(f"Zip file created at: {zip_path}")
+    return zip_path
+  else:
+    return _upload_serving_zip(
+      zip_path = zip_path,
+      workspace_id = workspace_id,
+      serving_id = serving_id,
+      model_proto = model_proto,
+    )
 
 
 def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model_proto: Model):
@@ -112,7 +118,7 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
   ))
 
   # get bucket URL and upload the data
-  response: Model = rpc(
+  response: Model = mpb.rpc(
     nbox_model_service_stub.UploadModel,
     ModelRequest(
       model = model_proto,
@@ -160,18 +166,18 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
       logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
       return
 
-
   # model is uploaded successfully, now we need to deploy it
   logger.info(f"Model uploaded successfully, deploying ...")
-  response: Model = rpc(
+  response: Model = mpb.rpc(
     nbox_model_service_stub.Deploy,
     ModelRequest(
       model = Model(
         id = model_id,
         serving_group_id = deployment_id,
-        resource = model_proto.resource
+        resource = model_proto.resource,
+        # feature_gates = {"SetRunMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
       ),
-      auth_info = auth_info_pb()
+      auth_info = auth_info_pb(),
     ),
     "Could not deploy model",
     raise_on_error=True
@@ -210,7 +216,8 @@ def deploy_job(
   job_id: str = None,
   exe_jinja_kwargs = {},
   *,
-  _unittest = False
+  _only_zip: bool = False,
+  _unittest: bool = False
 ) -> None:
   """Upload code for a NBX-Job.
 
@@ -252,7 +259,7 @@ def deploy_job(
     resource = resource
   )
   job_proto_fp = U.join(gettempdir(), "job_proto.msg")
-  write_binary_to_file(job_proto, job_proto_fp)
+  mpb.write_binary_to_file(job_proto, job_proto_fp)
 
   if _unittest:
     return job_proto
@@ -286,6 +293,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
     # incase an old job exists, we need to update few things with the new information
     logger.debug("Found existing job, checking for update masks")
     paths = []
+    mask = mpb.field_mask(old_job_proto, job_proto)
     if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
       paths.append("resource")
     if old_job_proto.schedule.cron != job_proto.schedule.cron:
@@ -302,7 +310,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   ))
 
   # UploadJobCode is responsible for uploading the code of the job
-  response: JobProto = rpc(
+  response: JobProto = mpb.rpc(
     nbox_grpc_stub.UploadJobCode,
     JobRequest(job = job_proto, auth_info=auth_info_pb()),
     f"Failed to upload job: {job_proto.id} | {job_proto.name}"
@@ -349,7 +357,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   auth_info = auth_info_pb()
   if new_job:
     logger.info("Creating a new job")
-    rpc(
+    mpb.rpc(
       stub = nbox_grpc_stub.CreateJob,
       message = JobRequest(job = job_proto, auth_info = auth_info),
       err_msg = "Failed to create job"
@@ -357,7 +365,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
 
   if not old_job_proto.feature_gates:
     logger.info("Updating feature gates")
-    rpc(
+    mpb.rpc(
       stub = nbox_grpc_stub.UpdateJob,
       message = UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths = ["feature_gates"]), auth_info = auth_info),
       err_msg = "Failed to update job",
@@ -478,12 +486,6 @@ def zip_to_nbox_folder(
       })
       f2.write(code)
     # print(os.stat(exe_path))
-
-    # currently the serving pod does not come with secrets file so we need to make a temporary fix while that
-    # feature is being worked on
-    if type == OT.SERVING:
-      secrets_path = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
-      zip_file.write(secrets_path, arcname = ".nbx/secrets.json")
 
     zip_file.write(exe_path, arcname = "exe.py")
     for src, trg in files_to_copy.items():
