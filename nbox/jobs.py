@@ -574,8 +574,8 @@ class Serve:
     """
     if not self.model_id:
       raise ValueError("Model ID is required to scale a model. Pass with --model_id")
-    if replicas < 1:
-      raise ValueError("Replicas must be greater than 0")
+    if replicas < 0:
+      raise ValueError("Replicas must be greater than or equal to 0")
 
     logger.info(f"Scale model deployment {self.model_id} to {replicas} replicas")
     rpc(
