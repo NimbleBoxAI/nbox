@@ -32,6 +32,7 @@ from nbox.version import __version__ as V
 from nbox.nbxlib.fire import NBXFire
 from nbox.projects import Project
 from nbox.utils import logger, lo
+from nbox.plugins.base import PluginCLI
 
 class Config(object):
   def update(self, workspace_id: str):
@@ -182,6 +183,7 @@ def main():
     "lmao"     : LmaoCLI,
     "login"    : login,
     "open"     : open_home,
+    "plugins"  : PluginCLI,
     "projects" : Project,
     "relics"   : Relics,
     "serve"    : Serve,

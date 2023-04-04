@@ -567,7 +567,8 @@ class Operator():
   def __setattr__(self, key, value: 'Operator'):
     if (
       isinstance(value, Operator) and
-      hasattr(value, "_op_type") and self._op_type == ospec.OperatorType.UNSET and
+      hasattr(value, "_op_type") and
+      self._op_type == ospec.OperatorType.UNSET and
       hasattr(self, "_operators")
     ):
       # print("Adding:", self.__class__.__qualname__, key, value.__class__.__qualname__, isinstance(value, Operator), id(value), id(self))
@@ -691,24 +692,25 @@ class Operator():
     elif self._op_type == ospec.OperatorType.WRAP_CLS:
       raise ValueError(f"Cannot call class wrappers directly, will interfere with nbox")
 
-    input_dict = {}
-    logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = SimplerTimes.get_now_pb()
-    self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
-    if self._tracer != None:
-      self._tracer(self.node)
+    # input_dict = {}
+    logger.debug(f"Calling operator '{self.__class__.__name__}'")
+    # _ts = SimplerTimes.get_now_pb()
+    # if self._tracer != None:
+    #   self._tracer(self.node)
     # ---- USER SEPERATION BOUNDARY ---- #
 
-    with log_latency(f"{self.__class__.__name__}-forward"):
-      out = self.forward(*args, **kwargs)
+    # with log_latency(f"{self.__class__.__name__}-forward"):
+    #   out = self.forward(*args, **kwargs)
+
+    out = self.forward(*args, **kwargs)
 
     # ---- USER SEPERATION BOUNDARY ---- #
-    outputs = {}
-    logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = SimplerTimes.get_now_pb()
-    self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
-    if self._tracer != None:
-      self._tracer(self.node)
+    # outputs = {}
+    logger.debug(f"Ending operator '{self.__class__.__name__}'")
+    # _ts = SimplerTimes.get_now_pb()
+    # self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
+    # if self._tracer != None:
+    #   self._tracer(self.node)
 
     # if user has enabled _tracking, then we will store the input, output values as well
     return out

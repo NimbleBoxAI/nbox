@@ -1,6 +1,7 @@
 import os
 import sys
 import ast
+import json
 import shlex
 import zipfile
 from pprint import pformat
@@ -18,11 +19,14 @@ from nbox.lmao import (
   get_git_details,
   lmao_v2_pb2 as pb,
   ExperimentConfig,
-  LMAO_RM_PREFIX
+  LMAO_RM_PREFIX,
+  LiveConfig,
+  LMAO_SERVING_FILE,
 )
 from nbox.relics import Relics
 from nbox.lmao.lmao_rpc_client import LMAO_Stub
 from nbox.jobs import Job, Serve
+from nbox.hyperloop.deploy import serve_pb2
 from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.nbxlib.astea import Astea
 
@@ -31,6 +35,9 @@ class ProjectState:
   project_id: str = ""
   experiment_id: str = ""
   serving_id: str = ""
+
+  def data():
+    return {k:getattr(ProjectState, k) for k in ProjectState.__dict__ if not k.startswith("__") and k != "data"}
 
 
 class Project:
@@ -234,7 +241,7 @@ class Project:
         enable_system_monitoring = False,
       ).to_json(),
     ))
-    logger.info(f"Run ID: {run.experiment_id}")
+    logger.info(f"Created new experiment ID: {run.experiment_id}")
 
     # create a git patch and upload it to relics
     if git_det:
@@ -300,8 +307,8 @@ class Project:
     resource_gpu_count: str = "",
     resource_max_retries: int = 0,
 
-    # any other things to pass to the function / class being called
-    **serving_kwargs,
+    # all the things for serving
+    serving_type: str = "fastapi_v2",
   ):
     workspace_id = secret(AuthConfig.workspace_id)
 
@@ -323,14 +330,55 @@ class Project:
       (f" --resource_gpu_count '{resource_gpu_count}'" if resource_gpu_count else "") +
       (f" --resource_max_retries {resource_max_retries}" if resource_max_retries else "")
     )
-    for k, v in serving_kwargs.items():
-      if type(v) == bool:
-        reconstructed_cli_comm += f" --{k}"
-      else:
-        reconstructed_cli_comm += f" --{k} '{v}'"
     logger.debug(f"command: {reconstructed_cli_comm}")
 
-    # 
-    Serve.upload(
-      
+    # get the serving
+    serving_pb = serve_pb2.Serving(id = self.get_deployment_id())
+    serving_pb.resource.MergeFrom(Resource(
+      cpu = resource_cpu,
+      memory = resource_memory,
+      disk_size = resource_disk_size,
+      gpu = resource_gpu,
+      gpu_count = resource_gpu_count,
+      max_retries = resource_max_retries,
+    ))
+
+    # now we create a live tracker that can then be reused by the serving
+    config = LiveConfig(
+      resource = serving_pb.resource,
+      cli_comm = reconstructed_cli_comm,
+      enable_system_monitoring = False,
     )
+    serving = self.lmao_stub.init_serving(pb.InitRunRequest(
+      workspace_id = workspace_id,
+      project_id = self.pid,
+      agent_details = pb.AgentDetails(
+        type = pb.AgentDetails.NBX.JOB,
+        nbx_serving_id = serving_pb.id
+      ),
+      config = config.to_json(),
+    ))
+    logger.info(f"Created new live tracking ID: {serving.serving_id}")
+
+    # now store the config
+    config.add("serving_id", serving.serving_id)
+    config.add("project_id", self.pid)
+    with open(LMAO_SERVING_FILE, "w") as f:
+      f.write(config.to_json())
+
+    # now upload this model via the Serve functionality
+    Serve.upload(
+      init_folder = init_path,
+      id = serving_pb.id,
+      trigger = True,
+      resource_cpu = resource_cpu,
+      resource_memory = resource_memory,
+      resource_disk_size = resource_disk_size,
+      resource_gpu = resource_gpu,
+      resource_gpu_count = resource_gpu_count,
+      model_name = serving.serving_id.replace("-", "_"),
+      serving_type = serving_type,
+    )
+
+    # clean up
+    os.remove(LMAO_SERVING_FILE)

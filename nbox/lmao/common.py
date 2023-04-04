@@ -110,6 +110,18 @@ def get_project(project_id: str) -> ProjectProto:
   ))
   return project
 
+
+def resource_from_dict(d: Dict[str, Any]):
+  return Resource(
+    cpu = str(d["cpu"]),
+    memory = str(d["memory"]),
+    disk_size = str(d["disk_size"]),
+    gpu = str(d["gpu"]),
+    gpu_count = str(d["gpu_count"]),
+    timeout = int(d["timeout"]),
+    max_retries = int(d["max_retries"]),
+  )
+
 """
 Common structs
 """
@@ -159,17 +171,51 @@ class ExperimentConfig:
   @classmethod
   def from_json(cls, json_str):
     d = json.loads(json_str)
-    # print(d["resource"])
-    d["resource"] = Resource(
-      cpu = str(d["resource"]["cpu"]),
-      memory = str(d["resource"]["memory"]),
-      disk_size = str(d["resource"]["disk_size"]),
-      gpu = str(d["resource"]["gpu"]),
-      gpu_count = str(d["resource"]["gpu_count"]),
-      timeout = int(d["resource"]["timeout"]),
-      max_retries = int(d["resource"]["max_retries"]),
-    )
+    d["resource"] = resource_from_dict(d["resource"])
     return cls(**d)
+
+
+
+class LiveConfig:
+  def __init__(
+    self,
+    resource: Resource,
+    cli_comm: str,
+    enable_system_monitoring: bool = False,
+  ):
+    self.resource = resource
+    self.cli_comm = cli_comm
+    self.enable_system_monitoring = enable_system_monitoring
+    self.keys = set()
+
+  def to_dict(self):
+    out = {
+      "resource": mpb.message_to_dict(self.resource),
+      "cli_comm": self.cli_comm,
+      "enable_system_monitoring": self.enable_system_monitoring,
+    }
+    for k in self.keys:
+      out[k] = getattr(self, k)
+    return out
+  
+  def to_json(self):
+    return json.dumps(self.to_dict())
+  
+  @classmethod
+  def from_json(cls, json_str) -> 'LiveConfig':
+    d = json.loads(json_str)
+    d["resource"] = resource_from_dict(d["resource"])
+    _cls = cls(**d)
+    for k in d:
+      if k not in ["resource", "cli_comm", "enable_system_monitoring"]:
+        _cls.add(k, d[k])
+  
+  def add(self, key, value):
+    setattr(self, key, value)
+    self.keys.add(key)
+
+  def get(self, key):
+    return getattr(self, key)
 
 
 """
@@ -179,4 +225,5 @@ Constants
 # do not change these it can become a huge pain later on
 LMAO_RELIC_NAME = "experiments"
 LMAO_RM_PREFIX = "NBXLmao-"
+LMAO_SERVING_FILE = "NBXLmaoServingCfg.json"
 LMAO_ENV_VAR_PREFIX = "NBX_LMAO_"

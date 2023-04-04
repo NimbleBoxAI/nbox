@@ -18,7 +18,7 @@ from getpass import getpass
 from functools import lru_cache
 
 import nbox.utils as U
-from nbox.utils import join, logger
+from nbox.utils import join, logger, lo
 
 
 class AuthConfig():
@@ -33,7 +33,7 @@ class AuthConfig():
 
   # things for the pod
   nbx_pod_run = "run"
-  # nbx_pod_deploy = "deploy"
+  nbx_pod_deploy = "deploy"
 
   def items():
     return [AuthConfig.workspace_id, AuthConfig.workspace_name, AuthConfig.cache]
@@ -208,7 +208,13 @@ def init_secret():
   # add any logic here for creating secrets
   if not U.env.NBOX_NO_AUTH(False):
     secret = NBXClient()
-    logger.info(f"Current workspace id: {secret(AuthConfig.workspace_id)} ({secret(AuthConfig.workspace_name)})")
+    logger.info(lo(
+      f"workspace details",
+      workspace_id = secret.workspace_id,
+      workspace_name =  AuthConfig.workspace_name,
+      token_present = len(secret.access_token) > 0,
+      nbx_url = secret.nbx_url,
+    ))
     return secret
   else:
     logger.info(f"Skipping authentication as NBOX_NO_AUTH is set to True")
@@ -231,4 +237,4 @@ def auth_info_pb():
   )
 
 def inside_pod():
-  return secret(AuthConfig.nbx_pod_run, False)
+  return secret(AuthConfig.nbx_pod_run, False) or secret(AuthConfig.nbx_pod_deploy, False)

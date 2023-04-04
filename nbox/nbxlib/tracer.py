@@ -91,6 +91,7 @@ class Tracer:
 
     # start heartbeat in a different thread
     if start_heartbeat:
+      self.thread_stop = threading.Event()
       self.thread = threading.Thread(target=self.hearbeat_thread_worker)
       self.thread.start()
 
@@ -128,7 +129,9 @@ class Tracer:
   def hearbeat_thread_worker(self):
     while True:
       self._rpc()
-      sleep(self.heartbeat_every)
+      for _ in range(self.hearbeat_thread_worker):
+        # in future add a way to stop the thread
+        sleep(1)
 
   def stop(self):
     if not self.network_tracer:

@@ -24,7 +24,7 @@ from nbox.nbxlib.astea import Astea, IndexTypes as IT
 from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.jobs.dag_pb2 import DAG as DAGProto
-from nbox.hyperloop.common.common_pb2 import Resource, Code
+from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.hyperloop.jobs.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
 from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto, UpdateModelRequest
 
@@ -164,7 +164,7 @@ def upload_job_folder(
   method: str,
   init_folder: str,
   id: str = "",
-  # name: str = "",
+  project_id: str = "",
   trigger: bool = False,
 
   # all the things for resources
@@ -206,6 +206,7 @@ def upload_job_folder(
     init_folder (str): folder with all the relevant files or ``file_path:fn_name`` pair so you can use it as the entrypoint.
     name (str, optional): Name of the job. Defaults to "".
     id (str, optional): ID of the job. Defaults to "".
+    project_id (str, optional): Project ID, if None uses the one from config. Defaults to "".
     trigger (bool, optional): If uploading a "job" trigger the job after uploading. Defaults to False.
     resource_cpu (str, optional): CPU resource. Defaults to "100m".
     resource_memory (str, optional): Memory resource. Defaults to "128Mi".
@@ -221,6 +222,8 @@ def upload_job_folder(
   from nbox.network import deploy_job, deploy_serving
   import nbox.nbxlib.operator_spec as ospec
   from nbox.nbxlib.serving import SupportedServingTypes as SST
+  from nbox.projects import Project
+  
   OT = ospec.OperatorType
 
   if method not in OT._valid_deployment_types():
@@ -231,6 +234,17 @@ def upload_job_folder(
     raise ValueError(f"Trigger can only be used with '{OT.JOB}' or '{OT.SERVING}'")
   if model_name and method != OT.SERVING:
     raise ValueError(f"model_name can only be used with '{OT.SERVING}'")
+  
+  # get the correct ID based on the project_id
+  if (not project_id and not id) or (project_id and id):
+    raise ValueError("Either --project-id or --id must be present")
+  if project_id:
+    p = Project(project_id)
+    if method == OT.JOB:
+      id = p.get_job_id()
+    else:
+      id = p.get_deployment_id()
+    logger.info(f"Using project_id: {project_id}, found id: {id}")
 
   if ":" not in init_folder:
     # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
@@ -274,8 +288,8 @@ def upload_job_folder(
   if method == OT.SERVING:
     if serving_type not in SST.all():
       raise ValueError(f"Invalid serving_type: {serving_type}, should be one of {SST.all()}")
-    if serving_type == SST.FASTAPI:
-      logger.warning(f"You have selected serving_type='{SST.FASTAPI}', this assumes the object: {fn_name} is a FastAPI app")
+    if serving_type == SST.FASTAPI or serving_type == SST.FASTAPI_V2:
+      logger.warning(f"You have selected serving_type='{serving_type}', this assumes the object: {fn_name} is a FastAPI app")
       init_code = fn_name
       perform_tea = False
       load_operator = False
@@ -311,7 +325,8 @@ def upload_job_folder(
     "file_name": file_name,
     "fn_name": fn_name,
     "init_code": init_code,
-    "load_operator": load_operator
+    "load_operator": load_operator,
+    "serving_type": serving_type,
   }
 
   # create a requirements.txt file if it doesn't exist with the latest nbox version

@@ -165,3 +165,6 @@ class LmaoLive():
       raise Exception("Server Error")
 
     self._total_logged_elements += 1
+
+
+# helper class

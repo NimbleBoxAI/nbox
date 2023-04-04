@@ -32,14 +32,15 @@ from nbox.utils import py_from_bs64, py_to_bs64, logger
 class SupportedServingTypes():
   NBOX = "nbox"
   FASTAPI = "fastapi"
+  FASTAPI_V2 = "fastapi_v2"  
 
   def all():
-    return [SupportedServingTypes.NBOX, SupportedServingTypes.FASTAPI]
+    return [getattr(SupportedServingTypes, x) for x in dir(SupportedServingTypes) if not x.startswith("__") and not x == "all"]
 
 
 def serve_operator(
   op_or_app: Operator,
-  # serving_type: str,
+  serving_type: str,
   host: str = "0.0.0.0",
   port: int = 8000,
   *,
@@ -88,9 +89,17 @@ def serve_operator(
     for route, fn in get_fastapi_routes(op_or_app):
       app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
   
-  elif type(op_or_app) == FastAPI:
+  elif serving_type == SupportedServingTypes.FASTAPI:
     # app.mount("/x", op_or_app)
+    logger.info("Mounting FastAPI app at /x/...")
     app.add_api_route("/x", op_or_app, methods=["POST"], response_class=JSONResponse)
+
+  elif serving_type == SupportedServingTypes.FASTAPI_V2:
+    # load all the paths from op_or_app and add them to the app except / and /metadata
+    logger.info("Loading FastAPI app routes...")
+    for route in op_or_app.routes:
+      if route.path not in ["/", "/metadata"]:
+        app.add_api_route(route.path, route.endpoint, methods=route.methods, response_class=JSONResponse)
 
   # TODO: @yashbonde can we mount flask/django? https://fastapi.tiangolo.com/advanced/wsgi/
 

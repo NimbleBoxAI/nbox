@@ -54,5 +54,9 @@ if __name__ == "__main__":
   nbxlet = NBXLet(op = get_op(cloud = True))
   fire.Fire({
     "run": nbxlet.run,     # NBX-Jobs
-    "serve": partial(nbxlet.serve, model_name = "{{ model_name }}"), # NBX-Deploy
+    "serve": partial(
+      nbxlet.serve,
+      model_name = "{{ model_name }}",
+      serving_type = "{{ serving_type }}"
+    ), # NBX-Deploy
   })

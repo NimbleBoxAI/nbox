@@ -6,6 +6,7 @@ process management. The code here is tested along with `nbox.Relic` to perform d
 """
 
 import os
+import json
 
 import nbox.utils as U
 from nbox.utils import logger, lo
@@ -16,7 +17,7 @@ from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.jobs.job_pb2 import Job
 from nbox.nbxlib.serving import serve_operator
 
-from nbox.lmao import ExperimentConfig, LMAO_RM_PREFIX
+from nbox.lmao import ExperimentConfig, LiveConfig, LMAO_RM_PREFIX, LMAO_SERVING_FILE
 from nbox.projects import Project, ProjectState
 
 # Manager
@@ -100,11 +101,11 @@ class NBXLet(Operator):
       elif run_tag.startswith(SILK_RM_PREFIX):
         # 27/03/2023: We are adding a new job type called Silk
         trace_id = run_tag[len(SILK_RM_PREFIX):]
-        logger.info(f"Running trace: {trace_id}")
         kwargs = {"trace_id": trace_id}
 
       # call the damn thing
       st = U.SimplerTimes.get_now_i64()
+      logger.debug(f"Args: {args}\nKwargs: {kwargs}")
       out = self.op(*args, **kwargs)
 
       # save the output to the relevant place, LMAO jobs are not saved to the relic
@@ -130,36 +131,23 @@ class NBXLet(Operator):
         tracer._rpc(f"RPC error in ending job {job_id}")
       U.hard_exit_program()
 
-  def serve(self, host: str = "0.0.0.0", port: int = 8000, *, model_name: str = None):
+  def serve(self, **serve_kwargs):
     """Run a serving API endpoint"""
+    # run_tag = os.getenv("NBOX_RUN_METADATA", "")
+    # logger.info(f"Run Tag: {run_tag}")
 
-    run_tag = os.getenv("NBOX_RUN_METADATA", "")
-    logger.info(f"Run Tag: {run_tag}")
-
-    # Unlike a run above where it is only going to be triggered once and all the metadata is already indexed
-    # in the DB, this is not the case with deploy. But with deploy we can get away with something much simpler
-    # which is using a more complicated ModelProto.metadata object
-    # init_folder = U.env.NBOX_JOB_FOLDER("")
-    # if not init_folder:
-    #   raise RuntimeError("NBOX_JOB_FOLDER not set")
-    # if not os.path.exists(init_folder):
-    #   raise RuntimeError(f"NBOX_JOB_FOLDER {init_folder} does not exist")
-
-    # fp_bin = U.join(init_folder, "model_proto.msg")
-    # serving_type = SST.NBOX
-    # if fp_bin:
-    #   model_proto: ModelProto = read_file_to_binary(fp_bin, ModelProto())
-    #   logger.info(model_proto)
-    #   serving_type = model_proto.metadata.get("serving_type", SST.NBOX)
+    # while we prepare to ship run_tag for serving, we can leverage the existing code to provide the exact
+    # same functionality
+    if os.path.exists(LMAO_SERVING_FILE):
+      logger.info(f"Found {LMAO_SERVING_FILE}")
+      with open(LMAO_SERVING_FILE, "r") as f:
+        cfg = LiveConfig.from_json(f.read())
+        ProjectState.project_id = cfg.get("project_id")
+        ProjectState.serving_id = cfg.get("serving_id")
+        logger.info(lo("Project data:", **ProjectState.data))
 
     try:
-      serve_operator(
-        op_or_app = self.op,
-        # serving_type = serving_type,
-        host = host,
-        port = port,
-        model_name = model_name
-      )
+      serve_operator(op_or_app = self.op, **serve_kwargs)
     except Exception as e:
       U.log_traceback()
       logger.error(f"Failed to serve operator: {e}")

@@ -60,9 +60,8 @@ class LmaoAsgiMiddleware(Middleware):
         })
 
 
-def add_live_tracker(project: Project, app:FastAPI, metadata = {}):
+def add_live_tracker(project: Project, app:FastAPI, metadata = {}) -> FastAPI:
   live_tracker = project.get_live_tracker(metadata = metadata)
-  # live_tracker = None
   app.add_middleware(LmaoAsgiMiddleware, tracker = live_tracker)
   app.middleware("http")(_decorator_middleware)
   return app
