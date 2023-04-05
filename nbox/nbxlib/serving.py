@@ -1,10 +1,19 @@
+"""
+## NBX Operator Serving 
+
+This file has all the functions on how the serving of an Operator works, it also acts as the default code that runs
+on NBX Deploy service.
+
+{% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
+"""
 # https://github.com/apache/airflow/issues/7870
+
 
 try:
   from pydantic import create_model
   import uvicorn
 
-  from fastapi import FastAPI, APIRouter
+  from fastapi import FastAPI
   from fastapi.responses import JSONResponse, Response
   from fastapi.middleware.cors import CORSMiddleware
 except ImportError:
@@ -13,22 +22,38 @@ except ImportError:
 
 import json
 import inspect
-from typing import Any, Dict
+from typing import Any, Dict, Callable
 
 from nbox.version import __version__
 from nbox.operator import Operator
 from nbox.nbxlib.operator_spec import OperatorType
 from nbox.utils import py_from_bs64, py_to_bs64, logger
 
+class SupportedServingTypes():
+  NBOX = "nbox"
+  FASTAPI = "fastapi"
+  FASTAPI_V2 = "fastapi_v2"  
+
+  def all():
+    return [getattr(SupportedServingTypes, x) for x in dir(SupportedServingTypes) if not x.startswith("__") and not x == "all"]
+
+
 def serve_operator(
   op_or_app: Operator,
+  serving_type: str,
   host: str = "0.0.0.0",
   port: int = 8000,
   *,
-  log_system_metrics: bool = True,
-  log_user_io: bool = False,
   model_name: str = ""
 ):
+  """
+  Serve an operator or a FastAPI app on a given host and port.
+
+  Args:
+    op_or_app: The operator or FastAPI app to serve.
+    host: The host to serve on.
+    port: The port to serve on.
+  """
   # TODO: @yashbonde server can behave like a proxy to a different running server so it can be flask app or anything
   # https://stackoverflow.com/questions/70610266/proxy-an-external-website-using-python-fast-api-not-supporting-query-params
   if FastAPI is None:
@@ -64,15 +89,29 @@ def serve_operator(
     for route, fn in get_fastapi_routes(op_or_app):
       app.add_api_route(route, fn, methods=["POST"], response_class=JSONResponse)
   
-  elif type(op_or_app) == FastAPI:
-    app.mount("/x", op_or_app)
+  elif serving_type == SupportedServingTypes.FASTAPI:
+    # app.mount("/x", op_or_app)
+    logger.info("Mounting FastAPI app at /x/...")
+    app.add_api_route("/x", op_or_app, methods=["POST"], response_class=JSONResponse)
+
+  elif serving_type == SupportedServingTypes.FASTAPI_V2:
+    # load all the paths from op_or_app and add them to the app except / and /metadata
+    logger.info("Loading FastAPI app routes...")
+    for route in op_or_app.routes:
+      if route.path not in ["/", "/metadata"]:
+        app.add_api_route(route.path, route.endpoint, methods=route.methods, response_class=JSONResponse)
+
+  # TODO: @yashbonde can we mount flask/django? https://fastapi.tiangolo.com/advanced/wsgi/
+
+  else:
+    raise ValueError(f"op_or_app must be an Operator or FastAPI app, got: {op_or_app}")
 
   uvicorn.run(app, host = host, port = port)
 
 
 def get_fastapi_routes(op: Operator):
   """To keep seperation of responsibility the paths are scoped out like all the functions are
-  in the /method_{...} and all the custom python code is in /nbx_py_rpc"""
+  in the `/method_{...}` and all the custom python code is in `/nbx_py_rpc`"""
   if op._op_type == OperatorType.WRAP_CLS:
     routes = []
     # add functions that the user has exposed
@@ -100,7 +139,17 @@ def get_fastapi_routes(op: Operator):
 
 
 # builder method is used to progrmatically generate api routes related information for the fastapi app
-def get_fastapi_fn(fn, _rest = False):
+def get_fastapi_fn(fn, _rest = False) -> Callable:
+  """This function is used to generate a fastapi route for a given function, it will take in a function
+  and return a function that can be used as a fastapi route
+
+  Args:
+    fn (Callable): function to be used as a fastapi route
+    _rest (bool, optional): if the function is a REST endpoint. Defaults to False.
+
+  Returns:
+    Callable: a function that can be used as a fastapi route
+  """
   from pydantic import create_model
 
   # we use inspect signature instead of writing our own ast thing
@@ -178,6 +227,7 @@ class NbxPyRpc(Operator):
   user friendliness of python means that some methods acn be routed and managed as long as there is a wire
   protocol. So here it is:
 
+  ```python
   request = {
     "rpc_name": "__getattr__",
     "key": "string",            # always there
@@ -189,29 +239,31 @@ class NbxPyRpc(Operator):
     "message": str,   # optional, will be error in case of failure
     "value": str,     # optional, will be b64-cloudpickle or might be empty ex. del
   }
+  ```
 
   we should also add some routes to support a subset of important language features:
 
-  1. __getattr__: obtain any value by doing: `obj.x`
-  2. __getitem__: obtain any value by doing: `obj[x]`
-  3. __setitem__: set any value by doing: `obj[x] = y`
-  4. __delitem__: delete any value by doing: `del obj[x]`
-  5. __iter__: iterate over any iterable by doing: `for x in obj`
-  6. __next__: get next value from an iterator by doing: `next(obj)`
-  7. __len__: get length of any object by doing: `len(obj)`
-  8. __contains__: check if an object contains a value by doing: `x in obj`
+  - `__getattr__`: obtain any value by doing: `obj.x`
+  - `__getitem__`: obtain any value by doing: `obj[x]`
+  - `__setitem__`: set any value by doing: `obj[x] = y`
+  - `__delitem__`: delete any value by doing: `del obj[x]`
+  - `__iter__`: iterate over any iterable by doing: `for x in obj`
+  - `__next__`: get next value from an iterator by doing: `next(obj)`
+  - `__len__`: get length of any object by doing: `len(obj)`
+  - `__contains__`: check if an object contains a value by doing: `x in obj`
 
   The reason we have chosen these for starting is that they can be used to represent any
   data structure required and get/set information from it. We can add more later like
-  __enter__ and __exit__ to support context managers. Others like numerical operations
-  __add__ and __sub__ doesn't really make sense. Maybe one day when we have neural networks
+  `__enter__` and `__exit__` to support context managers. Others like numerical operations
+  `__add__` and `__sub__` doesn't really make sense. Maybe one day when we have neural networks
   but even then it's not clear how we would use them.
   """
   def __init__(self, op: Operator):
     super().__init__()
     self.wrapped_cls = op
 
-  def forward(self, data, response: Response) -> Dict[str, str]:
+  def forward(self, data, response) -> Dict[str, str]:
+    response: Response = response
     _k = set(tuple(data.keys())) - set(["rpc_name", "key", "value"])
     if _k:
       response.status_code = 400

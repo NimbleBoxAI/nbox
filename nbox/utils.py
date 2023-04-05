@@ -3,30 +3,31 @@ Utility objects and functions.
 
 This has a couple of cool things:
 
-#. ``get_logger``: a master logger for nbox, this can be modified to log through anything
-#. ``isthere``: a decorator that checks if a package is installed, if not it raises an error\
+- `get_logger`: a master logger for nbox, this can be modified to log through anything
+- `isthere`: a decorator that checks if a package is installed, if not it raises an error\
   It is more complicated than it needs to be because it is seedling for a way to package\
   functions and code together so that it can be used in a more dynamic way.
-#. ``get_files_in_folder``: a function that returns all files in a folder with a certain extension
-#. ``fetch``: a function that fetches a url and caches it in ``tempdir`` for faster loading
-#. ``get_random_name``: a function that returns a random name, if ``True`` is passed returns\
-  an ``uuid4()`` for truly random names :)
-#. ``hash_``: a function that returns a hash of any python object, string is accurate, others\
+- `get_files_in_folder`: a function that returns all files in a folder with a certain extension
+- `fetch`: a function that fetches a url and caches it in `tempdir` for faster loading
+- `get_random_name`: a function that returns a random name, if `True` is passed returns\
+  an `uuid4()` for truly random names :)
+- `hash_`: a function that returns a hash of any python object, string is accurate, others\
   might be anything, but atleast it returns something.
-#. ``folder/join``: to be used in pair, ``join(folder(__file__), "server_temp.jinja")`` means\
+- `folder/join`: to be used in pair, `join(folder(__file__), "server_temp.jinja")` means\
   relative path "../other.py". Scattered throughout the codebase, the super generic name will\
   bite me.
-#. ``to_pickle/from_pickle``: to be used in pair, ``to_pickle(obj, "path")`` and ``from_pickle("path")``\
+- `to_pickle/from_pickle`: to be used in pair, `to_pickle(obj, "path")` and `from_pickle("path")`\
   to save and load python objects to disk.
-#. ``DBase``: सस्ता-protobuf (cheap protobuf), can be nested and ``get_dict`` will get for all\
+- `DBase`: सस्ता-protobuf (cheap protobuf), can be nested and `get_dict` will get for all\
   children
-#. ``PoolBranch``: Or how to use multiprocessing, but blocked so you don't have to give a shit\
+- `PoolBranch`: Or how to use multiprocessing, but blocked so you don't have to give a shit\
   about it.
 """
 
 ############################################################
 # This file is d0 meaning that this has no dependencies!
 # Do not import anything from rest of nbox here!
+# only exception is `nbox.nbxlib.logger`
 ############################################################
 
 # this file has bunch of functions that are used everywhere
@@ -34,7 +35,6 @@ This has a couple of cool things:
 import os
 import sys
 import json
-import logging
 import hashlib
 import requests
 import tempfile
@@ -42,42 +42,47 @@ import traceback
 import randomname
 import cloudpickle
 from uuid import uuid4
-from typing import List
+from typing import List, Any
 from contextlib import contextmanager
 from base64 import b64encode, b64decode
 from datetime import datetime, timezone
-from pythonjsonlogger import jsonlogger
 from functools import partial, lru_cache
 from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from google.protobuf.timestamp_pb2 import Timestamp as Timestamp_pb
 
+from nbox.nbxlib.logger import get_logger, lo
+
 class env:
   """
   Single namespace for all environment variables.
   
-  #. ``NBOX_LOG_LEVEL``: Logging level for ``nbox``, set ``NBOX_LOG_LEVEL=info|debug|warning"
-  #. ``NBOX_JSON_LOG``: Whether to print json-logs, set ``NBOX_JSON_LOG=1``
-  #. ``NBOX_JOB_FOLDER``: Folder path for the job, set ``NBOX_JOB_FOLDER=/tmp/nbox/jobs"``
-  #. ``NBOX_NO_AUTH``: If set ``secrets = None``, this will break any API request and is good only for local testing
-  #. ``NBOX_SSH_NO_HOST_CHECKING``: If set, ``ssh`` will not check for host key
-  #. ``NBOX_HOME_DIR``: By default ~/.nbx folder
-  #. ``NBOX_USER_TOKEN``: User token for NimbleBox.ai from <app.nimblebox.ai/secrets>_
-  #. ``NBOX_NO_LOAD_GRPC``: If set, will not load grpc stub
-  #. ``NBOX_NO_LOAD_WS``: If set, will not load webserver subway
-  #. ``NBOX_LMAO_DISABLE_RELICS``: If set, Monitoring data will be stored on the cloud Relic
-  #. ``NBOX_LMAO_DISABLE_SYSTEM_METRICS``: If set, system metrics will not logged in monitoring
+  #. `NBOX_LOG_LEVEL`: Logging level for `nbox`, set `NBOX_LOG_LEVEL=info|debug|warning"
+  #. `NBOX_ACCESS_TOKEN`: User token for NimbleBox.ai from [secrets](app.nimblebox.ai/secrets)
+  #. `NBOX_NO_AUTH`: If set `secrets = None`, this will break any API request and is good only for local testing
+  #. `NBOX_NO_LOAD_GRPC`: If set, will not load grpc stub
+  #. `NBOX_NO_LOAD_WS`: If set, will not load webserver subway
+  #. `NBOX_NO_CHECK_VERSION`: If set, will not check for version
+  #. `NBOX_SSH_NO_HOST_CHECKING`: If set, `ssh` will not check for host key
+  #. `NBOX_HOME_DIR`: By default `~/.nbx` folder, avoid changing this, user generally does not need to set this
+  #. `NBOX_JSON_LOG`: Whether to print json-logs, user generally does not need to set this
+  #. `NBOX_JOB_FOLDER`: Folder path for the job, user generally does not need to set this
   """
+  # things user can chose to set if they want
   NBOX_LOG_LEVEL = lambda x: os.getenv("NBOX_LOG_LEVEL", x)
-  NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
-  NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
-  NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
+  NBOX_ACCESS_TOKEN = lambda x: os.getenv("NBOX_ACCESS_TOKEN", x)
   NBOX_SSH_NO_HOST_CHECKING = lambda x: os.getenv("NBOX_SSH_NO_HOST_CHECKING", x)
-  NBOX_HOME_DIR = lambda : os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
-  NBOX_USER_TOKEN = lambda x: os.getenv("NBOX_USER_TOKEN", x)
+
+  # things that are good mostly for testing and development of nbox itself
+  NBOX_NO_AUTH = lambda x: os.getenv("NBOX_NO_AUTH", x)
   NBOX_NO_LOAD_GRPC = lambda: os.getenv("NBOX_NO_LOAD_GRPC", False)
   NBOX_NO_LOAD_WS = lambda: os.getenv("NBOX_NO_LOAD_WS", False)
   NBOX_NO_CHECK_VERSION = lambda: os.getenv("NBOX_NO_CHECK_VERSION", False)
+  
+  # that that should be avoided to change, but provided here for max. control
+  NBOX_HOME_DIR = lambda : os.environ.get("NBOX_HOME_DIR", os.path.join(os.path.expanduser("~"), ".nbx"))
+  NBOX_JSON_LOG = lambda x: os.getenv("NBOX_JSON_LOG", x)
+  NBOX_JOB_FOLDER = lambda x: os.getenv("NBOX_JOB_FOLDER", x)
 
   def set(key, value):
     os.environ[key] = value
@@ -86,55 +91,26 @@ class env:
     return os.environ.get(key, default)
 
 # logger /
-
-logger = None
-
-def get_logger():
-  # add some handling so files can use functional way of getting logger
-  global logger
-  if logger is not None:
-    return logger
-
-  logger = logging.getLogger("utils")
-  lvl = env.NBOX_LOG_LEVEL("info").upper()
-  logger.setLevel(getattr(logging, lvl))
-
-  if env.NBOX_JSON_LOG(False):
-    logHandler = logging.StreamHandler()
-    logHandler.setFormatter(jsonlogger.JsonFormatter(
-      '%(timestamp)s %(levelname)s %(message)s ',
-      timestamp=True
-    ))
-    logger.addHandler(logHandler)
-  else:
-    logHandler = logging.StreamHandler()
-    logHandler.setFormatter(logging.Formatter(
-      '[%(asctime)s] [%(levelname)s] [%(filename)s:%(lineno)d] %(message)s',
-      datefmt = "%Y-%m-%dT%H:%M:%S%z"
-    ))
-    logger.addHandler(logHandler)
-
-  return logger
-
-logger = get_logger() # package wide logger
+logger = get_logger(env) # package wide logger
+# logger = NBXUnifiedLogger(env) # package wide logger
 
 def log_traceback():
-  f = traceback.format_exc()
-  for _l in f.splitlines():
-    logger.error(_l.rstrip())
-
+  # for l in traceback.format_exc().splitlines():
+  #   logger.error(l)
+  logger.error(traceback.format_exc())
 
 @contextmanager
 def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
   from nbox.version import __version__
-  logger.warning("Deprecation Warning")
-  logger.warning(f"  current: {__version__}")
-  logger.warning(f"  removed: {remove}")
-  logger.warning(f"      msg: {msg}")
+  msg = "Deprecation Warning" \
+    f"\n  current: {__version__}" \
+    f"\n  removed: {remove}" \
+    f"\n      msg: {msg}"
   if replace_by:
-    logger.warning(f"  replace: {replace_by}")
+    msg += f"\n  replace: {replace_by}"
   if help:
-    logger.warning(f"  help: {help}")
+    msg += f"\n  help: {help}"
+  logger.warning(msg)
 
 class FileLogger:
   """Flush logs to a file, useful when we don't want to mess with current logging"""
@@ -169,7 +145,7 @@ def isthere(*packages, soft = True):
   """Checks all the packages
 
   Args:
-      soft (bool, optional): If ``False`` raises ``ImportError``. Defaults to True.
+      soft (bool, optional): If `False` raises `ImportError`. Defaults to `True`.
   """
   def wrapper(fn):
     _fn_ = fn
@@ -215,7 +191,7 @@ def get_files_in_folder(
   abs_path: bool = True,
   followlinks: bool = False,
 ) -> List[str]:
-  """Get files with ``ext`` in ``folder``"""
+  """Get files with `ext` in `folder`"""
   # this method is faster than glob
   import os
   all_paths = []
@@ -234,7 +210,7 @@ def get_files_in_folder(
   return all_paths
 
 def fetch(url, force = False):
-  """Fetch and cache a url for faster loading, ``force`` re-downloads"""
+  """Fetch and cache a url for faster loading, `force` re-downloads"""
   fp = join(tempfile.gettempdir(), hash_(url))
   if os.path.isfile(fp) and os.stat(fp).st_size > 0 and not force:
     with open(fp, "rb") as f:
@@ -246,26 +222,37 @@ def fetch(url, force = False):
     os.rename(fp + ".tmp", fp)
   return dat
 
-def folder(x):
+def folder(x) -> str:
   """get the folder of this file path"""
   return os.path.split(os.path.abspath(x))[0]
 
-def join(x, *args):
+def join(x, *args) -> str:
   """convienience function for os.path.join"""
   return os.path.join(x, *args)
 
 def to_pickle(obj, path):
+  """Save an object to a pickle file
+  
+  Args:
+    obj: object to save
+    path: path to save to
+  """
   with open(path, "wb") as f:
     cloudpickle.dump(obj, f)
 
 def from_pickle(path):
+  """Load an object from a pickle file
+
+  Args:
+    path: path to load from
+  """
   with open(path, "rb") as f:
     return cloudpickle.load(f)
 
-def py_to_bs64(x: str):
+def py_to_bs64(x: Any):
   return b64encode(cloudpickle.dumps(x)).decode("utf-8")
 
-def py_from_bs64(x: str):
+def py_from_bs64(x: bytes):
   return cloudpickle.loads(b64decode(x.encode("utf-8")))
 
 def to_json(x: dict, fp: str = "", indent = 2):
@@ -290,7 +277,7 @@ def get_assets_folder():
 # misc/
 
 def get_random_name(uuid = False):
-  """Get a random name, if ``uuid`` is ``True``, return a uuid4"""
+  """Get a random name, if `uuid` is `True`, return a uuid4"""
   if uuid:
     return str(uuid4())
   return randomname.generate()
@@ -301,10 +288,10 @@ def hash_(item, fn="md5"):
 
 
 @lru_cache()
-def get_mime_type(x: str, defualt = "application/octet-stream"):
+def get_mime_type(fp: str, defualt = "application/octet-stream"):
   with open(join(get_assets_folder(), "ex2mime.json"), "r") as f:
     mimes = json.load(f)
-  return mimes.get(x, defualt)
+  return mimes.get(os.path.splitext(fp)[1].lower(), defualt)
 
 
 # /misc
@@ -383,7 +370,7 @@ def threaded_map(fn, inputs, wait: bool = True, max_threads = 20, _name: str = N
 
 # /pool
 
-def _exit_program(code = 0):
+def hard_exit_program(code = 0):
   # why use os._exit over sys.exit:
   # https://stackoverflow.com/questions/9591350/what-is-difference-between-sys-exit0-and-os-exit0
   # https://stackoverflow.com/questions/19747371/python-exit-commands-why-so-many-and-when-should-each-be-used
@@ -410,6 +397,9 @@ class SimplerTimes:
     ts = Timestamp_pb()
     ts.GetCurrentTime()
     return ts
+  
+  def get_now_ns() -> int:
+    return SimplerTimes.get_now_pb().ToNanoseconds()
 
   def i64_to_datetime(i64) -> datetime:
     return datetime.fromtimestamp(i64, SimplerTimes.tz)

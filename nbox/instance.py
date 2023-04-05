@@ -1,30 +1,28 @@
 """
 NBX-Build Instances are APIs to your machines. These APIs can be used to change state of the machine (start, stop,
-etc.), can be used to transfer files to and from the machine (using ``Instance.mv`` commands), calling any shell
-command using ``Instance.remote``.
+etc.), can be used to transfer files to and from the machine (using `Instance.mv` commands), calling any shell
+command using `Instance.remote`.
 
-CLI Commands
-------------
+### CLI Commands
 
 Build comes built in with several functions to move and list files from the instance. All you need to know is that
-cloud files have prefix ``nbx://`` which is where your projects are. Here's a quick list:
+cloud files have prefix `nbx://` which is where your projects are. Here's a quick list:
 
-.. code-block:: bash
+```bash
 
-  # move files
-  nbx build -i 'instance_name' --workspace_id 'workspace_id' \
-    mv ./local_file nbx://cloud_file
+# move files
+nbx build -i 'instance_name' --workspace_id 'workspace_id' \
+  mv ./local_file nbx://cloud_file
 
-  # or move folders
-  nbx build -i 'instance_name' --workspace_id 'workspace_id' \
-    mv ./local_folder nbx://in_this/folder/
+# or move folders
+nbx build -i 'instance_name' --workspace_id 'workspace_id' \
+  mv ./local_folder nbx://in_this/folder/
 
+```
 
-You might be required to agree to the SSH connection being setup. If you want to avoid that set ``NBOX_SSH_NO_HOST_CHECKING=1``.
+You might be required to agree to the SSH connection being setup. If you want to avoid that set `NBOX_SSH_NO_HOST_CHECKING=1`.
 All these APIs are also available in python.
 
-Documentation
--------------
 """
 
 import io
@@ -38,7 +36,7 @@ from typing import Dict, List
 from requests.sessions import Session
 
 import nbox.utils as U
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig
 from nbox.utils import logger
 from nbox.subway import TIMEOUT_CALLS, Sub30
 from nbox.init import nbox_ws_v1, create_webserver_subway
@@ -54,14 +52,15 @@ make the entire process functional.
 ################################################################################
 
 def print_status(fields: List[str] = [], *, workspace_id: str = ""):
-  """Print complete status of NBX-Build instances. If ``workspace_id`` is not provided
-  personal workspace will be used. Used in CLI"""
+  """Print complete status of NBX-Build instances. If `workspace_id` is not provided
+  personal workspace will be used. Used in CLI
+  
+  Args:
+    fields (List[str], optional): fields to print. Defaults to []. If not provided all fields will be printed.
+  """
   logger.info("Getting NBX-Build details")
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-  if not workspace_id:
-    stub_projects = nbox_ws_v1.user.projects
-  else:
-    stub_projects = nbox_ws_v1.workspace.u(workspace_id).projects
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+  stub_projects = nbox_ws_v1.projects
 
   fields = fields or Instance.useful_keys
 
@@ -88,25 +87,20 @@ class Instance():
   useful_keys = ["project_id", "project_name", "size_used", "size", "state"]
 
   def __init__(self, i: str, *, workspace_id: str = ""):
-    """NBX-Build Instance class manages the both individual instance, but provides
-    webserver functionality using ``nbox_ws_v1``, such as starting and stopping,
-    deletion and more.
+    """NBX-Build Instance class manages the both individual instance, but provides webserver functionality using
+    `nbox_ws_v1`, such as starting and stopping, deletion and more.
 
     Args:
-        i (str): name or ``project_id`` of the instance
-        workspace_id (int, optional): id of the workspace to use, if not provided
-            personal workspace will be used.
-        cs_endpoint (str, optional): endpoint to use for the webserver, this will connect
-          to the custom ports functionality of the instance. Defaults to ``server``,
+      i (str): name or `project_id` of the instance
     """
     if not i:
-      raise ValueError("Instance id must be provided, try --i='8h57f9'")
+      raise ValueError("Instance id must be provided, try --i='1023'")
     i = str(i)
 
     # simply add useful keys to the instance
     self.project_id: str = None
     self.project_name: str = None
-    self.workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id)
+    self.workspace_id: str = workspace_id or secret(AuthConfig.workspace_id)
     self.size_used: float = None
     self.size: float = None
     self.state: str = None
@@ -116,12 +110,9 @@ class Instance():
 
     # create a new subway for webserver
     sess = Session()
-    sess.headers.update({"Authorization": f"Bearer {secret.get('access_token')}"})
+    sess.headers.update({"Authorization": f"Bearer {secret('access_token')}"})
     stub_ws_instance = create_webserver_subway("v1", sess)
-    if self.workspace_id == None:
-      stub_projects = stub_ws_instance.user.projects
-    else:
-      stub_projects = stub_ws_instance.workspace.u(self.workspace_id).instances
+    stub_projects = stub_ws_instance.instances
 
     # filter and get the data
     project_details = stub_projects()["project_details"]
@@ -179,12 +170,22 @@ class Instance():
     *,
     workspace_id: str = "",
   ) -> 'Instance':
-    """Create a new NBX-Build instance."""
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-    if not workspace_id:
-      stub_all_projects = nbox_ws_v1.user.projects
-    else:
-      stub_all_projects = nbox_ws_v1.workspace.u(workspace_id).projects
+    """Create a new NBX-Build instance.
+    
+    Args:
+      project_name (str): Name of the instance
+      storage_limit (int, optional): Storage limit in GB. Defaults to 25.
+      project_type (str, optional): Type of the instance. Defaults to "blank".
+      github_branch (str, optional): Branch of the github repo. Defaults to "".
+      github_link (str, optional): Link to the github repo. Defaults to "".
+      template_id (int, optional): ID of the template to use. Defaults to 0.
+      clone_id (int, optional): ID of the instance to clone. Defaults to 0.
+
+    Returns:
+      Instance: The newly created instance.
+    """
+    workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+    stub_all_projects = nbox_ws_v1.projects
 
     kwargs_dict = {
       "project_name": project_name,
@@ -211,19 +212,27 @@ class Instance():
   """
   ################################################################################
 
-  def get_subway(self, key = "stablediff"):
+  def get_subway(self, subdomain) -> Sub30:
+    """Get a Subway object for the instance.
+
+    Args:
+      subdomain (str): The subdomain to connect to
+    
+    Returns:
+      Subway: The Subway object.
+    """
     self._unopened_error()
 
     build = "build"
-    if "app.c." in secret.get("nbx_url"):
+    if "app.c." in secret("nbx_url"):
       build = "build.c"
-    elif "app.rc" in secret.get("nbx_url"):
+    elif "app.rc" in secret("nbx_url"):
       build = "build.rc"
-    url = f"https://{key}-{self.open_data['url']}.{build}.nimblebox.ai/",
+    url = f"https://{subdomain}-{self.open_data['url']}.{build}.nimblebox.ai/",
     session = Session(
       headers = {
         "NBX-TOKEN": self.open_data["token"],
-        "X-NBX-USERNAME": secret.get("username"),
+        "X-NBX-USERNAME": secret("username"),
       }
     )
     r = session.get(url + "openapi.json")
@@ -243,7 +252,7 @@ class Instance():
     """Check if the instance is running.
 
     Returns:
-        bool: True if the instance is running, False otherwise.
+      bool: True if the instance is running, False otherwise.
     """
     return self.state == "RUNNING"
 
@@ -315,12 +324,12 @@ class Instance():
     Actual start is implemented in `_start` method, this combines other things
 
     Args:
-        cpu (int, optional): CPU count should be one of ``[2, 4, 8]``
-        gpu (str, optional): GPU name should be one of ``["t5", "p100", "v100", "k80"]``
-        gpu_count (int, optional): When zero, cpu-only instance is started
-        auto_shutdown (int, optional): No autoshutdown if zero, defaults to 6.
-        dedicated_hw (bool, optional): If not spot/pre-emptible like machines used
-        zone (str, optional): GCP cloud regions, defaults to "asia-south-1".
+      cpu (int, optional): CPU count should be one of ``[2, 4, 8]``
+      gpu (str, optional): GPU name should be one of ``["t5", "p100", "v100", "k80"]``
+      gpu_count (int, optional): When zero, cpu-only instance is started
+      auto_shutdown (int, optional): No autoshutdown if zero, defaults to 6.
+      dedicated_hw (bool, optional): If not spot/pre-emptible like machines used
+      zone (str, optional): GCP cloud regions, defaults to "asia-south-1".
     """
     
 
@@ -339,7 +348,7 @@ class Instance():
       self._open()
 
   def stop(self):
-    """Stop Instance"""
+    """Stop the Instance"""
     if self.state == "STOPPED":
       logger.info(f"Instance {self.project_name} ({self.project_id}) is already stopped")
       return
@@ -403,7 +412,7 @@ class Instance():
 
     conman = ConnectionManager(
       file_logger = file_logger,
-      user = secret.get("username"), 
+      user = secret("username"), 
       subdomain = self.open_data.get("url"),
       auth = self.open_data.get("token"),
     )
@@ -437,14 +446,17 @@ class Instance():
     connection.quit()
     return result.strip()
 
-  def ls(self, path: str, *, port: int = 6174):
+  def ls(self, path: str, *, port: int = 6174) -> str:
     """
     List files in a directory relative to '/home/ubuntu/project'
 
     ```
     [nbox API] - nbox.Instance(...).ls("/")
-    [nbox CLI] - python3 -m nbox build ... ls ./
+    [nbox CLI] - nbx build ... ls ./
     ```
+
+    Args:
+      path (str): Path to list files in all paths will be built relative to "/home/ubuntu/project/" folder.
     """
     self._unopened_error()
     if path.startswith("nbx://"):
@@ -464,10 +476,13 @@ class Instance():
 
   def mv(self, src: str, dst: str, force: bool = False, *, port: int = 6174):
     """
-    Move files to and fro NBX-Build.
+    Move files to and fro NBX-Build. Use 'nbx://' as prefix for Instance, all files will be placed relative to
+    '/home/ubuntu/project/' folder.
 
-    Use 'nbx://' as prefix for Instance, all files will be placed relative to
-    "/home/ubuntu/project/" folder.
+    Args:
+      src (str): Source file or folder to move
+      dst (str): Destination file or folder to move to
+      force (bool): If True, will override the destination file if it already exists
     """
     self._unopened_error()
 
@@ -520,9 +535,12 @@ class Instance():
     result = self.__run_command(comm, port)
     return result
 
-  def rm(self, file: str, *, port: int = 6174):
+  def rm(self, file: str, *, port: int = 6174) -> str:
     """
     Remove file from NBX-Build.
+
+    Args:
+      file (str): File to remove
     """
     self._unopened_error()
 
@@ -539,10 +557,12 @@ class Instance():
     result = self.__run_command(comm, port)
     return result
 
-  def remote(self, x: str, *, port: int = 6174):
+  def remote(self, x: str, *, port: int = 6174) -> str:
     """
-    Run any command using SSH, in the underlying system it will setup a SSH connection and execute
-    any command.
+    Run any command using SSH, in the underlying system it will setup a SSH connection and execute any command.
+
+    Args:
+      x (str): Command to run
     """
     self._unopened_error()
 

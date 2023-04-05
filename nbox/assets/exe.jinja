@@ -1,8 +1,9 @@
-# Auto generated code by 'nbox deploy/serve upload' command
+# Auto generated code by 'nbox job/serve upload' command
 # created time: {{ created_time }}
 # nbox version: {{ nbox_version }}
 
 import os
+os.environ["NBOX_JSON_LOG"] = '1' # since we finally have a pretty logging on the dashboard
 os.environ["NBOX_JOB_FOLDER"] = os.path.split(os.path.abspath(__file__))[0] # do not change
 os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 
@@ -36,7 +37,7 @@ def get_op(cloud = False) -> Operator:
   except Exception as e:
     U.log_traceback()
     logger.error(f"Failed to load operator: {e}")
-    U._exit_program(1)
+    U.hard_exit_program(1)
 
   if cloud:
     try:
@@ -46,12 +47,16 @@ def get_op(cloud = False) -> Operator:
     except Exception as e:
       U.log_traceback()
       logger.error(f"Failed to remote initialise operator: {e}")
-      U._exit_program(1)
+      U.hard_exit_program(1)
   return op
 
 if __name__ == "__main__":
   nbxlet = NBXLet(op = get_op(cloud = True))
   fire.Fire({
     "run": nbxlet.run,     # NBX-Jobs
-    "serve": partial(nbxlet.serve, model_name = "{{ model_name }}"), # NBX-Deploy
+    "serve": partial(
+      nbxlet.serve,
+      model_name = "{{ model_name }}",
+      serving_type = "{{ serving_type }}"
+    ), # NBX-Deploy
   })

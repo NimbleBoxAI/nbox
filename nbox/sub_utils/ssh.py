@@ -1,20 +1,12 @@
 """
 Creates a socket tunnel between users localhost to server called RSockServer (Reverse Socket Server) .
 
-Usage
------
+```bash
+nbx tunnel 8000 --i "nbox-dev"
+```
 
-.. code-block:: bash
-
-  nbx tunnel 8000 --i "nbox-dev"
+{% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
 """
-
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:3: ERROR: Unexpected indentation.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh:4: WARNING: Block quote ends without a blank line; unexpected unindent.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:6: ERROR: Unexpected indentation.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:19: WARNING: Bullet list ends without a blank line; unexpected unindent.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:20: WARNING: Enumerated list ends without a blank line; unexpected unindent.
-# /Users/yashbonde/Desktop/wrk/nbx/rnd/nbox/nbox/sub_utils/ssh.py:docstring of nbox.sub_utils.ssh.RSockClient:21: WARNING: Enumerated list ends without a blank line; unexpected unindent.
 
 import os
 import sys
@@ -29,7 +21,7 @@ from typing import List
 import grpc
 from nbox.utils import logger as nbx_logger, FileLogger
 from nbox import utils as U
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig
 from nbox.instance import Instance
 from nbox.sub_utils.rsock_pb.rsock_pb2_grpc import RSockStub
 from nbox.sub_utils.rsock_pb.rsock_pb2 import HandshakeRequest, HandshakeResponse, DataPacket
@@ -74,7 +66,6 @@ class RSockClient:
       instance_port: The port that the instance is listening on.
       auth: The authentication token that the client has to provide to connect to the RSockServer.
       secure: Whether or not the client is using SSL.
-    
     """
     self.connection_id = connection_id
     self.client_socket = client_socket
@@ -110,7 +101,7 @@ class RSockClient:
     Connects to RSockServer.
     """
     self.log('Connecting to RSockServer', "DEBUG")
-    token_cred = grpc.access_token_call_credentials(secret.get("access_token"))
+    token_cred = grpc.access_token_call_credentials(secret("access_token"))
     ssl_cred = grpc.ssl_channel_credentials()
     creds = grpc.composite_channel_credentials(ssl_cred, token_cred)
     channel = grpc.secure_channel(f'{self.launch_url.replace("https://","").replace(self.subdomain,"rsock")}:443', creds)
@@ -323,7 +314,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   # conman runs threads internally for multiple connections
   conman = ConnectionManager(
     file_logger = file_logger,
-    user = secret.get("username"), 
+    user = secret("username"), 
     subdomain = instance.open_data.get("url"),
     auth = instance.open_data.get("token"),
     launch_url = instance.open_data.get("launch_url"),
@@ -342,11 +333,10 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str = "")
 
   Args:
     port: Local port for terminal
-    *apps_to_ports: A tuple of values `buildport:localport`. For example, ``jupyter:8888`` or ``2001:8002``
+    *apps_to_ports: A tuple of values `buildport:localport`. For example, `jupyter:8888` or `2001:8002`
     i(str): The instance to connect to
-    pwd (str): password to connect to that instance.
   """
-  workspace_id: str = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id: str = workspace_id or secret(AuthConfig.workspace_id)
   connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)
 
   try:

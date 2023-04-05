@@ -1,6 +1,9 @@
 """This file contains the code for observability in the networking layer. This is not the same as in case of prometheus
 because in our structure the pod is going to be informing the DB about the metrics and not the other way around. We are
-chosing this approach because it allows for more flexibility in the future."""
+chosing this approach because it allows for more flexibility in the future.
+
+{% CallOut variant="info" label="This is currently a work in progress, please check back later for progress or reach out to NimbleBox support." /%}
+"""
 
 from typing import Tuple
 from threading import Lock
@@ -93,4 +96,4 @@ except ImportError:
 
 
 
-from starlette_prometheus import metrics, PrometheusMiddleware
+# from starlette_prometheus import metrics, PrometheusMiddleware

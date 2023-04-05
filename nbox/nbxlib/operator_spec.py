@@ -1,24 +1,36 @@
+"""
+## OperatorSpec
+
+This file is a helper file for the `Operator` class. It contains the `OperatorSpec` class which can be thought of
+as the `struct` that contains all the information needed to run an `Operator`. This is then used across all the
+functions in the `Operator` to provide relevant behaviour.
+
+{% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
+"""
+
 import os
 import inspect
 from enum import Enum
+from typing import Union
 from threading import Thread, Lock
 from time import sleep
 
 import nbox.utils as U
 from nbox.utils import logger
-from nbox.hyperloop.common_pb2 import Resource
+from nbox.hyperloop.common.common_pb2 import Resource
 
-class OperatorType(Enum):
+
+class OperatorType():
   """This Enum does not concern the user, however I am describing it so people can get a feel of the breadth
-  of what nbox can do. The purpose of ``Operator`` is to build an abstract representation of any possible compute
+  of what nbox can do. The purpose of `Operator` is to build an abstract representation of any possible compute
   and execute them in any fashion needed to improve the overall performance of any distributed software system.
   Here are the different types of operators:
 
-  #. ``UNSET``: this is the default mode and is like using vanilla python without any nbox features.
-  #. ``JOB``: In this case the process is run as a batch process and the I/O of values is done using Relics
-  #. ``SERVING``: In this case the process is run as an API proces
-  #. ``WRAP_FN``: When we wrap a function as an ``Operator``, by default deployed as a job
-  #. ``WRAP_CLS``: When we wrap a class as an ``Operator``, by default deployed as a serving
+  - `UNSET`: this is the default mode and is like using vanilla python without any nbox features.
+  - `JOB`: In this case the process is run as a batch process and the I/O of values is done using Relics
+  - `SERVING`: In this case the process is run as an API proces
+  - `WRAP_FN`: When we wrap a function as an `Operator`, by default deployed as a job
+  - `WRAP_CLS`: When we wrap a class as an `Operator`, by default deployed as a serving
   """
   UNSET = "unset" # default
   JOB = "job"
@@ -27,12 +39,11 @@ class OperatorType(Enum):
   WRAP_CLS = "cls_wrap"
 
   def _valid_deployment_types():
-    return (OperatorType.JOB.value, OperatorType.SERVING.value)
-
+    return (OperatorType.JOB, OperatorType.SERVING)
 
 class _UnsetSpec:
   def __init__(self):
-    self.type = OperatorType.UNSET.value
+    self.type = OperatorType.UNSET
 
   def __repr__(self):
     return f"[{self.type}]"
@@ -47,7 +58,7 @@ class _JobSpec:
   ):
     from nbox import Job
 
-    self.type = OperatorType.JOB.value
+    self.type = OperatorType.JOB
     self.job_id = job_id
     self.rpc_fn_name = rpc_fn_name
     self.job: Job = job
@@ -65,7 +76,7 @@ class _ServingSpec:
     workspace_id,
     track_io: bool = False
   ):
-    self.type = OperatorType.SERVING.value
+    self.type = OperatorType.SERVING
     self.serving_id = serving_id
     self.rpc_fn_name = rpc_fn_name
     self.fn_spec = fn_spec
@@ -77,7 +88,7 @@ class _ServingSpec:
 
 class _WrapFnSpec:
   def __init__(self, fn_name, wrap_obj):
-    self.type = OperatorType.WRAP_FN.value
+    self.type = OperatorType.WRAP_FN
     self.fn_name = fn_name
     self.wrap_obj = wrap_obj
 
@@ -86,7 +97,7 @@ class _WrapFnSpec:
 
 class _WrapClsSpec:
   def __init__(self, cls_name, wrap_obj, init_ak):
-    self.type = OperatorType.WRAP_CLS.value
+    self.type = OperatorType.WRAP_CLS
     self.cls_name = cls_name
     self.wrap_obj = wrap_obj
     self.init_ak = init_ak
@@ -204,8 +215,8 @@ class _LocalMapPooler:
 
 
 DEFAULT_RESOURCE = Resource(
-  cpu = "100m",         # 100mCPU
-  memory = "512Mi",     # MiB
+  cpu = "128m",         # 100mCPU
+  memory = "256Mi",     # MiB
   disk_size = "5Gi",    # GiB
   gpu = "none",         # keep "none" for no GPU
   gpu_count = "0",      # keep "0" when no GPU

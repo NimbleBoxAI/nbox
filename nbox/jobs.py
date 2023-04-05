@@ -1,32 +1,43 @@
 """
-``nbox.Job`` and ``nbox.Serve`` are wrappers to the NBX-Jobs and NBX-Deploy APIs and contains staticmethods for convinience from the CLI.
+`nbox.Job` and `nbox.Serve` are wrappers to the NBX-Jobs and NBX-Deploy APIs and contains staticmethods for convinience from the CLI.
 
-* ``datetime.now(timezone.utc)`` is incorrect, use `this <https://blog.ganssle.io/articles/2019/11/utcnow.html>`_ method.
+* `datetime.now(timezone.utc)` is incorrect, use [this](https://blog.ganssle.io/articles/2019/11/utcnow.html) method.
 """
 
 import os
 import sys
 import tabulate
+from typing import Tuple, List, Dict
 from functools import lru_cache, partial
 from datetime import datetime, timedelta, timezone
 from google.protobuf.timestamp_pb2 import Timestamp
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.utils import logger
 from nbox.version import __version__
 from nbox.messages import rpc, streaming_rpc
 from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub, nbox_model_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
-from nbox.hyperloop.nbox_ws_pb2 import JobRequest
-from nbox.hyperloop.job_pb2 import Job as JobProto
-from nbox.hyperloop.dag_pb2 import DAG as DAGProto
-from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource
-from nbox.hyperloop.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto
+from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest
+from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
+from nbox.hyperloop.jobs.dag_pb2 import DAG as DAGProto
+from nbox.hyperloop.common.common_pb2 import Resource
+from nbox.hyperloop.jobs.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
+from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto, UpdateModelRequest
 
+
+DEFAULT_RESOURCE = Resource(
+  cpu = "128m",         # 100mCPU
+  memory = "256Mi",     # MiB
+  disk_size = "3Gi",    # GiB
+  gpu = "none",         # keep "none" for no GPU
+  gpu_count = "0",      # keep "0" when no GPU
+  timeout = 120_000,    # 2 minutes between attempts
+  max_retries = 2,      # third times the charm :P
+)
 
 
 class Schedule:
@@ -39,38 +50,36 @@ class Schedule:
     starts: datetime = None,
     ends: datetime = None,
   ):
-    """Make scheduling natural.
-
-    Usage:
-
-    ```python
-    # 4:20 everyday
-    Schedule(4, 0)
-
-    # 4:20 every friday
-    Schedule(4, 20, ["fri"])
-
-    # 4:20 every friday from jan to feb
-    Schedule(4, 20, ["fri"], ["jan", "feb"])
-
-    # 4:20 everyday starting in 2 days and runs for 3 days
-    starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
-    Schedule(4, 20, starts = starts, ends = starts + timedelta(days = 3))
-
-    # Every 1 hour
-    Schedule(1)
-
-    # Every 69 minutes
-    Schedule(minute = 69)
-    ```
+    """Make scheduling natural. Uses 24-hour nomenclature.
 
     Args:
-      hour (int): Hour of the day, if only this value is passed it will run every ``hour``
-      minute (int): Minute of the hour, if only this value is passed it will run every ``minute``
+      hour (int): Hour of the day, if only this value is passed it will run every `hour`
+      minute (int): Minute of the hour, if only this value is passed it will run every `minute`
       days (str/list, optional): List of days (first three chars) of the week, if not passed it will run every day.
       months (str/list, optional): List of months (first three chars) of the year, if not passed it will run every month.
       starts (datetime, optional): UTC Start time of the schedule, if not passed it will start now.
       ends (datetime, optional): UTC End time of the schedule, if not passed it will end in 7 days.
+
+    Examples:
+
+      # 4:20PM everyday
+      Schedule(16, 20)
+
+      # 4:20AM every friday
+      Schedule(4, 20, ["fri"])
+
+      # 4:20AM every friday from jan to feb
+      Schedule(4, 20, ["fri"], ["jan", "feb"])
+
+      # 4:20PM everyday starting in 2 days and runs for 3 days
+      starts = datetime.now(timezone.utc) + timedelta(days = 2) # NOTE: that time is in UTC
+      Schedule(16, 20, starts = starts, ends = starts + timedelta(days = 3))
+
+      # Every 1 hour
+      Schedule(1)
+
+      # Every 69 minutes
+      Schedule(minute = 69)
     """
     self.hour = hour
     self.minute = minute
@@ -117,20 +126,26 @@ class Schedule:
 
   @property
   def cron(self):
-    """Cron string"""
+    """Get the cron string for the given schedule"""
     if self.mode == "every":
       return f"{self.minute} {self.hour} * * *"
     return f"{self.minute} {self.hour} * {self.months} {self.days}"
 
   def get_dict(self):
+    """Get the dictionary representation of this Schedule"""
     return {"cron": self.cron, "mode": self.mode, "starts": self.starts, "ends": self.ends}
 
   def get_message(self) -> JobProto.Schedule:
     """Get the JobProto.Schedule object for this Schedule"""
-    _starts = Timestamp(); _starts.GetCurrentTime()
-    _ends = Timestamp(); _ends.FromDatetime(self.ends)
-    # return JobProto.Schedule(start = _starts, end = _ends, cron = self.cron)
-    return JobProto.Schedule(cron = self.cron)
+    _starts = Timestamp()
+    _starts.GetCurrentTime()
+    _ends = Timestamp()
+    _ends.FromDatetime(self.ends)
+    return JobProto.Schedule(
+      start = _starts,
+      end = _ends,
+      cron = self.cron
+    )
 
   def __repr__(self):
     return str(self.get_dict())
@@ -148,27 +163,35 @@ These functions are common to both NBX-Jobs and NBX-Deploy.
 def upload_job_folder(
   method: str,
   init_folder: str,
-  name: str = "",
   id: str = "",
+  project_id: str = "",
   trigger: bool = False,
 
   # all the things for resources
-  resource_cpu: str = "100m",
-  resource_memory: str = "128Mi",
-  resource_disk_size: str = "3Gi",
-  resource_gpu: str = "none",
-  resource_gpu_count: str = "0",
-  resource_timeout: int = 120_000,
-  resource_max_retries: int = 2,
+  resource_cpu: str = "",
+  resource_memory: str = "",
+  resource_disk_size: str = "",
+  resource_gpu: str = "",
+  resource_gpu_count: str = "",
+  resource_timeout: int = 0,
+  resource_max_retries: int = 0,
+
+  # deployment specific
+  model_name: str = "",
 
   # X-type
   serving_type: str = "nbox",
 
   # there's no more need to pass the workspace_id anymore
   workspace_id: str = "",
+
+  # some extra things for functionality
+  _ret: bool = False,
+
+  # finally everything else is assumed to be passed to the initialisation script
   **init_kwargs
 ):
-  """Upload the code for a job or serving to the NBX. if `id_or_name` is not present, it will create a new Job.
+  """Upload the code for a job or serving to the NBX.
 
   ### Engineer's Note
 
@@ -183,6 +206,7 @@ def upload_job_folder(
     init_folder (str): folder with all the relevant files or ``file_path:fn_name`` pair so you can use it as the entrypoint.
     name (str, optional): Name of the job. Defaults to "".
     id (str, optional): ID of the job. Defaults to "".
+    project_id (str, optional): Project ID, if None uses the one from config. Defaults to "".
     trigger (bool, optional): If uploading a "job" trigger the job after uploading. Defaults to False.
     resource_cpu (str, optional): CPU resource. Defaults to "100m".
     resource_memory (str, optional): Memory resource. Defaults to "128Mi".
@@ -197,28 +221,55 @@ def upload_job_folder(
   """
   from nbox.network import deploy_job, deploy_serving
   import nbox.nbxlib.operator_spec as ospec
+  from nbox.nbxlib.serving import SupportedServingTypes as SST
+  from nbox.projects import Project
+  
   OT = ospec.OperatorType
 
   if method not in OT._valid_deployment_types():
     raise ValueError(f"Invalid method: {method}, should be either {OT._valid_deployment_types()}")
-  if (not name and not id) or (name and id):
-    raise ValueError("Either --name or --id must be present")
-  if trigger and method not in [OT.JOB.value, OT.SERVING.value]:
+  # if (not name and not id) or (name and id):
+  #   raise ValueError("Either --name or --id must be present")
+  if trigger and method not in [OT.JOB, OT.SERVING]:
     raise ValueError(f"Trigger can only be used with '{OT.JOB}' or '{OT.SERVING}'")
+  if model_name and method != OT.SERVING:
+    raise ValueError(f"model_name can only be used with '{OT.SERVING}'")
+  
+  # get the correct ID based on the project_id
+  if (not project_id and not id) or (project_id and id):
+    raise ValueError("Either --project-id or --id must be present")
+  if project_id:
+    p = Project(project_id)
+    if method == OT.JOB:
+      id = p.get_job_id()
+    else:
+      id = p.get_deployment_id()
+    logger.info(f"Using project_id: {project_id}, found id: {id}")
 
   if ":" not in init_folder:
     # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
     # in this case the module is loaded on the local machine and so user will need to have
     # everything installed locally. This was a legacy method before 0.10.0
     logger.error(
-      'Old method of having a manual nbx_user.py file is not deprecated\n'
+      'Old method of having a manual nbx_user.py file is now deprecated\n'
       f'  Fix: nbx {method} upload file_path:fn_cls_name --id "id"'
     )
     raise ValueError("Old style upload is not supported anymore")
 
-  # go with the new flow: style of `file_path:fn_name` where we need to upload the entire thing as if
-  # it is done programmatically (i.e. no `nbx_user.py` file)
-  fn_file, fn_name = init_folder.split(":")
+  # In order to upload we can either chose to upload the entire folder, but can we implement a style where
+  # only that specific function is uploaded? This is useful for raw distributed compute style.
+  commands = init_folder.split(":")
+  if len(commands) == 2:
+    fn_file, fn_name = commands
+    mode = "folder"
+  elif len(commands) == 3:
+    mode, fn_file, fn_name = commands
+    if mode not in ["file", "folder"]:
+      raise ValueError(f"Invalid mode: '{mode}' in upload command, should be either 'file' or 'folder'")
+  else:
+    raise ValueError(f"Invalid init_folder: {init_folder}")
+  if mode != "folder":
+    raise NotImplementedError(f"Only folder mode is supported, got: {mode}")
   if not os.path.exists(fn_file+".py"):
     raise ValueError(f"File {fn_file}.py does not exist")
   init_folder, file_name = os.path.split(fn_file)
@@ -230,15 +281,15 @@ def upload_job_folder(
   _curdir = os.getcwd()
   os.chdir(init_folder)
 
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
 
   # Now that we have the init_folder and function name, we can throw relevant errors
   perform_tea = True
-  if method == OT.SERVING.value:
-    if serving_type not in ["nbox", "fastapi"]:
-      raise ValueError(f"Invalid serving_type: {serving_type}, should be either 'nbox' or 'fastapi'")
-    if serving_type == "fastapi":
-      logger.warning(f"You have selected serving_type='fastapi', this assumes the object: {fn_name} is a FastAPI app")
+  if method == OT.SERVING:
+    if serving_type not in SST.all():
+      raise ValueError(f"Invalid serving_type: {serving_type}, should be one of {SST.all()}")
+    if serving_type == SST.FASTAPI or serving_type == SST.FASTAPI_V2:
+      logger.warning(f"You have selected serving_type='{serving_type}', this assumes the object: {fn_name} is a FastAPI app")
       init_code = fn_name
       perform_tea = False
       load_operator = False
@@ -274,7 +325,8 @@ def upload_job_folder(
     "file_name": file_name,
     "fn_name": fn_name,
     "init_code": init_code,
-    "load_operator": load_operator
+    "load_operator": load_operator,
+    "serving_type": serving_type,
   }
 
   # create a requirements.txt file if it doesn't exist with the latest nbox version
@@ -294,45 +346,68 @@ def upload_job_folder(
     with open(U.join(".", ".nboxignore"), "w") as f:
       f.write("\n".join(_igp))
 
-  # just create a resource.pb, if it's empty protobuf will work it out
-  resource = Resource(
-    cpu = str(resource_cpu),
-    memory = str(resource_memory),
-    disk_size = str(resource_disk_size),
-    gpu = str(resource_gpu),
-    gpu_count = str(resource_gpu_count),
-    timeout = resource_timeout,
-    max_retries = resource_max_retries,
-  )
+  # creation of resources, we first need to check if any resource arguments are passed, if they are
+  def __common_resource(db: Resource) -> Resource:
+    # get a common resource based on what the user has said, what the db has and defaults if nothing is given
+    resource = Resource(
+      cpu = str(resource_cpu) or db.cpu or ospec.DEFAULT_RESOURCE.cpu,
+      memory = str(resource_memory) or db.memory or ospec.DEFAULT_RESOURCE.memory,
+      disk_size = str(resource_disk_size) or db.disk_size or ospec.DEFAULT_RESOURCE.disk_size,
+      gpu = str(resource_gpu) or db.gpu or ospec.DEFAULT_RESOURCE.gpu,
+      gpu_count = str(resource_gpu_count) or db.gpu_count or ospec.DEFAULT_RESOURCE.gpu_count,
+      timeout = int(resource_timeout) or db.timeout or ospec.DEFAULT_RESOURCE.timeout,
+      max_retries = int(resource_max_retries) or db.max_retries or ospec.DEFAULT_RESOURCE.max_retries,
+    )
+    return resource
 
   # common to both, kept out here because these two will eventually merge
-  if method == ospec.OperatorType.JOB.value:
-    job_id, job_name = _get_job_data(name = name, id = id, workspace_id = workspace_id)
+  nbx_auth_info = auth_info_pb()
+  if method == ospec.OperatorType.JOB:
+    # since user has not passed any arguments, we will need to check if the job already exists
+    job_proto: JobProto = nbox_grpc_stub.GetJob(
+      JobRequest(
+        auth_info = nbx_auth_info,
+        job = JobProto(id = id)
+      )
+    )
+    resource = __common_resource(job_proto.resource)
     out: Job = deploy_job(
       init_folder = init_folder,
-      job_id = job_id,
-      job_name = job_name,
+      job_id = job_proto.id,
+      job_name = job_proto.name,
       dag = DAGProto(),
       workspace_id = workspace_id,
       schedule = None,
       resource = resource,
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
-
     if trigger:
-      # trigger the job
-      logger.info(f"Triggering job: {job_name} ({job_id})")
+      logger.info(f"Triggering job: {job_proto.name} ({job_proto.id})")
       out = out.trigger()
 
-  elif method == ospec.OperatorType.SERVING.value:
-    serving_id, serving_name = _get_deployment_data(name = name, id = id, workspace_id = workspace_id)
+  elif method == ospec.OperatorType.SERVING:
+    model_name = model_name or U.get_random_name().replace("-", "_")
+    logger.info(f"Model name: {model_name}")
+    
+    # serving_id, serving_name = _get_deployment_data(name = name, id = id, workspace_id = workspace_id)
+    serving_proto: Serving = nbox_serving_service_stub.GetServing(
+      ServingRequest(
+        auth_info = nbx_auth_info,
+        serving = Serving(id=id),
+      )
+    )
+    resource = __common_resource(serving_proto.resource)
     out: Serve = deploy_serving(
       init_folder = init_folder,
-      serving_id = serving_id,
-      serving_name = serving_name,
+      serving_id = serving_proto.id,
+      model_name = model_name,
+      serving_name = serving_proto.name,
       workspace_id = workspace_id,
       resource = resource,
       wait_for_deployment = False,
+      model_metadata = {
+        "serving_type": serving_type
+      },
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
     if trigger:
@@ -341,6 +416,9 @@ def upload_job_folder(
     raise ValueError(f"Unknown method: {method}")
 
   os.chdir(_curdir)
+
+  if _ret:
+    return out
 
 
 ################################################################################
@@ -353,33 +431,54 @@ the highest levels of consistency with the NBX-Jobs API.
 ################################################################################
 
 @lru_cache()
-def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""):
+def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = "") -> Tuple[str, str]:
+  """
+  Get the deployment data, either by name or id
+
+  Args:
+    name (str, optional): Name of the deployment. Defaults to "".
+    id (str, optional): ID of the deployment. Defaults to "".
+
+  Returns:
+    Tuple[str, str]: (id, name)
+  """
   # print("Getting deployment data", name, id, workspace_id)
   if (not name and not id) or (name and id):
     logger.warning("Must provide either name or id")
     return None, None
   # filter and get "id" and "name"
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
 
   # get the deployment
   serving: Serving = rpc(
     nbox_serving_service_stub.GetServing,
-    ServingRequest(serving=Serving(name=name, id=id),auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    ServingRequest(
+      serving=Serving(name=name, id=id),
+      auth_info = auth_info_pb()
+    ),
     "Could not get deployment",
     raise_on_error=True
   )
 
   return serving.id, serving.name
 
-
 def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
+  """
+  Print the list of deployments
+
+  Args:
+    sort (str, optional): Sort by. Defaults to "created_on".
+  """
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
   all_deployments: ServingListResponse = rpc(
     nbox_serving_service_stub.ListServings,
-    ServingListRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),limit=10),
+    ServingListRequest(
+      auth_info=auth_info_pb(),
+      limit=10
+    ),
     "Could not get deployments",
     raise_on_error=True
   )
@@ -401,29 +500,27 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
     logger.info(l)
 
 
-
-
 class Serve:
   status = staticmethod(print_serving_list)
-  upload = staticmethod(partial(upload_job_folder, "serving"))
+  upload: 'Serve' = staticmethod(partial(upload_job_folder, "serving"))
 
-  def __init__(self, serving_id: str = None, model_id: str = None, *, workspace_id: str = "") -> None:
+  def __init__(self, serving_id: str = "", model_id: str = "", *, workspace_id: str = "") -> None:
     """Python wrapper for NBX-Serving gRPC API
 
     Args:
-      id (str): Deployment ID
-      workspace_id (str, optional): If None personal workspace is used. Defaults to None.
+      serving_id (str, optional): Serving ID. Defaults to None.
+      model_id (str, optional): Model ID. Defaults to None.
     """
     self.id = serving_id
     self.model_id = model_id
-    self.workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+    self.workspace_id = workspace_id or secret(AuthConfig.workspace_id)
     if workspace_id is None:
       raise DeprecationWarning("Personal workspace does not support serving")
     else:
-      serving_id, serving_name = _get_deployment_data( name = "", id = self.id, workspace_id = self.workspace_id) # TODO add name support
+      serving_id, serving_name = _get_deployment_data(name = "", id = self.id, workspace_id = self.workspace_id) # TODO add name support
     self.serving_id = serving_id
     self.serving_name = serving_name
-    self.ws_stub = nbox_ws_v1.workspace.u(workspace_id).deployments
+    self.ws_stub = nbox_ws_v1.deployments
 
   def pin(self) -> bool:
     """Pin a model to the deployment
@@ -432,24 +529,20 @@ class Serve:
       model_id (str, optional): Model ID. Defaults to None.
       workspace_id (str, optional): Workspace ID. Defaults to "".
     """
-    try:
-      logger.info(f"Pin model {self.model_id} to deployment {self.serving_id}")
-      rpc(
-        nbox_model_service_stub.SetModelPin,
-        ModelRequest(
-          model = ModelProto(
-            id = self.model_id,
-            serving_group_id = self.serving_id,
-            pin_status = ModelProto.PinStatus.PIN_STATUS_PINNED
-          ),
-          auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
-        "Could not pin model",
-        raise_on_error=True
-      )
-    except Exception as e:
-      logger.error(e)
-      logger.error("Could not pin model")
-      return False
+    logger.info(f"Pin model {self.model_id} to deployment {self.serving_id}")
+    rpc(
+      nbox_model_service_stub.SetModelPin,
+      ModelRequest(
+        model = ModelProto(
+          id = self.model_id,
+          serving_group_id = self.serving_id,
+          pin_status = ModelProto.PinStatus.PIN_STATUS_PINNED
+        ),
+        auth_info = auth_info_pb()
+      ),
+      "Could not pin model",
+      raise_on_error = True
+    )
   
   def unpin(self) -> bool:
     """Pin a model to the deployment
@@ -458,24 +551,70 @@ class Serve:
       model_id (str, optional): Model ID. Defaults to None.
       workspace_id (str, optional): Workspace ID. Defaults to "".
     """
-    try:
-      logger.info(f"Unpin model {self.model_id} to deployment {self.serving_id}")
-      rpc(
-        nbox_model_service_stub.SetModelPin,
-        ModelRequest(
-          model = ModelProto(
-            id = self.model_id,
-            serving_group_id = self.serving_id,
-            pin_status = ModelProto.PinStatus.PIN_STATUS_UNPINNED
-          ),
-          auth_info = NBXAuthInfo(workspace_id=self.workspace_id)),
-        "Could not pin model",
-        raise_on_error=True
-      )
-    except Exception as e:
-      logger.error(e)
-      logger.error("Could not unpin model")
-      return False
+    logger.info(f"Unpin model {self.model_id} to deployment {self.serving_id}")
+    rpc(
+      nbox_model_service_stub.SetModelPin,
+      ModelRequest(
+        model = ModelProto(
+          id = self.model_id,
+          serving_group_id = self.serving_id,
+          pin_status = ModelProto.PinStatus.PIN_STATUS_UNPINNED
+        ),
+        auth_info = auth_info_pb(),
+      ),
+      "Could not unpin model",
+      raise_on_error = True
+    )
+  
+  def scale(self, replicas: int) -> bool:
+    """Scale the model deployment
+
+    Args:
+      replicas (int): Number of replicas
+    """
+    if not self.model_id:
+      raise ValueError("Model ID is required to scale a model. Pass with --model_id")
+    if replicas < 0:
+      raise ValueError("Replicas must be greater than or equal to 0")
+
+    logger.info(f"Scale model deployment {self.model_id} to {replicas} replicas")
+    rpc(
+      nbox_model_service_stub.UpdateModel,
+      UpdateModelRequest(
+        model=ModelProto(
+          id=self.model_id,
+          serving_group_id=self.serving_id,
+          replicas=replicas
+        ),
+        update_mask=FieldMask(paths=["replicas"]),
+        auth_info = auth_info_pb()
+      ),
+      "Could not scale deployment",
+      raise_on_error = True
+    )
+  
+  def logs(self, f = sys.stdout):
+    """Get the logs of the model deployment
+
+    Args:
+      f (file, optional): File to write the logs to. Defaults to sys.stdout.
+    """
+    logger.debug(f"Streaming logs of model '{self.model_id}'")
+    for model_log in streaming_rpc(
+      nbox_model_service_stub.ModelLogs,
+      ModelRequest(
+        model = ModelProto(
+          id = self.model_id,
+          serving_group_id = self.serving_id
+        ),
+        auth_info = auth_info_pb(),
+      ),
+      f"Could not get logs of model {self.model_id}, only live logs are available",
+      False
+    ):
+      for log in model_log.log:
+        f.write(log)
+        f.flush()
 
   def __repr__(self) -> str:
     x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
@@ -496,19 +635,32 @@ around the NBX-Jobs gRPC API.
 ################################################################################
 
 @lru_cache()
-def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *, workspace_id: str = ""):
-  """Returns the job id and name"""
+def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *, workspace_id: str = "") -> Tuple[str, str]:
+  """
+  Returns the job id and name
+  
+  Args:
+    name (str, optional): Job name. Defaults to "".
+    id (str, optional): Job ID. Defaults to "".
+    remove_archived (bool, optional): If True, will remove archived jobs. Defaults to True.
+
+  Returns:
+    Tuple[str, str]: Job ID, Job Name
+  """
   if (not name and not id) or (name and id):
     logger.info(f"Please either pass job_id '{id}' or name '{name}'")
     return None, None
   # get stub
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
   if workspace_id == None:
     workspace_id = "personal"
 
   job: JobProto = rpc(
     nbox_grpc_stub.GetJob,
-    JobRequest(auth_info=NBXAuthInfo(workspace_id=workspace_id),job=JobProto(id=id, name=name)),
+    JobRequest(
+      auth_info = auth_info_pb(),
+      job = JobProto(id=id, name=name)
+    ),
     "Could not find job with ID: {}".format(id),
     raise_on_error = True
   )
@@ -520,18 +672,20 @@ def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *,
   logger.info(f"Found job with ID '{job_id}' and name '{job_name}'")
   return job_id, job_name
 
-
 def get_job_list(sort: str = "name", *, workspace_id: str = ""):
-  """Get list of jobs, optionally in a workspace"""
-  workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+  """Get list of jobs
+  
+  Args:
+    sort (str, optional): Sort key. Defaults to "name".
+  """
+  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
 
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
-  auth_info = NBXAuthInfo(workspace_id = workspace_id)
   out: ListJobsResponse = rpc(
     nbox_grpc_stub.ListJobs,
-    ListJobsRequest(auth_info = auth_info),
+    ListJobsRequest(auth_info = auth_info_pb()),
     "Could not get job list",
   )
 
@@ -565,19 +719,22 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
 
 class Job:
   status = staticmethod(get_job_list)
-  upload = staticmethod(partial(upload_job_folder, "job"))
+  upload: 'Job' = staticmethod(partial(upload_job_folder, "job"))
 
-  def __init__(self, job_name: str = "", job_id: str = "", *, workspace_id: str = ""):
-    """Python wrapper for NBX-Jobs gRPC API
+  def __init__(self, job_name: str = "", job_id: str = ""):
+    """Python wrapper for NBX-Jobs gRPC API, when both arguments are not passed,
+    an unintialiased object is created.
 
     Args:
-        id (str): job ID
-        workspace_id (str, optional): If None personal workspace is used. Defaults to None.
+      job_name (str, optional): Job name. Defaults to "".
+      job_id (str, optional): Job ID. Defaults to "".
     """
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
-    self.id, self.name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
-    self.workspace_id = workspace_id
-    self.auth_info = NBXAuthInfo(workspace_id = workspace_id)
+    if job_name == "" and job_id == "":
+      return
+
+    self.id, self.name = _get_job_data(job_name, job_id)
+    self.workspace_id = secret(AuthConfig.workspace_id)
+    self.auth_info = auth_info_pb()
     self.job_proto = JobProto(id = self.id)
 
     self.run_stub = None
@@ -591,10 +748,50 @@ class Job:
 
   @property
   def exists(self):
+    """Check if this job exists in the workspace"""
     return self.id is not None
 
+  @classmethod
+  def new(cls, job_name: str, description: str = ""):
+    """Create a new job
+
+    Args:
+      job_name (str): Job name
+      description (str, optional): Job description. Defaults to "".
+
+    Returns:
+      Job: Job object
+    """
+    job = nbox_ws_v1.job("post", job_name = job_name, job_description = description)
+    job_id = job["job_id"]
+    # job_proto: JobProto = nbox_grpc_stub.CreateJob(
+    #   JobRequest(
+    #     auth_info = auth_info_pb(),
+    #     job = JobProto(
+    #       name = job_name,
+    #       code = Code(
+    #         size = 1,
+    #         type = Code.Type.NOT_SET,
+    #       ),
+    #       resource = DEFAULT_RESOURCE,
+    #       schedule = JobProto.Schedule(
+    #         cron = "0 0 * * *",
+    #         end = Timestamp(seconds = 0),
+    #       ),
+    #       status = JobProto.Status.NOT_SET,
+    #       paused = False,
+    #     ),
+    #   )
+    # )
+    logger.info(f"Created a new job with name (ID): {job_name} ({job_id})")
+    return cls(job_id = job_id)
+
   def change_schedule(self, new_schedule: Schedule):
-    """Change schedule this job"""
+    """Change schedule this job
+    
+    Args:
+      new_schedule (Schedule): New schedule
+    """
     logger.debug(f"Updating job '{self.job_proto.id}'")
     self.job_proto.schedule.MergeFrom(new_schedule.get_message())
     rpc(
@@ -615,7 +812,7 @@ class Job:
     return x
 
   def logs(self, f = sys.stdout):
-    """Stream logs of the job, ``f`` can be anything has a ``.write/.flush`` methods"""
+    """Stream logs of the job, `f` can be anything has a `.write/.flush` methods"""
     logger.debug(f"Streaming logs of job '{self.job_proto.id}'")
     for job_log in streaming_rpc(
       nbox_grpc_stub.GetJobLogs,
@@ -624,7 +821,7 @@ class Job:
       True
     ):
       for log in job_log.log:
-        f.write(log + "\n")
+        f.write(log)
         f.flush()
 
   def delete(self):
@@ -635,7 +832,7 @@ class Job:
     self.refresh()
 
   def refresh(self):
-    """Refresh Job statistics"""
+    """Refresh Job data"""
     logger.info(f"Updating job '{self.job_proto.id}'")
     if self.id == None:
       self.id, self.name = _get_job_data(id = self.id, workspace_id = self.workspace_id)
@@ -643,15 +840,21 @@ class Job:
       return
 
     self.job_proto: JobProto = rpc(
-      nbox_grpc_stub.GetJob, JobRequest(auth_info=self.auth_info, job = self.job_proto), f"Could not get job {self.job_proto.id}"
+      nbox_grpc_stub.GetJob,
+      JobRequest(auth_info=self.auth_info, job = self.job_proto),
+      f"Could not get job {self.job_proto.id}"
     )
-    self.auth_info.CopyFrom(NBXAuthInfo(workspace_id = self.workspace_id))
+    self.auth_info.CopyFrom(auth_info_pb())
     logger.debug(f"Updated job '{self.job_proto.id}'")
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
   def trigger(self, tag: str = ""):
-    """Manually triger this job"""
+    """Manually triger this job.
+    
+    Args:
+      tag (str, optional): Tag to be set in the run metadata, read in more detail before trying to use this. Defaults to "".
+    """
     logger.debug(f"Triggering job '{self.job_proto.id}'")
     if tag:
       self.job_proto.feature_gates.update({"SetRunMetadata": tag})
@@ -662,7 +865,8 @@ class Job:
   def pause(self):
     """Pause the execution of this job.
 
-    WARNING: This will "cancel" all the scheduled runs, if present"""
+    **WARNING: This will "cancel" all the scheduled runs, if present**
+    """
     logger.info(f"Pausing job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.PAUSED
@@ -679,17 +883,35 @@ class Job:
     logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()
 
-  def _get_runs(self, page = -1, limit = 10):
-    self.run_stub = nbox_ws_v1.workspace.u(self.workspace_id).job.u(self.id).runs
+  def _get_runs(self, page = -1, limit = 10) -> List[Dict]:
+    self.run_stub = nbox_ws_v1.job.u(self.id).runs
     runs = self.run_stub(limit = limit, page = page)["runs_list"]
     return runs
 
-  def get_runs(self, page = -1, sort = "s_no", limit = 10):
+  def get_runs(self, page = -1, sort = "s_no", limit = 10) -> List[Dict]:
+    """
+    Get runs for this job
+
+    Args:
+      page (int, optional): Page number. Defaults to -1.
+      sort (str, optional): Sort by. Defaults to "s_no".
+      limit (int, optional): Number of runs to return. Defaults to 10.
+
+    Returns:
+      List[Dict]: List of runs
+    """
     runs = self._get_runs(page, limit)
     sorted_runs = sorted(runs, key = lambda x: x[sort])
     return sorted_runs
 
   def display_runs(self, sort: str = "created_at", page: int = -1, limit = 10):
+    """Display runs for this job
+
+    Args:
+      sort (str, optional): Sort by. Defaults to "created_at".
+      page (int, optional): Page number. Defaults to -1.
+      limit (int, optional): Number of runs to return. Defaults to 10.
+    """
     headers = ["s_no", "created_at", "run_id", "status"]
 
     def _display_runs(runs):
@@ -711,7 +933,15 @@ class Job:
       y = input(f">> Print {limit} more runs? (y/n): ")
       done = y != "y"
 
-  def last_n_runs(self, n: int = 10):
+  def last_n_runs(self, n: int = 10) -> List[Dict]:
+    """Get last n runs for this job
+
+    Args:
+      n (int, optional): Number of runs to return. Defaults to 10.
+
+    Returns:
+      List[Dict]: List of runs
+    """
     all_items = []
     _page = 1
     out = self._get_runs(_page, n)

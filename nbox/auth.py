@@ -13,20 +13,40 @@ import os
 import json
 import requests
 import webbrowser
+from typing import Dict
 from getpass import getpass
-from enum import Enum
+from functools import lru_cache
 
 import nbox.utils as U
-from nbox.utils import join, logger
+from nbox.utils import join, logger, lo
 
 
-class ConfigString():
+class AuthConfig():
   workspace_id = "config.global.workspace_id"
   workspace_name = "config.global.workspace_name"
+  _workspace_id = "workspace_id"
+  email = "email"
   cache = "cache"
+  username = "username"
+  access_token = "access_token"
+  url = "nbx_url"
+
+  # things for the pod
+  nbx_pod_run = "run"
+  nbx_pod_deploy = "deploy"
 
   def items():
-    return [ConfigString.workspace_id, ConfigString.workspace_name, ConfigString.cache]
+    return [AuthConfig.workspace_id, AuthConfig.workspace_name, AuthConfig.cache]
+
+# kept for legacy reasons, remove it when this code (see git blame) is > 4 months old
+ConfigString = AuthConfig
+
+
+class JobDetails(object):
+  job_id: str
+  run_id: str
+
+# class DeployDetails(object):
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -36,7 +56,7 @@ class NBXClient:
     os.makedirs(U.env.NBOX_HOME_DIR(), exist_ok=True)
     self.fp = join(U.env.NBOX_HOME_DIR(), "secrets.json")
 
-    access_token = U.env.NBOX_USER_TOKEN("")
+    access_token = U.env.NBOX_ACCESS_TOKEN("")
 
     # if this is the first time starting this then get things from the nbx-hq
     if not os.path.exists(self.fp):
@@ -87,17 +107,20 @@ class NBXClient:
 
       # create the objects
       self.secrets = {
-        "email": email,
-        "access_token": access_token,
-        "nbx_url": nbx_url,
-        "username": username,
+        AuthConfig.email: email,
+        AuthConfig.access_token: access_token,
+        AuthConfig.url: nbx_url,
+        AuthConfig.username: username,
 
         # config values that can be set by the user for convenience
-        ConfigString.workspace_id: workspace_id,
-        ConfigString.workspace_name: workspace_details["workspace_name"],
+        AuthConfig.workspace_id: workspace_id,
+        AuthConfig.workspace_name: workspace_details["workspace_name"],
 
         # now cache the information about this workspace
-        ConfigString.cache: {workspace_id: workspace_details},
+        AuthConfig.cache: {workspace_id: {
+          "workspace_name": workspace_details["workspace_name"],
+          "workspace_id": workspace_id,
+        }},
       }
       # for k,v in self.secrets.items():
       #   print(type(k), k, "::", type(v), v)
@@ -115,26 +138,103 @@ class NBXClient:
     return json.dumps(self.secrets, indent=2)
 
   def get(self, item, default=None, reload: bool = False):
+    """
+    Get the value of the item from the secrets file.
+
+    Args:
+      item (str): The item to get the value for
+      default (any): The default value to return if the item is not found
+      reload (bool): If True, reload the secrets file before getting the value
+
+    Returns:
+      any: The value of the item or the default value if the item is not found
+    """
     if reload:
       with open(self.fp, "r") as f:
         self.secrets = json.load(f)
     return self.secrets.get(item, default)
 
-  def put(self, item, value, persist: bool = False):
-    self.secrets[item] = value
+  def put(self, item, value = None, persist: bool = False):
+    """
+    Put the value of the item in the secrets file. If no `value` or `persist` is specified,
+    this is a no-op.
+
+    Args:
+      item (str): The item to put the value for
+      value (any): The value to put
+      persist (bool): If True, persist the secrets file after putting the value
+    """
+    if value:
+      self.secrets[item] = value
     if persist:
       with open(self.fp, "w") as f:
         f.write(repr(self))
 
+  def __call__(self, item, default=None, reload: bool = False):
+    return self.get(item, default, reload)
+
+  @property
+  def workspace_id(self) -> str:
+    return self.get(AuthConfig.workspace_id) or self.get(AuthConfig._workspace_id)
+
+  @property
+  def nbx_url(self) -> str:
+    return self.get(AuthConfig.url)
+
+  @property
+  def access_token(self) -> str:
+    return self.get(AuthConfig.access_token)
+  
+  @property
+  def username(self) -> str:
+    return self.get(AuthConfig.username)
+
+  def get_agent_details(self) -> Dict[str, str]:
+    if ConfigString.nbx_pod_run in self.secrets:
+      run_data = self.secrets[ConfigString.nbx_pod_run]
+      jd = JobDetails()
+      jd.job_id = run_data.get("job_id", None)
+      jd.run_id = run_data.get("token", None)
+      return jd
+    # elif ConfigString.nbx_pod_deploy in self.secrets:
+    #   return self.secrets[ConfigString.nbx_pod_deploy]
+    return {}
+
 
 def init_secret():
+  """
+  Initialize the secret object. This is a singleton object that can be used across multiple processes.
+  """
   # add any logic here for creating secrets
   if not U.env.NBOX_NO_AUTH(False):
     secret = NBXClient()
-    logger.info(f"Current workspace id: {secret.get(ConfigString.workspace_id)} ({secret.get(ConfigString.workspace_name)})")
+    logger.info(lo(
+      f"workspace details",
+      workspace_id = secret.workspace_id,
+      workspace_name =  AuthConfig.workspace_name,
+      token_present = len(secret.access_token) > 0,
+      nbx_url = secret.nbx_url,
+    ))
     return secret
   else:
     logger.info(f"Skipping authentication as NBOX_NO_AUTH is set to True")
   return None
 
 secret = init_secret()
+
+
+@lru_cache()
+def auth_info_pb():
+  """
+  Get the auth token for the current user.
+  """
+  from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
+
+  return NBXAuthInfo(
+    username = secret(AuthConfig.username),
+    workspace_id = secret(AuthConfig.workspace_id) or secret(AuthConfig._workspace_id),
+    access_token = secret(AuthConfig.access_token),
+  )
+
+def inside_pod():
+  return secret(AuthConfig.nbx_pod_run, False) or secret(AuthConfig.nbx_pod_deploy, False)

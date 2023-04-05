@@ -1,9 +1,13 @@
+"""
+{% CallOut variant="info" label="This is currently a work in progress, please check back later for progress or reach out to NimbleBox support." /%}
+"""
+
 import time
 import psutil
 import threading
 from queue import Queue
 
-from nbox.sublime.proto.lmao_pb2 import *
+from nbox.lmao.proto.lmao_v2_pb2 import *
 
 import GPUtil
 HAS_GPU = len(GPUtil.getGPUs())

@@ -8,76 +8,85 @@ You can SSH into your instance with the `nbx tunnel` command. This command will 
 to your instance and start an SSH session.
 
 ```bash
-nbx tunnel 8000 -i "instance-name"
+nbx tunnel 8000 -i "instance-id"
 ```
 """
 
 import os
 import fire
-import jinja2
-import tempfile
+import requests
 import webbrowser
 from json import dumps
+from shutil import rmtree
 from typing import Dict, Any
 
 import nbox.utils as U
 from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
-from nbox.auth import init_secret, ConfigString, secret
+from nbox.auth import init_secret, AuthConfig, secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
-from nbox.relics import RelicsNBX
+from nbox.relics import Relics
 from nbox.lmao import LmaoCLI
 from nbox.version import __version__ as V
 from nbox.nbxlib.fire import NBXFire
-
-logger = U.get_logger()
-
+from nbox.projects import Project
+from nbox.utils import logger, lo
+from nbox.plugins.base import PluginCLI
 
 class Config(object):
-  def update(self, workspace_id: str = ""):
+  def update(self, workspace_id: str):
     """Set global config for `nbox`"""
     secret = init_secret()
-    if workspace_id:
-      secret.put(ConfigString.workspace_id, workspace_id, True)
-      logger.info(f"Global Workspace ID set to {workspace_id}")
+    data = secret(AuthConfig.cache)
+    redo = not data or (workspace_id not in data)
+    if redo:
+      workspaces = requests.get(
+        secret(AuthConfig.url) + f"/api/v1/workspace",
+        headers = nbox_ws_v1._session.headers
+      ).json()["data"]
+      # workspaces = nbox_ws_v1.workspace()
+      workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
+      if len(workspace_details) == 0:
+        logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
+        raise Exception("Invalid workspace ID")
+      workspace_details = workspace_details[0]
+      workspace_name = workspace_details["workspace_name"]
+      secret.secrets[AuthConfig.cache].update({
+        workspace_id: {
+          "workspace_id": workspace_id,
+          "workspace_name": workspace_name
+        }
+      })
+      secret.put(AuthConfig.cache)
+    else:
+      data = data[workspace_id]
+      workspace_name = data["workspace_name"]
 
-      data = secret.get(ConfigString.cache)
-      redo = not data or (workspace_id not in data)
-
-      if redo:
-        workspaces = nbox_ws_v1.workspace()
-        workspace_details = list(filter(lambda x: x["workspace_id"] == workspace_id, workspaces))
-        if len(workspace_details) == 0:
-          logger.error(f"Could not find the workspace ID: {workspace_id}. Please check the workspace ID and try again.")
-          raise Exception("Invalid workspace ID")
-        workspace_details = workspace_details[0]
-        workspace_name = workspace_details["workspace_name"]
-        secret.secrets.get(ConfigString.cache).update({workspace_id: workspace_details})
-      else:
-        data = data[workspace_id]
-        workspace_name = data["workspace_name"]
-
-      secret.put(ConfigString.workspace_name, workspace_name, True)
-      logger.info(f"Global Workspace: {workspace_name}")
+    secret.put(AuthConfig.workspace_id, workspace_id, True)
+    secret.put(AuthConfig.workspace_name, workspace_name, True)
+    logger.info(f"Global Workspace: {workspace_name}")
 
   def show(self):
     """Pretty print global config for `nbox`"""
-    workspace_id = secret.get(ConfigString.workspace_id)
-    workspace_name = secret.get(ConfigString.workspace_name)
-    logger.info(
-      "\nnbox config:\n" \
-      f"  workspace_name: {workspace_name}\n" \
-      f"    workspace_id: {workspace_id}\n" \
-      f"    nbox version: {V}\n" \
-      f"             URL: {secret.get('nbx_url')}"
-    )
+    logger.info(lo(
+      "nbox config:",
+      workspace_name = secret(AuthConfig.workspace_name),
+      workspace_id = secret(AuthConfig.workspace_id),
+      username = secret(AuthConfig.username),
+      nbox = V,
+      URL = secret(AuthConfig.url),
+    ))
+
+  def clear(self):
+    cp = U.join(U.env.NBOX_HOME_DIR(), ".cache")
+    logger.info(f"Clearing: {cp}")
+    rmtree(cp)
+    os.makedirs(cp)
 
 def open_home():
   """Open current NBX platform"""
-  from .auth import secret
-  import webbrowser
-  webbrowser.open(secret.get("nbx_url"))
+  webbrowser.open(secret(AuthConfig.url))
 
 
 def get(api_end: str, no_pp: bool = False, **kwargs):
@@ -99,25 +108,30 @@ def get(api_end: str, no_pp: bool = False, **kwargs):
   else:
     return res
 
-def login():
+def login(force: bool = False):
   """Re authenticate `nbox`. NOTE: Will remove all added keys to `secrets`"""
-  fp = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
-  os.remove(fp)
-  init_secret()
+  if force:
+    fp = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
+    os.remove(fp)
+    init_secret()
+    return
+  else:
+    logger.info("Already logged in, to re-login use `nbx login --force`")
 
 def version():
-  logger.info("NimbleBox.ai Client Library")
-  logger.info(f"    nbox version: {V}")
+  logger.info(f"NimbleBox.ai Client Library\n    nbox version: {V}")
 
 
 def why():
-  print("\nWhy we build NimbleBox?\n")
-  print("  * Artificial intelligence will be the most important technology of the 21st century.")
-  print("  * Every major piece of software ever written will need to be upgraded and rewritten.")
-  print("  * Energy spent per code token will increase exponentially to handle the bandwidth of AI.")
-  print("  * AI is still software and software engineering is hard.")
-  print("  * Nimblebox is a general purpose tool to build and manage such operations.")
-  print("\nIf you like what we are building, come work with us.\n\nWith Love,\nNimbleBox.ai\n")
+  print('''
+Embrace the Future of Business with NimbleBox!
+
+Artificial intelligence is the key to unlocking new opportunities in the 21st century.
+With NimbleBox, you can simplify the building and management of AI operations and stay
+ahead of the competition.
+
+Join the AI revolution and seize the future!
+''')
 
 
 class NBXWS_CLI(object):
@@ -148,7 +162,7 @@ class NBXWS_CLI(object):
     return res
 
   # def rapidoc(self):
-  #   openapi = secret.get("openapi_spec", None)
+  #   openapi = secret("openapi_spec", None)
   #   if openapi == None:
   #     raise RuntimeError("Not connected to NimbleBox.ai webserver")
   #   fp = U.join(U.folder(__file__), "assets", "rapidoc.html")
@@ -162,19 +176,21 @@ class NBXWS_CLI(object):
 
 def main():
   component = {
-    "build"   : Instance,
-    "config"  : Config,
-    "get"     : get,
-    "jobs"    : Job,
-    "lmao"    : LmaoCLI,
-    "login"   : login,
-    "open"    : open_home,
-    "relics"  : RelicsNBX,
-    "serve"   : Serve,
-    "tunnel"  : tunnel,
-    "version" : version,
-    "why"     : why,
-    "ws"      : NBXWS_CLI,
+    "build"    : Instance,
+    "config"   : Config,
+    "get"      : get,
+    "jobs"     : Job,
+    "lmao"     : LmaoCLI,
+    "login"    : login,
+    "open"     : open_home,
+    "plugins"  : PluginCLI,
+    "projects" : Project,
+    "relics"   : Relics,
+    "serve"    : Serve,
+    "tunnel"   : tunnel,
+    "version"  : version,
+    "why"      : why,
+    "ws"       : NBXWS_CLI,
   }
 
   fire.Fire(component)

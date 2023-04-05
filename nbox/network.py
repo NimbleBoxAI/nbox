@@ -1,6 +1,7 @@
 """
-Network functions are gateway between NBX-Services. If you find yourself using this
-you might want to reach out to us <research-at-nimblebox-dot-ai>!
+Network functions are gateway between NBX-Services.
+
+{% CallOut variant="success" label="If you find yourself using this reach out to NimbleBox support." /%}
 
 But for the curious mind, many of our services work on gRPC and Protobufs. This network.py
 manages the quirkyness of our backend and packs multiple steps as one function.
@@ -9,26 +10,29 @@ manages the quirkyness of our backend and packs multiple steps as one function.
 import os
 import re
 import grpc
+import shlex
 import jinja2
 import fnmatch
 import zipfile
 import requests
+from subprocess import Popen
+from typing import Dict, Union
 from tempfile import gettempdir
 from datetime import datetime, timezone
 from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
-from nbox.auth import secret
+from nbox import messages as mpb
+from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.utils import logger, SimplerTimes
 from nbox.version import __version__
-from nbox.hyperloop.dag_pb2 import DAG
+from nbox.hyperloop.jobs.dag_pb2 import DAG
 from nbox.init import nbox_ws_v1, nbox_grpc_stub, nbox_model_service_stub
-from nbox.hyperloop.job_pb2 import  Job as JobProto
-from nbox.hyperloop.common_pb2 import NBXAuthInfo, Resource, Code
-from nbox.hyperloop.serve_pb2 import ModelRequest, Model
-from nbox.messages import rpc, write_binary_to_file
+from nbox.hyperloop.jobs.job_pb2 import  Job as JobProto
+from nbox.hyperloop.common.common_pb2 import Resource, Code
+from nbox.hyperloop.deploy.serve_pb2 import ModelRequest, Model
 from nbox.jobs import Schedule, Serve, Job
-from nbox.hyperloop.nbox_ws_pb2 import JobRequest, UpdateJobRequest
+from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest, UpdateJobRequest
 from nbox.nbxlib.operator_spec import OperatorType as OT
 
 
@@ -44,68 +48,84 @@ Function related to serving of any model.
 def deploy_serving(
   init_folder: str,
   serving_name: str,
+  model_name: str,
   serving_id: str = None,
   workspace_id: str = None,
   resource: Resource = None,
   wait_for_deployment: bool = False,
-  exe_jinja_kwargs = {},
+  model_metadata: Dict[str, str] = {},
+  exe_jinja_kwargs: Dict[str, str] = {},
   *,
-  _unittest = False
+  _only_zip: bool = False,
 ):
-  """Use the NBX-Deploy Infrastructure"""
+  """Use the NBX-Deploy Infrastructure
+
+  Args:
+    init_folder (str): Path to the code
+    serving_name (str): Name of the serving
+    model_name (str): Name of the model
+    serving_id (str, optional): Serving ID. Defaults to None.
+    workspace_id (str, optional): Workspace ID. Defaults to None.
+    resource (Resource, optional): Resource. Defaults to None.
+    wait_for_deployment (bool, optional): Wait for deployment. Defaults to False.
+    model_metadata (dict, optional): Model metadata. Defaults to {}.
+    exe_jinja_kwargs (dict, optional): Jinja kwargs. Defaults to {}.
+  """
   # check if this is a valid folder or not
   if not os.path.exists(init_folder) or not os.path.isdir(init_folder):
     raise ValueError(f"Incorrect project at path: '{init_folder}'! nbox jobs new <name>")
+  logger.info(f"Deployment ID (Name): {serving_id} ({serving_name})")
 
-  if resource is not None:
-    logger.warning("Resource is coming in the following release!")
   if wait_for_deployment:
-    logger.warning("Wait for deployment is coming in the following release!")
+    logger.warning("Wait for deployment to be implemented, please add your own wait loop for now!")
 
-  # [TODO] - keeping this for now, if file can be zip without serving id then we can remove this
-  logger.info(f"Serving name: {serving_name}")
-  logger.info(f"Serving ID: {serving_id}")
-  # if serving_id is None:
-  #   logger.error("Could not find service ID, creating a new one")
-  #   data = nbox_ws_v1.workspace.u(workspace_id).deployments(_method = "post", deployment_name = serving_name, deployment_description = "")
-  #   serving_id = data["deployment_id"]
-  #   logger.info(f"Serving ID: {serving_id}")
-  model_name = U.get_random_name().replace("-", "_")
-  logger.info(f"Model name: {model_name}")
+  model_proto = Model(
+    serving_group_id = serving_id,
+    name = model_name,
+    type = Model.ServingType.SERVING_TYPE_NBOX_OP,
+    metadata = model_metadata,
+    resource = resource
+  )
+  model_proto_fp = U.join(gettempdir(), "model_proto.msg")
+  mpb.write_binary_to_file(model_proto, model_proto_fp)
 
   # zip init folder
+  exe_jinja_kwargs.update({"model_name": model_name,})
   zip_path = zip_to_nbox_folder(
     init_folder = init_folder,
     id = serving_id,
     workspace_id = workspace_id,
     type = OT.SERVING,
-
-    # jinja kwargs
-    model_name = model_name,
+    files_to_copy = {model_proto_fp: "model_proto.msg"},
     **exe_jinja_kwargs,
   )
-  return _upload_serving_zip(zip_path, workspace_id, serving_id, model_name)
+  if _only_zip:
+    logger.info(f"Zip file created at: {zip_path}")
+    return zip_path
+  else:
+    return _upload_serving_zip(
+      zip_path = zip_path,
+      workspace_id = workspace_id,
+      serving_id = serving_id,
+      model_proto = model_proto,
+    )
 
 
-def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
-  file_size = os.stat(zip_path).st_size # serving in bytes
+def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model_proto: Model):
+  model_proto.code.MergeFrom(Code(
+    type = Code.Type.ZIP,
+    size = int(max(os.stat(zip_path).st_size/(1024*1024), 1)) # MBs
+  ))
 
   # get bucket URL and upload the data
-  response: Model = rpc(
+  response: Model = mpb.rpc(
     nbox_model_service_stub.UploadModel,
-    ModelRequest(model=
-      Model(
-        serving_group_id=serving_id, name=model_name,
-        code=Code(
-          type=Code.Type.ZIP,
-          size=int(max(file_size/(1000*1000), 1)) # MiBs
-        ),
-        type=Model.ServingType.SERVING_TYPE_NBOX_OP
-        ),
-      auth_info=NBXAuthInfo(workspace_id=workspace_id)
-      ),
+    ModelRequest(
+      model = model_proto,
+      auth_info = auth_info_pb()
+    ),
     "Could not get upload URL",
-    raise_on_error=True
+    raise_on_error = True
   )
   model_id = response.id
   deployment_id = response.serving_group_id
@@ -127,10 +147,7 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
     use_curl = True
 
   if use_curl:
-    import shlex
-    from subprocess import Popen
     shell_com = f'curl -X POST -F key={s3_meta["key"]} '
-    # for k,v in out.body.items():
     for k,v in s3_meta.items():
       if k == "key":
         continue
@@ -149,12 +166,19 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
       logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
       return
 
-
   # model is uploaded successfully, now we need to deploy it
   logger.info(f"Model uploaded successfully, deploying ...")
-  response: Model = rpc(
+  response: Model = mpb.rpc(
     nbox_model_service_stub.Deploy,
-    ModelRequest(model=Model(id=model_id,serving_group_id=deployment_id), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    ModelRequest(
+      model = Model(
+        id = model_id,
+        serving_group_id = deployment_id,
+        resource = model_proto.resource,
+        # feature_gates = {"SetRunMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
+      ),
+      auth_info = auth_info_pb(),
+    ),
     "Could not deploy model",
     raise_on_error=True
   )
@@ -164,13 +188,13 @@ def _upload_serving_zip(zip_path, workspace_id, serving_id, model_name):
   # _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
   # _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
   # _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
-  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/deploy/{serving_id}"
+  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/deploy/{serving_id}"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
   # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
   logger.info(f"  [page] - {_webpage}")
 
-  return Serve(serving_id = serving_id, model_id = model_id, workspace_id = workspace_id)
+  return Serve(serving_id = serving_id, model_id = model_id)
 
 
 #######################################################################################################################
@@ -192,7 +216,8 @@ def deploy_job(
   job_id: str = None,
   exe_jinja_kwargs = {},
   *,
-  _unittest = False
+  _only_zip: bool = False,
+  _unittest: bool = False
 ) -> None:
   """Upload code for a NBX-Job.
 
@@ -219,7 +244,7 @@ def deploy_job(
   logger.info(f"Job ID: {job_id}")
 
   # intialise the console logger
-  URL = secret.get("nbx_url")
+  URL = secret("nbx_url")
   logger.debug(f"Schedule: {schedule}")
   logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
@@ -229,11 +254,12 @@ def deploy_job(
     id = job_id,
     name = job_name or U.get_random_name(True).split("-")[0],
     created_at = SimplerTimes.get_now_pb(),
-    schedule = schedule.get_message() if schedule is not None else None,
+    schedule = schedule.get_message() if schedule is not None else None, # JobProto.Schedule(cron = "0 0 24 2 0"),
     dag = dag,
     resource = resource
   )
-  write_binary_to_file(job_proto, U.join(init_folder, "job_proto.msg"))
+  job_proto_fp = U.join(gettempdir(), "job_proto.msg")
+  mpb.write_binary_to_file(job_proto, job_proto_fp)
 
   if _unittest:
     return job_proto
@@ -244,14 +270,17 @@ def deploy_job(
     id = job_id,
     workspace_id = workspace_id,
     type = OT.JOB,
+    files_to_copy = {job_proto_fp: "job_proto.msg"},
     **exe_jinja_kwargs,
   )
   return _upload_job_zip(zip_path, job_proto,workspace_id)
 
-def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
+def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   # determine if it's a new Job based on GetJob API
   try:
-    old_job_proto: JobProto = nbox_grpc_stub.GetJob(JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)))
+    old_job_proto: JobProto = nbox_grpc_stub.GetJob(
+      JobRequest(job = JobProto(id = job_proto.id), auth_info = auth_info_pb())
+    )
     new_job = old_job_proto.status in [JobProto.Status.NOT_SET, JobProto.Status.ARCHIVED]
   except grpc.RpcError as e:
     if e.code() == grpc.StatusCode.NOT_FOUND:
@@ -264,76 +293,99 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto,workspace_id: str):
     # incase an old job exists, we need to update few things with the new information
     logger.debug("Found existing job, checking for update masks")
     paths = []
+    mask = mpb.field_mask(old_job_proto, job_proto)
     if old_job_proto.resource.SerializeToString(deterministic = True) != job_proto.resource.SerializeToString(deterministic = True):
       paths.append("resource")
     if old_job_proto.schedule.cron != job_proto.schedule.cron:
       paths.append("schedule.cron")
     logger.debug(f"Updating fields: {paths}")
     nbox_grpc_stub.UpdateJob(
-      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths), auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+      UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths=paths), auth_info=auth_info_pb()),
     )
 
   # update the JobProto with file sizes
   job_proto.code.MergeFrom(Code(
-    size = max(int(os.stat(zip_path).st_size / (1024 ** 2)), 1), # jobs in MiB
+    size = max(int(os.stat(zip_path).st_size / (1024 ** 2)), 1), # jobs in MB
     type = Code.Type.ZIP,
   ))
 
   # UploadJobCode is responsible for uploading the code of the job
-  response: JobProto = rpc(
+  response: JobProto = mpb.rpc(
     nbox_grpc_stub.UploadJobCode,
-    JobRequest(job = job_proto, auth_info=NBXAuthInfo(workspace_id=workspace_id)),
+    JobRequest(job = job_proto, auth_info=auth_info_pb()),
     f"Failed to upload job: {job_proto.id} | {job_proto.name}"
   )
   job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
   
-  # TODO: @yashbonde migrate requests to curl like Serve
-  logger.info(f"Uploading model to S3 ... (fs: {job_proto.code.size/1024/1024:0.3f} MB)")
-  r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
-  try:
-    r.raise_for_status()
-  except:
-    logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
-    return
+  logger.info(f"Uploading model to S3 ... (fs: {response.code.size:0.3f} MB)")
+  use_curl = False
+  if response.code.size > 10:
+    logger.info(
+      f"File {zip_path} is larger than 10 MB ({response.code.size} MB), this might take a while\n"
+      f"Switching to user/agent: cURL for this upload\n"
+      f"Protip:\n"
+      f"  - if you are constantly uploading large files, take a look at nbox.Relics, that's the right tool for the job"
+    )
+    use_curl = True
 
-  # if this is the first time this is being created
-  def _update_feature_gates(proto: JobProto, **kwargs):
-    proto.feature_gates.update({
-      "UsePipCaching": "", # some string does not honour value
-      "EnableAuthRefresh": ""
-    })
-    rpc(
-      JobRequest(
-        job = proto,
-        update_mask = FieldMask(paths = ["feature_gates"]),
-        auth_info = NBXAuthInfo(workspace_id = workspace_id, username = secret.get("username"))
-      ),
-      **kwargs
+  if use_curl:
+    shell_com = f'curl -X POST -F key={s3_meta["key"]} '
+    for k,v in s3_meta.items():
+      if k == "key":
+        continue
+      shell_com += f'-F {k}={v} '
+    shell_com += f'-F file="@{zip_path}" {s3_url}'
+    logger.debug(f"Running shell command: {shell_com}")
+    out = Popen(shlex.split(shell_com)).wait()
+    if out != 0:
+      logger.error(f"Failed to upload model: {out}, please check logs for this")
+      return
+  else:
+    r = requests.post(url=s3_url, data=s3_meta, files={"file": (s3_meta["key"], open(zip_path, "rb"))})
+    try:
+      r.raise_for_status()
+    except:
+      logger.error(f"Failed to upload model: {r.content.decode('utf-8')}")
+      return
+
+  job_proto.feature_gates.update({
+    "UsePipCaching": "", # some string does not honour value
+    "EnableAuthRefresh": ""
+  })
+  auth_info = auth_info_pb()
+  if new_job:
+    logger.info("Creating a new job")
+    mpb.rpc(
+      stub = nbox_grpc_stub.CreateJob,
+      message = JobRequest(job = job_proto, auth_info = auth_info),
+      err_msg = "Failed to create job"
     )
 
-  if new_job:
-    print("Creating a new job")
-    _update_feature_gates(job_proto, stub = nbox_grpc_stub.CreateJob, err_msg = "Failed to create job")
-
   if not old_job_proto.feature_gates:
-    print("Updating feature gates")
-    _update_feature_gates(job_proto, stub = nbox_grpc_stub.UpdateJob, err_msg = "Failed to update job", raise_on_error = False)
+    logger.info("Updating feature gates")
+    mpb.rpc(
+      stub = nbox_grpc_stub.UpdateJob,
+      message = UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths = ["feature_gates"]), auth_info = auth_info),
+      err_msg = "Failed to update job",
+      raise_on_error = False
+    )
 
   # write out all the commands for this job
   # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
   # _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
-  # _curl = f"curl -X POST {secret.get('nbx_url')}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
-  _webpage = f"{secret.get('nbx_url')}/workspace/{workspace_id}/jobs/{job_proto.id}"
+  # _curl = f"curl -X POST {secret(AuthConfig.url)}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
+
+  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/jobs/{job_proto.id}"
   logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
-  return Job(job_id = job_proto.id, workspace_id = workspace_id)
+  return Job(job_id = job_proto.id)
 
 
 #######################################################################################################################
@@ -344,7 +396,25 @@ Function related to both NBX-Serving and NBX-Jobs
 """
 #######################################################################################################################
 
-def zip_to_nbox_folder(init_folder, id, workspace_id, type, **jinja_kwargs):
+def zip_to_nbox_folder(
+  init_folder: str,
+  id: str,
+  workspace_id: str,
+  type: Union[OT.JOB, OT.SERVING],
+  files_to_copy: Dict[str, str] = {},
+  **jinja_kwargs
+):
+  """
+  This function creates the zip file that is ulitimately uploaded to NBX-Serving or NBX-Jobs.
+
+  Args:
+    init_folder (str): The folder that contains the files to be zipped
+    id (str): The id of the job or serving
+    workspace_id (str): The workspace id of the job or serving
+    type (OT_TYPE): The type of the job or serving, comes from nbxlib.operator_spec.OT_TYPE
+    files_to_copy (Dict[str, str], optional): A dictionary of source to target filepaths to copy to the zip file. Defaults to {}.
+    **jinja_kwargs: Any additional arguments to be passed to the jinja template
+  """
   # zip all the files folder
   all_f = U.get_files_in_folder(init_folder, followlinks = False)
 
@@ -417,11 +487,8 @@ def zip_to_nbox_folder(init_folder, id, workspace_id, type, **jinja_kwargs):
       f2.write(code)
     # print(os.stat(exe_path))
 
-    # currently the serving pod does not come with secrets file so we need to make a temporary fix while that
-    # feature is being worked on
-    if type == OT.SERVING:
-      secrets_path = U.join(U.env.NBOX_HOME_DIR(), "secrets.json")
-      zip_file.write(secrets_path, arcname = ".nbx/secrets.json")
-
     zip_file.write(exe_path, arcname = "exe.py")
+    for src, trg in files_to_copy.items():
+      zip_file.write(src, arcname = trg)
+
   return zip_path

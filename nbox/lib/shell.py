@@ -1,15 +1,17 @@
 """
-Shell
-=====
+### Shell
 
 This module contains the Operators that can be used to interact with the shell.
 """
+import sys
+from subprocess import Popen
 
 from nbox import Operator
+from nbox.operator import operator
 
 class ShellCommand(Operator):
   def __init__(self, *commands):
-    """Run multiple shell commands, uses ``shelex`` to prevent injection"""
+    """Run multiple shell commands, uses `shelex` to prevent injection"""
     super().__init__()
     import string
 
@@ -28,17 +30,6 @@ class ShellCommand(Operator):
       called_process: subprocess.CompletedProcess = subprocess.run(comm, check = True)
       if called_process.returncode != 0:
         raise Exception(f"Command {comm} failed with return code {called_process.stdout}")
-
-
-class Python(Operator):
-  def __init__(self, func, *args, **kwargs):
-    """Convert a python function into an operator, everything has to be passed at runtime"""
-    super().__init__()
-    self.fak = (func, args, kwargs)
-
-  def forward(self):
-    return self.fak[0](*self.fak[1], **self.fak[2])
-
 
 class PythonScript(Operator):
   def __init__(self, fpath, python_path = "/usr/bin/python3", **kwargs):
@@ -81,23 +72,30 @@ class NBToScript(Operator):
     with open(self.trg, "w") as f:
       f.write(code_script)
 
-class GitClone(Operator):
-  def __init__(self, url, path = None, branch = None):
-    """Clone a git repository into a path"""
-    super().__init__()
-    self.url = url
-    self.path = path
-    self.branch = branch
-
-  def forward(self):
-    # git clone -b <branch> <repo> <path>
-    import subprocess
-    command = ["git", "clone"]
-    if self.branch:
-      command.append("-b")
-      command.append(self.branch)
-    if self.path:
-      command.append(self.path)
-    command.append(self.url)
-    subprocess.run(command, check = True)
-
+@operator()
+def git_clone(
+  repository: str,
+  path: str = ".",
+  branch: str = "",
+  depth: int = 1,
+  **kwargs
+) -> bool:
+  """
+  Operator to clone a git repository at a given path, usually wherever this operator is called from
+  returns True if the clone was successful
+  """
+  command = ["git", "clone"]
+  if branch:
+    command.append("-b")
+    command.append(branch)
+  if depth:
+    command.append("--depth")
+    command.append(str(depth))
+  for k,v in kwargs.items():
+    command.append(f"--{k}")
+    if v != None:
+      command.append(v)
+  command.append(repository)
+  command.append(path)
+  out = Popen(command, stdout=sys.stdout, stderr=sys.stderr).wait()
+  return out == 0

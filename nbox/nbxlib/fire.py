@@ -1,3 +1,13 @@
+"""
+## NBX Fire
+
+This is the CLI function for bespoke designed for nbox. Named after the legendary `python-fire` command is currently in
+use in nbox. It is a very simple CLI function that can be used to call any python object. It is designed to be used
+with the `nbx` command.
+
+{% CallOut variant="info" label="This is currently a work in progress, please check back later for progress or reach out to NimbleBox support." /%}
+"""
+
 import sys
 
 class TC:
@@ -17,9 +27,9 @@ def colored(st, color):
   return f"\u001b[{30+['black', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'white'].index(color)}m{st}\u001b[0m"
 
 class NBXFire:
-  """This is the CLI function for bespoke designed for nbox. Names after the legendary `python-fire` command which served
-  us well for many years before we ended up here.
-  
+  """
+  Requirements:
+
   - can load any kind of python object
   - '-' can be as many as you want they would be ignored
   - booleans are parsed as `--flag`

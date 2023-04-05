@@ -86,8 +86,6 @@ certainly if we come up with that high abstraction we will refactor this:
   determined by the order of the operators in the tree. DAGs are fundamentally just trees with some nodes spun together,
   to execute only once.
 - deploy, ...: All the services in NBX-Jobs.
-- get_nbx_flow: which is the static code analysis system to understand true user intent and if possible (and permission of
-  the user) optimise the logic.
 
 ## Tips
 
@@ -105,35 +103,32 @@ run in distributed fashion.
 # pytorch license: https://github.com/pytorch/pytorch/blob/master/LICENSE
 # modifications: research@nimblebox.ai 2022
 
-from functools import partial
-import json
 import os
 import re
 import inspect
+import asyncio
 import requests
 from tqdm import tqdm
+from tabulate import tabulate
 from functools import partial
 from time import sleep, monotonic
 from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Iterable, List, Tuple, Union
 
 import nbox.utils as U
-from nbox.auth import secret, ConfigString
+from nbox.auth import secret, AuthConfig
 from nbox.utils import logger, SimplerTimes
 from nbox.nbxlib import operator_spec as ospec
 from nbox.nbxlib.tracer import Tracer
 from nbox.version import __version__
 from nbox.sub_utils.latency import log_latency
-from nbox.framework.on_functions import get_nbx_flow
-from nbox.framework import AirflowMixin, PrefectMixin
-from nbox.hyperloop.job_pb2 import Job as JobProto
-from nbox.hyperloop.common_pb2 import Resource
-from nbox.hyperloop.dag_pb2 import DAG, Flowchart, Node, RunStatus
+from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
+from nbox.hyperloop.common.common_pb2 import Resource
+from nbox.hyperloop.jobs.dag_pb2 import DAG, Node, RunStatus
 
 from nbox.jobs import Schedule, Job, Serve, _get_job_data
 from nbox.messages import write_binary_to_file
-from nbox.relics import RelicsNBX, RelicLocal
+from nbox.relics import Relics
 from nbox.init import nbox_ws_v1
 from nbox.subway import SpecSubway
 
@@ -161,10 +156,8 @@ class Operator():
     """Create an operator, which abstracts your code into sharable, bulding blocks which
     can then deployed on either NBX-Jobs or NBX-Deploy.
     
-    Usage:
+    Examples:
 
-    .. code-block:: python
-      
       class MyOperator(Operator):
         def __init__(self, ...):
           ... # initialisation of job happens here
@@ -196,7 +189,7 @@ class Operator():
   def __remote_init__(self):
     """User can overwrite this function, this will be called only when running on remote.
     This helps in with things like creating the models can caching them in self, instead
-    of ``lru_cache`` in forward."""
+    of `lru_cache` in forward."""
     pass
 
   def remote_init(self):
@@ -260,44 +253,59 @@ class Operator():
 
   @classmethod
   def from_job(cls, job_name: str = "", job_id: str = "", workspace_id: str = ""):
-    """latch an existing job so that it can be called as an operator."""
+    """latch an existing job so that it can be called as an operator. This is designed to be used as
+    a part of "Compute Fabric" mode.
+
+    Args:
+      job_name (str, optional): Name of the job. Defaults to "".
+      job_id (str, optional): ID of the job. Defaults to "".
+    """
     # implement this when we have the client-server that allows us to get the metadata for the job
     if (not job_name and not job_id) or (job_name and job_id):
       raise ValueError("Either job_name or job_id must be specified")
-    workspace_id = workspace_id or secret.get(ConfigString.workspace_id)
+    workspace_id = workspace_id or secret(AuthConfig.workspace_id)
     if not workspace_id:
-      raise DeprecationWarning("Personal workspace does not support serving")
-    job_id, job_name = _get_job_data(job_name, job_id, workspace_id = workspace_id)
+      raise DeprecationWarning("workspace_id cannot be none. Reauth yourself with `nbx login`")
+    job_id, job_name = _get_job_data(
+      name = job_name,
+      id = job_id,
+      remove_archived = True, 
+      workspace_id = workspace_id
+    )
     if job_id is None:
       raise ValueError(f"No serving found with name {job_name}")
-    job = Job(job_id, workspace_id = workspace_id)
+    job = Job(job_id = job_id)
     logger.debug(f"Latching to job '{job_name}' ({job_id})")
-    
+
     def forward(*args, _wait: bool = True, **kwargs):
       """This is the forward method for a NBX-Job. All the parameters will be passed through Relics."""
-      logger.debug(f"Running job '{job_name}' ({job_id})")
-      relic = RelicsNBX("cache", workspace_id, create = True)
+      from nbox.lib.dist import RAW_DIST_RM_PREFIX, RAW_DIST_RELIC_NAME
+
+      run_unk = U.get_random_name(True).split("-")[0]
+      tag = f"{RAW_DIST_RM_PREFIX}{run_unk}"
+      logger.debug(f"Running job '{job_name}' ({job_id}): tag = {tag}")
 
       # determining the put location is very tricky because there is no way to create a sync between the
       # key put here and what the run will pull. This can lead to many weird race conditions. So for now
-      # I am going to rely on the fact that we cannot have two parallel active runs. Thus at any given
-      # moment there can be only one file at /{job_id}/args_kwargs.pkl
-      tag = U.get_random_name(True).split("-")[0]
-      relic.put_object(f"{job_id}/args_kwargs_{tag}", (args, kwargs))
+      # I am going to rely on the fact that we cannot have two parallel runs with same tag. Thus at any given
+      # moment there can be only one file at /{job_id}/args_kwargs_{tag}.pkl
+      relic = Relics(RAW_DIST_RELIC_NAME, create = True)
+      _pkl_id_in = run_unk + "_in"
+      _pkl_id_out = run_unk + "_out"
+      relic.put_object(_pkl_id_in, (args, kwargs))
 
-      # and then we will trigger the job and wait for the run to complete
-      job.trigger(_tag = tag)
+      # and then we will trigger the job with that specific tag and wait for the run to complete
+      job.trigger(tag = tag)
       latest_run = job.last_n_runs(1)
 
       if not _wait:
         # even though we are returning the run_id, this cannot be trusted when making parallel call because of
         # the race condition on top run, which is the case when .map() method is called on the operator. 
         # return tag, latest_run["id"]
-        return tag, latest_run["id"]
+        return tag, latest_run["id"], _pkl_id_in, _pkl_id_out
 
       # if required wait else just return the 
       max_retries = latest_run['resource']['max_retries']
-
       max_polls = 600  # about 10 mins
       poll_count = 0
       while latest_run["retry_count"] <= max_retries:
@@ -356,7 +364,7 @@ class Operator():
       # this is deployment on a Build instance, there's a catch though without knowing the
       session.headers.update({
         "NBX-TOKEN": token,
-        "X-NBX-USERNAME": secret.get("username"),
+        "X-NBX-USERNAME": secret("username"),
       })
       serving_id = url
     else:
@@ -494,7 +502,7 @@ class Operator():
     return wrap
 
   def _cls(self, fn, *args, **kwargs):
-    """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a class as an operator"""
+    """Do not use directly, use `@operator` decorator instead. Utility to wrap a class as an operator"""
     obj = fn(*args, **kwargs)
     # override the file this is necessary for getting the remote operations running
     self.__file__ = inspect.getfile(fn)
@@ -525,7 +533,7 @@ class Operator():
     return op
 
   def _fn(self, fn):
-    """Do not use directly, use ``@operator`` decorator instead. Utility to wrap a function as an operator"""
+    """Do not use directly, use `@operator` decorator instead. Utility to wrap a function as an operator"""
     self.forward = fn # override the forward function
     # override the file this is necessary for getting the remote operations running
     self.__file__ = inspect.getfile(fn)
@@ -559,7 +567,8 @@ class Operator():
   def __setattr__(self, key, value: 'Operator'):
     if (
       isinstance(value, Operator) and
-      hasattr(value, "_op_type") and self._op_type == ospec.OperatorType.UNSET and
+      hasattr(value, "_op_type") and
+      self._op_type == ospec.OperatorType.UNSET and
       hasattr(self, "_operators")
     ):
       # print("Adding:", self.__class__.__qualname__, key, value.__class__.__qualname__, isinstance(value, Operator), id(value), id(self))
@@ -622,7 +631,6 @@ class Operator():
     raise ValueError(f"Operator cannot iterate")
 
   def __contains__(self, key):
-
     if self._op_type == ospec.OperatorType.SERVING:
       return self.forward("__contains__", key)
     if self._op_type in [ospec.OperatorType.WRAP_CLS]:
@@ -684,24 +692,25 @@ class Operator():
     elif self._op_type == ospec.OperatorType.WRAP_CLS:
       raise ValueError(f"Cannot call class wrappers directly, will interfere with nbox")
 
-    input_dict = {}
-    logger.debug(f"Calling operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = SimplerTimes.get_now_pb()
-    self.node.run_status.CopyFrom(RunStatus(start = _ts, inputs = {k: str(type(v)) for k, v in input_dict.items()}))
-    if self._tracer != None:
-      self._tracer(self.node)
+    # input_dict = {}
+    logger.debug(f"Calling operator '{self.__class__.__name__}'")
+    # _ts = SimplerTimes.get_now_pb()
+    # if self._tracer != None:
+    #   self._tracer(self.node)
     # ---- USER SEPERATION BOUNDARY ---- #
 
-    with log_latency(f"{self.__class__.__name__}-forward"):
-      out = self.forward(*args, **kwargs)
+    # with log_latency(f"{self.__class__.__name__}-forward"):
+    #   out = self.forward(*args, **kwargs)
+
+    out = self.forward(*args, **kwargs)
 
     # ---- USER SEPERATION BOUNDARY ---- #
-    outputs = {}
-    logger.debug(f"Ending operator '{self.__class__.__name__}': {self.node.id}")
-    _ts = SimplerTimes.get_now_pb()
-    self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
-    if self._tracer != None:
-      self._tracer(self.node)
+    # outputs = {}
+    logger.debug(f"Ending operator '{self.__class__.__name__}'")
+    # _ts = SimplerTimes.get_now_pb()
+    # self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
+    # if self._tracer != None:
+    #   self._tracer(self.node)
 
     # if user has enabled _tracking, then we will store the input, output values as well
     return out
@@ -712,64 +721,56 @@ class Operator():
   # nbx/
   def _get_dag(self) -> DAG:
     """Get the DAG for this Operator including all the nested ones."""
-    dag = get_nbx_flow(self.forward)
-    all_child_nodes = {}
-    all_edges = {}
-    for child_id, child_node in dag.flowchart.nodes.items():
-      name = child_node.name
-      if name.startswith("self."):
-        name = name[5:]
-      operator_name = "CodeBlock" # default
-      cls_item = getattr(self, name, None)
-      if cls_item is not None and cls_item.__class__.__base__ == Operator:
-        # this node is an operator
-        operator_name = cls_item.__class__.__name__
-        child_dag: DAG = cls_item._get_dag() # call this function recursively
-
-        # update the child nodes with parent node id
-        for _child_id, _child_node in child_dag.flowchart.nodes.items():
-          if _child_node.parent_node_id == "":
-            _child_node.parent_node_id = child_id # if there is already a parent_node_id set is child's child
-          all_child_nodes[_child_id] = _child_node
-          all_edges.update(child_dag.flowchart.edges)
-      
-      # update the child nodes name with the operator name
-      child_node.operator = operator_name
-
-    # update the root dag with new children and edges
-    _nodes = {k:v for k,v in dag.flowchart.nodes.items()}
-    _edges = {k:v for k,v in dag.flowchart.edges.items()}
-    _nodes.update(all_child_nodes)
-    _edges.update(all_edges)
-
-    # because updating map in protobuf is hard
-    dag.flowchart.CopyFrom(Flowchart(nodes = _nodes, edges = _edges))
+    dag = DAG()
     return dag
+
+  # def deploy_as_job(
+  #   self,
+  #   job_id: str = "",
+  #   **kwargs,
+  # ):
+  #   return self.deploy(
+  #     group_id = job_id,
+  #     deployment_type = ospec.OperatorType.JOB,
+  #     **kwargs,
+  #   )
+
+  # def deploy_as_serving(
+  #   self,
+  #   serving_id: str = "",
+  #   **kwargs,
+  # ):
+  #   return self.deploy(
+  #     group_id = serving_id,
+  #     deployment_type = ospec.OperatorType.SERVING,
+  #     **kwargs,
+  #   )
 
   def deploy(
     self,
-    workspace_id: str,
-    id_or_name:str = None,
+    group_id: str,
     deployment_type: str = None,
     resource: Resource = None,
     ignore_patterns: List[str] = [],
+    workspace_id: str = "",
     *,
     _unittest = False,
     _include_pattern = [],
   ) -> 'Operator':
     """Uploads relevant files to the cloud and deploys as a batch process or and API endpoint, returns the relevant
-    ``.from_job()`` or ``.from_serving`` Operator. This uploads the entire folder where the caller file is located.
-    In which case having a ``.nboxignore`` and ``requirements.txt`` will be honoured.
+    `.from_job()` or `.from_serving` Operator. This uploads the entire folder where the caller file is located.
+    In which case having a `.nboxignore` and `requirements.txt` will be honoured.
 
     Args:
-      workspace_id (str): The workspace id to deploy to.
-      id_or_name (str, optional): The id or name of the deployment. if deployment_type is 'serving' this this must be provided.
-      deployment_type (str, optional): Defaults to 'serving' if WRAP_CLS else 'job'. The type of deployment to create.
-      resource (Resource, optional): The resource to deploy to, uses a reasonable default.
+      group_id (str): The Job/Deploy id to deploy to.
+      deployment_type (str, optional): The deployment type. Defaults to None.
+      resource (Resource, optional): The resource to use for deployment. Defaults to None.
+      ignore_patterns (List[str], optional): The patterns to ignore. Defaults to [].
     """
 
     if not workspace_id:
-      raise ValueError("Must provide a workspace_id")
+      workspace_id = secret(AuthConfig.workspace_id)
+      logger.info(f"Using workspace_id: {workspace_id}")
 
     # go over reasonable checks for deployment
     if deployment_type == None:
@@ -781,15 +782,13 @@ class Operator():
       raise ValueError(f"Cannot deploy a class as a job, only as a serving")
     if deployment_type not in ospec.OperatorType._valid_deployment_types():
       raise ValueError(f"Invalid deployment type: {deployment_type}. Must be one of {ospec.OperatorType._valid_deployment_types()}")
-    if deployment_type == ospec.OperatorType.SERVING.value:
-      if id_or_name is None:
-        raise ValueError("id_or_name must be provided for serving deployment")
+    if deployment_type == ospec.OperatorType.SERVING:
+      if group_id is None:
+        raise ValueError("pass deployment_id as group_id for serving deployment")
 
     # get the filepath and name to import for convience
     fp, folder, file, name = ospec.get_operator_location(self)
     logger.info(f"Deployment Type: {deployment_type}")
-    logger.info(f"Deploying '{name}' from '{fp}'")
-    logger.info(f"Will upload folder: {folder}")
 
     # create a temporary directory to store all the files
     # copy over all the files and wait for it, else the changes below won't be reflected
@@ -805,7 +804,7 @@ class Operator():
     with open(U.join(folder, "nbx_user.py"), "w") as f:
       f.write(f'''# Autogenerated for .deploy() call
 from nbox.messages import read_file_to_binary
-from nbox.hyperloop.job_pb2 import Resource
+from nbox.hyperloop.jobs.job_pb2 import Resource
 
 from {file.split('.')[0]} import {name}
 
@@ -843,19 +842,25 @@ get_schedule = lambda: None
     if _unittest:
       return
 
-    if deployment_type == ospec.OperatorType.JOB.value:
+    init_folder = f"{fp.replace('.py', '')}:{name}"
+    logger.debug(f"Upload init_folder: {init_folder}")
+
+    if deployment_type == ospec.OperatorType.JOB:
       out = Job.upload(
-        init_folder = folder,
-        id_or_name = id_or_name or "dot_deploy_runs", # all the .deploy() methods will be called dot_deploy_runs
-        workspace_id = workspace_id,
+        init_folder = init_folder,
+        id = group_id,
         _ret = True
       )
-      return self.from_job(job_id_or_name = out.id, workspace_id = workspace_id)
-    elif deployment_type == ospec.OperatorType.SERVING.value:
-      out = Serve.upload(init_folder = folder, id_or_name = id_or_name, workspace_id = workspace_id, _ret = True)
+      return self.from_job(job_id = out.id)
+    elif deployment_type == ospec.OperatorType.SERVING:
+      out = Serve.upload(
+        init_folder = init_folder,
+        id = group_id,
+        _ret = True
+      )
 
       # get the serving object
-      stub = nbox_ws_v1.workspace.u(workspace_id).deployments.u(out.id)
+      stub = nbox_ws_v1.deployments.u(out.id)
 
       # we will poll here till the model is not ready and return the latched operator
       done = False
@@ -976,22 +981,28 @@ if __name__ == "__main__":
       return results
 
     elif self._op_type == ospec.OperatorType.JOB:
+      from nbox.lib.dist import RAW_DIST_RELIC_NAME
+
       # now this is simple enough, we need to implement a waiting queue that's it
       _start_time = monotonic()
       run_tags = []
       run_tag_to_input_idx = {}
+      run_tag_to_out_files = {}
 
-      # though the threadpool is a faster method, cannot trust the run_id because of the race condition on top run
-      with ThreadPoolExecutor(min(len(inputs), 10)) as exe:
-        trigger = lambda i, x: [i, self(*x, _wait = False)]
-        results = {exe.submit(trigger, i, x) for i,x in enumerate(inputs)}
-        for future in as_completed(results):
-          try:
-            i, (tag, run_id) = future.result()
-            run_tags.append(tag)
-            run_tag_to_input_idx[tag] = i
-          except Exception as e:
-            raise Exception(e)
+      loop = asyncio.get_event_loop()
+      futures = []
+      for i,x in enumerate(inputs):
+        async def call_self():
+          tag, _est_run_id, _pkl_id_in, _pkl_id_out = self(*x, _wait = False)
+          run_tags.append(tag)
+          run_tag_to_input_idx[tag] = i
+          run_tag_to_out_files[tag] = _pkl_id_out
+        
+        futures.append(call_self())
+      gather_task = asyncio.gather(*futures)
+      loop.run_until_complete(gather_task)
+      loop.close()
+      
 
       run_tag_to_input_idx = {k:v for k,v in sorted(run_tag_to_input_idx.items(), key = lambda x: x[1])}
       sleep(1) # sleep for a bit before requesting the webserver, this sleep matters now that we have the threadpool
@@ -1003,30 +1014,18 @@ if __name__ == "__main__":
       # print("run_tag_to_input_idx:", run_tag_to_input_idx)
       # print("inputs:", inputs, len(inputs))
 
-      proc_hash = U.hash_(",".join(run_tags), "sha256")[:8]
       logger.info(f"Waiting for {len(run_ids)} processes to finish, this may take a while...")
-      html_path = U.join(U.env.NBOX_HOME_DIR(), ".cache", f"{proc_hash}.html")
-
-      def _write_html_page(data, headers = ["created_at", "end_time", "input_id", "run_id", "status", "tag", "files"]):
-        with open(U.join(U.folder(__file__), "assets", "run_status.jinja"), "r") as src, open(html_path, "w") as dst:
-          import jinja2
-          template = jinja2.Template(src.read())
-          dst.write(template.render(data = data, headers = headers))
-
-      _write_html_page([[] for _ in range(len(inputs))])
-
       run_status = {rid: None for rid in run_ids}
       active_runs = {rid for rid, done in run_status.items() if not done}
-      pbar = tqdm(total = len(inputs), desc = f"Waiting for runs ({html_path})")
-      relic = RelicsNBX("cache", workspace_id = self._op_spec.workspace_id)
+      pbar = tqdm(total = len(inputs), desc = f"Waiting for runs to complete")
+      relic = Relics(RAW_DIST_RELIC_NAME, workspace_id = self._op_spec.workspace_id)
 
       def _update_runs():
         # get all runs, filter those in this invocation, update the status
         files_ = {}
-        for t in run_tags:
-          files_[t] = (
-            relic.has(f"{self._op_spec.job_id}/return_{tag}"),
-          )
+        for t, _pkl_id_out in run_tag_to_out_files.items():
+          files_[t] = relic.has(_pkl_id_out)
+
         out = self._op_spec.job.last_n_runs(len(inputs))
         # print(out)
         if not isinstance(out, (list, tuple)):
@@ -1034,23 +1033,28 @@ if __name__ == "__main__":
         proc_runs = list(filter(lambda x: x["id"] in run_ids, out))
         data = [
           [
-            x["created_at"],
-            x["end_time"],
+            # x["created_at"],
+            # x["end_time"],
             run_tag_to_input_idx[t],
+            t,
             x["id"],
             x["status"],
-            t,
-            sum(files_[t])
+            int(files_[t])
           ] for x, t in zip(proc_runs, run_tags)
         ]
-        data = sorted(data, key = lambda x: x[2])
-        _write_html_page(data)
-
+        data = sorted(data, key = lambda x: x[0])
+        table_string = tabulate(
+          data,
+          headers = [
+            # "created_at", "end_time",
+            "input_id", "tag", "run_id (not accurate)", "status", "output found"
+          ],
+          tablefmt = "fancy_grid"
+        )
+        print(table_string)
         _active_runs = {x["id"] for x in proc_runs if x["status"] not in ["COMPLETED", "ERROR"]}
         pbar.update(len(active_runs) - len(_active_runs))
-
-        all_files_ready = sum([sum(files_[t]) for t in run_tags]) == len(run_tags)
-
+        all_files_ready = sum([int(files_[t]) for t in run_tags]) == len(run_tags)
         return _active_runs, all_files_ready
 
       while len(active_runs) > 0:
@@ -1064,7 +1068,8 @@ if __name__ == "__main__":
       # load the results in memory in the exact order of the inputs
       results = []
       for tag, _idx in run_tag_to_input_idx.items():
-        obj = relic.get_object(f"{self._op_spec.job_id}/return_{tag}")
+        _pkl_id_out = run_tag_to_out_files[tag]
+        obj = relic.get_object(_pkl_id_out)
         results.append(obj)
 
       _end_time = monotonic()

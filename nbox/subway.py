@@ -25,6 +25,7 @@ import re
 import time
 import string
 import threading
+from google.protobuf.message import Message
 from requests import Session
 from functools import lru_cache
 from json import dumps as json_dumps
@@ -321,7 +322,7 @@ class SpecSubway():
   def __repr__(self):
     return f"<SpecSubway ({self._url})>"
 
-  def __getattr__(self, attr):
+  def __getattr__(self, attr) -> 'SpecSubway':
     # https://stackoverflow.com/questions/3278077/difference-between-getattr-vs-getattribute
     if self._caller and len(self._spec) == 1:
       raise AttributeError(f"'.{self._name}' does not have children")
