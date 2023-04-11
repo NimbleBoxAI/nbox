@@ -54,6 +54,7 @@ def deploy_serving(
   resource: Resource = None,
   wait_for_deployment: bool = False,
   model_metadata: Dict[str, str] = {},
+  feature_gates: Dict[str, str] = {},
   exe_jinja_kwargs: Dict[str, str] = {},
   *,
   _only_zip: bool = False,
@@ -84,7 +85,8 @@ def deploy_serving(
     name = model_name,
     type = Model.ServingType.SERVING_TYPE_NBOX_OP,
     metadata = model_metadata,
-    resource = resource
+    resource = resource,
+    feature_gates=feature_gates
   )
   model_proto_fp = U.join(gettempdir(), "model_proto.msg")
   mpb.write_binary_to_file(model_proto, model_proto_fp)
@@ -214,6 +216,7 @@ def deploy_job(
   resource: Resource,
   workspace_id: str = None,
   job_id: str = None,
+  feature_gates: Dict[str, str] = None,
   exe_jinja_kwargs = {},
   *,
   _only_zip: bool = False,
@@ -256,7 +259,8 @@ def deploy_job(
     created_at = SimplerTimes.get_now_pb(),
     schedule = schedule.get_message() if schedule is not None else None, # JobProto.Schedule(cron = "0 0 24 2 0"),
     dag = dag,
-    resource = resource
+    resource = resource,
+    feature_gates=feature_gates
   )
   job_proto_fp = U.join(gettempdir(), "job_proto.msg")
   mpb.write_binary_to_file(job_proto, job_proto_fp)

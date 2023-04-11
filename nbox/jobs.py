@@ -188,6 +188,8 @@ def upload_job_folder(
   # some extra things for functionality
   _ret: bool = False,
 
+  feature_gates: dict = {},
+
   # finally everything else is assumed to be passed to the initialisation script
   **init_kwargs
 ):
@@ -379,6 +381,7 @@ def upload_job_folder(
       workspace_id = workspace_id,
       schedule = None,
       resource = resource,
+      feature_gates = feature_gates,
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
     if trigger:
@@ -408,6 +411,7 @@ def upload_job_folder(
       model_metadata = {
         "serving_type": serving_type
       },
+      feature_gates = feature_gates,
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
     if trigger:
@@ -849,7 +853,7 @@ class Job:
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
-  def trigger(self, tag: str = ""):
+  def trigger(self, tag: str = "",feature_gates: dict = {}):
     """Manually triger this job.
     
     Args:
@@ -857,6 +861,7 @@ class Job:
     """
     logger.debug(f"Triggering job '{self.job_proto.id}'")
     if tag:
+      self.job_proto.feature_gates.update(feature_gates)
       self.job_proto.feature_gates.update({"SetRunMetadata": tag})
     rpc(nbox_grpc_stub.TriggerJob, JobRequest(auth_info=self.auth_info, job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
     logger.info(f"Triggered job '{self.job_proto.id}'")
