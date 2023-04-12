@@ -133,20 +133,23 @@ class NBXLet(Operator):
 
   def serve(self, **serve_kwargs):
     """Run a serving API endpoint"""
-    # run_tag = os.getenv("NBOX_RUN_METADATA", "")
-    # logger.info(f"Run Tag: {run_tag}")
-
-    # while we prepare to ship run_tag for serving, we can leverage the existing code to provide the exact
-    # same functionality
-    if os.path.exists(LMAO_SERVING_FILE):
-      logger.info(f"Found {LMAO_SERVING_FILE}")
-      with open(LMAO_SERVING_FILE, "r") as f:
-        cfg = LiveConfig.from_json(f.read())
-        ProjectState.project_id = cfg.get("project_id")
-        ProjectState.serving_id = cfg.get("serving_id")
-        logger.info(lo("Project data:", **ProjectState.data))
+    run_tag = os.getenv("NBOX_MODEL_METADATA", "")
+    logger.info(f"Run Tag: {run_tag}")
 
     try:
+      if run_tag.startswith(LMAO_RM_PREFIX):
+        project_id, tracker_id = run_tag[len(LMAO_RM_PREFIX):].split("/")
+        logger.info(f"Project name (Tracker ID): {project_id} ({tracker_id})")
+        ProjectState.project_id = project_id
+        ProjectState.serving_id = tracker_id
+
+        # create the central project class and get the experiment tracker
+        proj = Project()
+        logger.info(lo("Project data:", **proj.data))
+        live_tracker = proj.get_live_tracker()
+        tracker_config = LiveConfig.from_json(live_tracker.serving.config)
+
+      # now start serving
       serve_operator(op_or_app = self.op, **serve_kwargs)
     except Exception as e:
       U.log_traceback()

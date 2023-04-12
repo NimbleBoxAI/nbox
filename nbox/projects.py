@@ -7,10 +7,12 @@ import zipfile
 from pprint import pformat
 from subprocess import Popen
 
+from google.protobuf import field_mask_pb2
+
 from nbox.utils import logger
 from nbox import utils as U
-from nbox.auth import secret, AuthConfig
-from nbox.init import nbox_ws_v1
+from nbox.auth import secret, AuthConfig, auth_info_pb
+from nbox.init import nbox_ws_v1, nbox_model_service_stub
 from nbox import messages as mpb
 from nbox.lmao import (
   Lmao,
@@ -30,6 +32,39 @@ from nbox.hyperloop.deploy import serve_pb2
 from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.nbxlib.astea import Astea
 
+
+def _parse_job_code(init_path: str, run_kwargs) -> tuple[str, dict]:
+  # analyse the input file and function, extract the types and build the run_kwargs
+  fn_file, fn_name = init_path.split(":")
+  if not os.path.exists(fn_file + ".py"):
+    raise Exception(f"File {fn_file} does not exist")
+  init_folder, fn_file = os.path.split(fn_file + ".py")
+  init_folder = init_folder or "."
+  tea = Astea(fn_file)
+  items = tea.find(fn_name)
+  if not len(items):
+    raise Exception(f"Function {fn_name} not found in {fn_file}")
+  fn = items[0]
+  defaults = fn.node.args.defaults
+  args = fn.node.args.args
+  _default_kwarg = {}
+  for k,v in zip(args[::-1], defaults[::-1]):
+    _k = k.arg
+    if not type(v) == ast.Constant:
+      raise Exception(f"Default value for {_k} is not a primitive type [int, float, str, bool] but {type(v)}")
+    _default_kwarg[_k] = v.value
+  args_set = set([x.arg for x in args])
+  args_na = args_set - set(_default_kwarg.keys())
+  args_not_passed = set(args_na) - set(run_kwargs.keys())
+  if len(args_not_passed):
+    raise Exception(f"Following arguments are not passed: {args_not_passed} but required, this can cause errors during execution")
+  extra_args = set(run_kwargs.keys()) - args_set
+  if len(extra_args) and not fn.node.args.kwarg:
+    raise Exception(f"Following arguments are passed but not consumed by {fn_name}: {extra_args}")
+  final_dict = {}
+  for k,v in _default_kwarg.items():
+    final_dict[k] = type(v)(run_kwargs.get(k, v))
+  return final_dict, init_folder
 
 class ProjectState:
   project_id: str = ""
@@ -109,7 +144,26 @@ class Project:
   def get_deployment_id(self) -> str:
     return self.data["deployment_list"][0]
 
-  # the big CLI command that replaces nbx lmao run
+  # Now here's the thing about the project, project is supposed to be an end to end thing from training to deployment
+  # however it depends on the NBX-Jobs and Deploy to provide the actual computation. NBX-Jobs and Deploy are application
+  # agnostic meaning that they do not know what they are running. So in order to inform them what is going to happen
+  # we use Environment Variables to pass the information.
+  # 
+  # Here's the flow in run:
+  # - recreate the CLI command that was used to trigger the job
+  # - get the exsting job at the project's associated job id
+  # - [JOB ONLY] parse the init_path and get the git details
+  # - LMAO initialise a new experiment
+  # - upload the job code
+  # - [JOB ONLY] if the git details are present then package the git files
+  # - trigger with `RunTag`
+  # 
+  # Here's the flow in deploy:
+  # - recreate the CLI command that was used to trigger the serving
+  # - get the exsting serving at the project's associated serving id
+  # - LMAO initialise the serving
+  # - upload the serving code
+  # - deploy with Tag
 
   def run(
     self,
@@ -188,43 +242,14 @@ class Project:
       max_retries = resource_max_retries,
     ))
 
-    # analyse the input file and function, extract the types and build the run_kwargs
-    fn_file, fn_name = init_path.split(":")
-    if not os.path.exists(fn_file + ".py"):
-      raise Exception(f"File {fn_file} does not exist")
-    init_folder, fn_file = os.path.split(fn_file + ".py")
-    init_folder = init_folder or "."
-    tea = Astea(fn_file)
-    items = tea.find(fn_name)
-    if not len(items):
-      raise Exception(f"Function {fn_name} not found in {fn_file}")
-    fn = items[0]
-    defaults = fn.node.args.defaults
-    args = fn.node.args.args
-    _default_kwarg = {}
-    for k,v in zip(args[::-1], defaults[::-1]):
-      _k = k.arg
-      if not type(v) == ast.Constant:
-        raise Exception(f"Default value for {_k} is not a primitive type [int, float, str, bool] but {type(v)}")
-      _default_kwarg[_k] = v.value
-    args_set = set([x.arg for x in args])
-    args_na = args_set - set(_default_kwarg.keys())
-    args_not_passed = set(args_na) - set(run_kwargs.keys())
-    if len(args_not_passed):
-      raise Exception(f"Following arguments are not passed: {args_not_passed} but required, this can cause errors during execution")
-    extra_args = set(run_kwargs.keys()) - args_set
-    if len(extra_args) and not fn.node.args.kwarg:
-      raise Exception(f"Following arguments are passed but not consumed by {fn_name}: {extra_args}")
-    final_dict = {}
-    for k,v in _default_kwarg.items():
-      final_dict[k] = type(v)(run_kwargs.get(k, v))
-    run_kwargs = final_dict
-
-    # initialise the run with the big object and get the experiment_id
+    # parse the code file + get git details, these two steps are unique to LMAO Run
+    run_kwargs, init_folder = _parse_job_code(init_path = init_path, run_kwargs = run_kwargs) 
     if os.path.exists(U.join(init_folder, ".git")):
       git_det = get_git_details(init_folder)
     else:
       git_det = {}
+
+    # initialise the run with the big object and get the experiment_id
     run = self.lmao_stub.init_run(pb.InitRunRequest(
       workspace_id = workspace_id,
       project_id = self.pid,
@@ -243,7 +268,7 @@ class Project:
     ))
     logger.info(f"Created new experiment ID: {run.experiment_id}")
 
-    # create a git patch and upload it to relics
+    # create a git patch and upload it to relics, this is unique to LMAO Run
     if git_det:
       _zf = U.join(init_folder, "untracked.zip")
       zip_file = zipfile.ZipFile(_zf, "w", zipfile.ZIP_DEFLATED)
@@ -289,7 +314,7 @@ class Project:
     # now trigger the experiment
     fp = f"{run.project_id}/{run.experiment_id}"
     tag = f"{LMAO_RM_PREFIX}{fp}"
-    logger.debug(f"Running job '{job.name}' ({job.id}) with tag: {tag}")
+    logger.info(f"Running job '{job.name}' ({job.id}) with tag: {tag}")
     job.trigger(tag)
 
     # finally print the location of the run where the users can track this
@@ -344,11 +369,6 @@ class Project:
     ))
 
     # now we create a live tracker that can then be reused by the serving
-    config = LiveConfig(
-      resource = serving_pb.resource,
-      cli_comm = reconstructed_cli_comm,
-      enable_system_monitoring = False,
-    )
     serving = self.lmao_stub.init_serving(pb.InitRunRequest(
       workspace_id = workspace_id,
       project_id = self.pid,
@@ -356,21 +376,19 @@ class Project:
         type = pb.AgentDetails.NBX.JOB,
         nbx_serving_id = serving_pb.id
       ),
-      config = config.to_json(),
+      config = LiveConfig(
+        resource = serving_pb.resource,
+        cli_comm = reconstructed_cli_comm,
+        enable_system_monitoring = False,
+      ).to_json(),
     ))
     logger.info(f"Created new live tracking ID: {serving.serving_id}")
 
-    # now store the config
-    config.add("serving_id", serving.serving_id)
-    config.add("project_id", self.pid)
-    with open(LMAO_SERVING_FILE, "w") as f:
-      f.write(config.to_json())
-
     # now upload this model via the Serve functionality
-    Serve.upload(
+    deployment_model: Serve = Serve.upload(
       init_folder = init_path,
       id = serving_pb.id,
-      trigger = True,
+      trigger = False,
       resource_cpu = resource_cpu,
       resource_memory = resource_memory,
       resource_disk_size = resource_disk_size,
@@ -378,7 +396,21 @@ class Project:
       resource_gpu_count = resource_gpu_count,
       model_name = serving.serving_id.replace("-", "_"),
       serving_type = serving_type,
+      _ret = True
     )
 
-    # clean up
-    os.remove(LMAO_SERVING_FILE)
+    # deploy with the tag
+    tag = f"{LMAO_RM_PREFIX}{self.pid}/{serving.serving_id}"
+    logger.info(f"Deploying serving '{deployment_model.serving_id}' ({deployment_model.model_id}) with tag: {tag}")
+    nbox_model_service_stub.Deploy(
+      serve_pb2.ModelRequest(
+        model = serve_pb2.Model(
+          id = deployment_model.serving_id,
+          serving_group_id = deployment_model.serving_id,
+          feature_gates = {
+            "SetModelMetadata": tag
+          }
+        ),
+        auth_info = auth_info_pb(),
+      ),
+    )

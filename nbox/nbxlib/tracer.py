@@ -129,7 +129,7 @@ class Tracer:
   def hearbeat_thread_worker(self):
     while True:
       self._rpc()
-      for _ in range(self.hearbeat_thread_worker):
+      for _ in range(self.heartbeat_every):
         # in future add a way to stop the thread
         sleep(1)
 

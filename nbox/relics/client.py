@@ -6,7 +6,7 @@ from hashlib import md5
 
 from subprocess import Popen
 from nbox.auth import secret, AuthConfig
-from nbox.utils import logger, env
+from nbox.utils import logger, env, get_files_in_folder
 from nbox.relics.proto.relics_rpc_pb2 import (
   CreateRelicRequest,
   ListRelicFilesRequest,
@@ -106,7 +106,7 @@ class Relics():
     self.uat = user_agent_type
 
   def __repr__(self):
-    return f"Relics({self.relic_name}, {'CONNECTED' if self.relic else 'NOT CONNECTED'}" + \
+    return f"Relics({self.relic_name} ({self.relic.id}), {'CONNECTED' if self.relic else 'NOT CONNECTED'}" + \
       (f", prefix='{self.prefix}'" if self.prefix else "") + \
       ")"
 
@@ -232,7 +232,14 @@ class Relics():
   def put_to(self, local_path: str, remote_path: str) -> None:
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.debug(f"Putting file: {local_path} to {remote_path}")
+    logger.debug(f"Putting '{local_path}' to '{remote_path}'")
+    if os.path.isdir(local_path):
+      all_f = get_files_in_folder(local_path, abs_path=False)
+    else:
+      all_f = [local_path]
+    logger.info(f"Found {len(all_f)} files, starting upload ...")
+    # TODO: @yashbonde work upload for folders as well! works for download
+
     relic_file = get_relic_file(local_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     relic_file.name = remote_path # override the name
@@ -249,21 +256,23 @@ class Relics():
     self._download_relic_file(local_path, relic_file)
 
   def get_from(self, local_path: str, remote_path: str, unzip: bool = False) -> None:
-    # TODO: @yashbonde add support for unzipping
+    if unzip:
+      logger.warning("Unzipping is inefficient, use Popen or CLI instead")
+
     if self.relic is None:
       raise ValueError("Relic does not exist, pass create=True")
-    logger.debug(f"Getting file: {local_path} from {remote_path}")
+    logger.debug(f"Getting '{local_path}' from '{remote_path}'")
 
     files = self.list_files(remote_path)
     file_ = list(filter(
-      lambda x: x.name == remote_path, files.files
+      lambda x: x.name == remote_path, files
     ))
     if not file_:
       raise ValueError(f"File {remote_path} does not exist in the relic")
     file_ = file_[0]
     if file_.type == RelicFile.RelicType.FOLDER:
       files = self.ls(remote_path + "/", recurse=True)
-      if not os.path.isdir(local_path):
+      if not os.path.exists(local_path):
         os.makedirs(local_path)
       all_files = []
       for fx in files:
@@ -275,9 +284,12 @@ class Relics():
     for (lp, fx) in all_files:
       if fx.type == RelicFile.RelicType.FOLDER:
         continue
-      relic_file = RelicFile(name = fx.name.strip("./"),)
-      relic_file.relic_name = self.relic_name
-      relic_file.workspace_id = self.workspace_id
+      relic_file = RelicFile(
+        name = fx.name.strip("./"),
+        relic_name = self.relic_name,
+        workspace_id = self.workspace_id
+      )
+      os.makedirs(os.path.dirname(relic_file.name), exist_ok=True)
       self._download_relic_file(lp, relic_file)
 
   def rm(self, remote_path: str):
@@ -356,33 +368,6 @@ class Relics():
       raise ValueError("Relic does not exist, nothing to delete")
     logger.warning(f"Deleting relic {self.relic_name}")
     self.stub.delete_relic(self.relic)
-
-  def list_files(self, path: str = "", recurse: bool = False) -> ListRelicFilesResponse:
-    """List all the files in the relic at path"""
-    if self.relic is None:
-      raise ValueError("Relic does not exist, pass create=True")
-    logger.debug(f"Listing files in relic {self.relic_name}:{self.prefix}:{path}")
-    for _ in range(2):
-      p = self.prefix
-      if path:
-        p += "/" + path
-      out = self.stub.list_relic_files(ListRelicFilesRequest(
-        workspace_id = self.workspace_id,
-        relic_id = self.relic.id,
-        prefix = p
-      ))
-      if out != None:
-        break
-      time.sleep(1)
-
-    if recurse:
-      for f in out.files:
-        if f.name == path:
-          continue
-        if f.type == RelicFile.RelicType.FOLDER:
-          fl = self.list_files(f.name + "/", recurse=recurse)
-          out.files.extend(fl.files)
-    return out
   
   def ls(self, path: str = "", recurse: bool = False):
     """Iterate over all the files at the path"""
@@ -412,3 +397,5 @@ class Relics():
         if f.type == RelicFile.RelicType.FOLDER:
           yield from self.ls(f.name + "/", recurse=recurse)
 
+  def list_files(self, path: str = "", recurse: bool = False) -> ListRelicFilesResponse:
+    return self.ls(path, recurse)

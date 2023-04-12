@@ -175,7 +175,7 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
         id = model_id,
         serving_group_id = deployment_id,
         resource = model_proto.resource,
-        # feature_gates = {"SetRunMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
+        # feature_gates = {"SetModelMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
       ),
       auth_info = auth_info_pb(),
     ),

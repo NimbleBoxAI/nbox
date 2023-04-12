@@ -29,7 +29,6 @@ from nbox.sub_utils.ssh import tunnel
 from nbox.relics import Relics
 from nbox.lmao import LmaoCLI
 from nbox.version import __version__ as V
-from nbox.nbxlib.fire import NBXFire
 from nbox.projects import Project
 from nbox.utils import logger, lo
 from nbox.plugins.base import PluginCLI
@@ -72,10 +71,10 @@ class Config(object):
     logger.info(lo(
       "nbox config:",
       workspace_name = secret(AuthConfig.workspace_name),
-      workspace_id = secret(AuthConfig.workspace_id),
+      workspace_id = secret.workspace_id,
       username = secret(AuthConfig.username),
       nbox = V,
-      URL = secret(AuthConfig.url),
+      URL = secret.nbx_url,
     ))
 
   def clear(self):
@@ -86,7 +85,7 @@ class Config(object):
 
 def open_home():
   """Open current NBX platform"""
-  webbrowser.open(secret(AuthConfig.url))
+  webbrowser.open(secret.nbx_url)
 
 
 def get(api_end: str, no_pp: bool = False, **kwargs):
@@ -194,7 +193,6 @@ def main():
   }
 
   fire.Fire(component)
-  # NBXFire(component)
 
 if __name__ == "__main__":
   main()
