@@ -146,8 +146,8 @@ class NBXLet(Operator):
         # create the central project class and get the experiment tracker
         proj = Project()
         logger.info(lo("Project data:", **proj.data))
-        live_tracker = proj.get_live_tracker()
-        tracker_config = LiveConfig.from_json(live_tracker.serving.config)
+        # live_tracker = proj.get_live_tracker()
+        # tracker_config = LiveConfig.from_json(live_tracker.serving.config)
 
       # now start serving
       serve_operator(op_or_app = self.op, **serve_kwargs)

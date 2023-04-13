@@ -167,21 +167,21 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
       return
 
   # model is uploaded successfully, now we need to deploy it
-  logger.info(f"Model uploaded successfully, deploying ...")
-  response: Model = mpb.rpc(
-    nbox_model_service_stub.Deploy,
-    ModelRequest(
-      model = Model(
-        id = model_id,
-        serving_group_id = deployment_id,
-        resource = model_proto.resource,
-        # feature_gates = {"SetModelMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
-      ),
-      auth_info = auth_info_pb(),
-    ),
-    "Could not deploy model",
-    raise_on_error=True
-  )
+  # logger.info(f"Model uploaded successfully, deploying ...")
+  # response: Model = mpb.rpc(
+  #   nbox_model_service_stub.Deploy,
+  #   ModelRequest(
+  #     model = Model(
+  #       id = model_id,
+  #       serving_group_id = deployment_id,
+  #       resource = model_proto.resource,
+  #       # feature_gates = {"SetModelMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
+  #     ),
+  #     auth_info = auth_info_pb(),
+  #   ),
+  #   "Could not deploy model",
+  #   raise_on_error=True
+  # )
 
   # write out all the commands for this deployment
   # logger.info("API will soon be hosted, here's how you can use it:")

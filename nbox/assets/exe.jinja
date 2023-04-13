@@ -10,7 +10,6 @@ os.environ["PYTHONUNBUFFERED"] = "true" # so print comes when it should come
 import fire
 import inspect
 from functools import lru_cache, partial
-from {{ file_name }} import {{ fn_name }}
 
 from nbox import Operator, logger
 import nbox.utils as U
@@ -20,6 +19,11 @@ from nbox.lib.dist import NBXLet
 def get_op(cloud = False) -> Operator:
   # The beauty of this function is that it ensures that the operator class is loaded only once
   try:
+    # import user code, add this to the try/except because if the code does not exit and there
+    # is an infinite loop, there can be a whole bunch of side effects, ex: 100s of LMAO live trackers
+    from {{ file_name }} import {{ fn_name }}
+    
+    # load the operator
     obj = {{ init_code }}
     if not type(obj) == Operator and {{ load_operator }}:
       # there is an initial level of precaution that we use during deployment, but we are adding simple

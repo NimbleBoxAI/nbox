@@ -101,7 +101,6 @@ class LmaoLive():
       workspace_id = self.workspace_id,
       project_id = self.project_id
     )
-    print(p)
     self.project = self.lmao.get_project(p)
     if self.project is None:
       raise Exception("Could not connect to LMAO, please check your credentials")
@@ -146,6 +145,11 @@ class LmaoLive():
 
     self.serving = s
     self._total_logged_elements  = 0 # total number of elements logged
+
+  @property
+  def serving_config(self) -> Dict[str, Any]:
+    return loads(self.serving.config)
+
 
   def log(self, y: Dict[str, Union[int, float, str]]):
     run_log = RunLog(

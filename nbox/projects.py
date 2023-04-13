@@ -6,6 +6,7 @@ import shlex
 import zipfile
 from pprint import pformat
 from subprocess import Popen
+from typing import Tuple, Dict
 
 from google.protobuf import field_mask_pb2
 
@@ -33,7 +34,7 @@ from nbox.hyperloop.common.common_pb2 import Resource
 from nbox.nbxlib.astea import Astea
 
 
-def _parse_job_code(init_path: str, run_kwargs) -> tuple[str, dict]:
+def _parse_job_code(init_path: str, run_kwargs) -> Tuple[str, Dict]:
   # analyse the input file and function, extract the types and build the run_kwargs
   fn_file, fn_name = init_path.split(":")
   if not os.path.exists(fn_file + ".py"):
@@ -334,6 +335,9 @@ class Project:
 
     # all the things for serving
     serving_type: str = "fastapi_v2",
+
+    # all the things for serving kwargs
+    **serving_kwargs,
   ):
     workspace_id = secret(AuthConfig.workspace_id)
 
@@ -355,6 +359,11 @@ class Project:
       (f" --resource_gpu_count '{resource_gpu_count}'" if resource_gpu_count else "") +
       (f" --resource_max_retries {resource_max_retries}" if resource_max_retries else "")
     )
+    for k, v in serving_kwargs.items():
+      if type(v) == bool:
+        reconstructed_cli_comm += f" --{k}"
+      else:
+        reconstructed_cli_comm += f" --{k} '{v}'"
     logger.debug(f"command: {reconstructed_cli_comm}")
 
     # get the serving
@@ -380,6 +389,7 @@ class Project:
         resource = serving_pb.resource,
         cli_comm = reconstructed_cli_comm,
         enable_system_monitoring = False,
+        extra_kwargs = serving_kwargs,
       ).to_json(),
     ))
     logger.info(f"Created new live tracking ID: {serving.serving_id}")
@@ -388,7 +398,6 @@ class Project:
     deployment_model: Serve = Serve.upload(
       init_folder = init_path,
       id = serving_pb.id,
-      trigger = False,
       resource_cpu = resource_cpu,
       resource_memory = resource_memory,
       resource_disk_size = resource_disk_size,
@@ -396,21 +405,13 @@ class Project:
       resource_gpu_count = resource_gpu_count,
       model_name = serving.serving_id.replace("-", "_"),
       serving_type = serving_type,
+
+      # don't deploy, use a tag for this
+      deploy = False,
       _ret = True
     )
 
     # deploy with the tag
     tag = f"{LMAO_RM_PREFIX}{self.pid}/{serving.serving_id}"
     logger.info(f"Deploying serving '{deployment_model.serving_id}' ({deployment_model.model_id}) with tag: {tag}")
-    nbox_model_service_stub.Deploy(
-      serve_pb2.ModelRequest(
-        model = serve_pb2.Model(
-          id = deployment_model.serving_id,
-          serving_group_id = deployment_model.serving_id,
-          feature_gates = {
-            "SetModelMetadata": tag
-          }
-        ),
-        auth_info = auth_info_pb(),
-      ),
-    )
+    deployment_model.deploy(tag)

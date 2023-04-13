@@ -17,7 +17,8 @@ import nbox.utils as U
 from nbox.auth import secret, AuthConfig, auth_info_pb
 from nbox.utils import logger
 from nbox.version import __version__
-from nbox.messages import rpc, streaming_rpc
+from nbox import messages as mpb
+# from nbox.messages import rpc, streaming_rpc
 from nbox.init import nbox_grpc_stub, nbox_ws_v1, nbox_serving_service_stub, nbox_model_service_stub
 from nbox.nbxlib.astea import Astea, IndexTypes as IT
 
@@ -165,7 +166,11 @@ def upload_job_folder(
   init_folder: str,
   id: str = "",
   project_id: str = "",
+
+  # job / deploy rpc things
   trigger: bool = False,
+  deploy: bool = True,
+  pin: bool = False,
 
   # all the things for resources
   resource_cpu: str = "",
@@ -228,10 +233,10 @@ def upload_job_folder(
 
   if method not in OT._valid_deployment_types():
     raise ValueError(f"Invalid method: {method}, should be either {OT._valid_deployment_types()}")
-  # if (not name and not id) or (name and id):
-  #   raise ValueError("Either --name or --id must be present")
-  if trigger and method not in [OT.JOB, OT.SERVING]:
-    raise ValueError(f"Trigger can only be used with '{OT.JOB}' or '{OT.SERVING}'")
+  if trigger and method != OT.JOB:
+    raise ValueError(f"Trigger can only be used with method='{OT.JOB}'")
+  if pin and method != OT.SERVING:
+    raise ValueError(f"Deploy and Pin can only be used with method='{OT.SERVING}'")
   if model_name and method != OT.SERVING:
     raise ValueError(f"model_name can only be used with '{OT.SERVING}'")
   
@@ -410,6 +415,8 @@ def upload_job_folder(
       },
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
+    if deploy:
+      out.deploy()
     if trigger:
       out.pin()
   else:
@@ -450,7 +457,7 @@ def _get_deployment_data(name: str = "", id: str = "", *, workspace_id: str = ""
   workspace_id = workspace_id or secret(AuthConfig.workspace_id)
 
   # get the deployment
-  serving: Serving = rpc(
+  serving: Serving = mpb.rpc(
     nbox_serving_service_stub.GetServing,
     ServingRequest(
       serving=Serving(name=name, id=id),
@@ -473,7 +480,7 @@ def print_serving_list(sort: str = "created_on", *, workspace_id: str = ""):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
   workspace_id = workspace_id or secret(AuthConfig.workspace_id)
-  all_deployments: ServingListResponse = rpc(
+  all_deployments: ServingListResponse = mpb.rpc(
     nbox_serving_service_stub.ListServings,
     ServingListRequest(
       auth_info=auth_info_pb(),
@@ -522,6 +529,13 @@ class Serve:
     self.serving_name = serving_name
     self.ws_stub = nbox_ws_v1.deployments
 
+  def __repr__(self) -> str:
+    x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
+    if self.model_id is not None:
+      x += f", model_id = '{self.model_id}'"
+    x += ")"
+    return x
+
   def pin(self) -> bool:
     """Pin a model to the deployment
 
@@ -530,7 +544,7 @@ class Serve:
       workspace_id (str, optional): Workspace ID. Defaults to "".
     """
     logger.info(f"Pin model {self.model_id} to deployment {self.serving_id}")
-    rpc(
+    mpb.rpc(
       nbox_model_service_stub.SetModelPin,
       ModelRequest(
         model = ModelProto(
@@ -552,7 +566,7 @@ class Serve:
       workspace_id (str, optional): Workspace ID. Defaults to "".
     """
     logger.info(f"Unpin model {self.model_id} to deployment {self.serving_id}")
-    rpc(
+    mpb.rpc(
       nbox_model_service_stub.SetModelPin,
       ModelRequest(
         model = ModelProto(
@@ -578,7 +592,7 @@ class Serve:
       raise ValueError("Replicas must be greater than or equal to 0")
 
     logger.info(f"Scale model deployment {self.model_id} to {replicas} replicas")
-    rpc(
+    mpb.rpc(
       nbox_model_service_stub.UpdateModel,
       UpdateModelRequest(
         model=ModelProto(
@@ -600,7 +614,7 @@ class Serve:
       f (file, optional): File to write the logs to. Defaults to sys.stdout.
     """
     logger.debug(f"Streaming logs of model '{self.model_id}'")
-    for model_log in streaming_rpc(
+    for model_log in mpb.streaming_rpc(
       nbox_model_service_stub.ModelLogs,
       ModelRequest(
         model = ModelProto(
@@ -616,13 +630,24 @@ class Serve:
         f.write(log)
         f.flush()
 
-  def __repr__(self) -> str:
-    x = f"nbox.Serve('{self.id}', '{self.workspace_id}'"
-    if self.model_id is not None:
-      x += f", model_id = '{self.model_id}'"
-    x += ")"
-    return x
-
+  def deploy(self, tag: str = ""):
+    model = ModelProto(
+      id = self.model_id,
+      serving_group_id = self.serving_id,
+    )
+    if tag:
+      model.feature_gates.update({
+        "SetModelMetadata": tag
+      })
+    response: ModelProto = mpb.rpc(
+      nbox_model_service_stub.Deploy,
+      ModelRequest(
+        model = model,
+        auth_info = auth_info_pb(),
+      ),
+      "Could not deploy model",
+      raise_on_error=True
+    )
 
 
 ################################################################################
@@ -655,7 +680,7 @@ def _get_job_data(name: str = "", id: str = "", remove_archived: bool = True, *,
   if workspace_id == None:
     workspace_id = "personal"
 
-  job: JobProto = rpc(
+  job: JobProto = mpb.rpc(
     nbox_grpc_stub.GetJob,
     JobRequest(
       auth_info = auth_info_pb(),
@@ -683,7 +708,7 @@ def get_job_list(sort: str = "name", *, workspace_id: str = ""):
   def _get_time(t):
     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
-  out: ListJobsResponse = rpc(
+  out: ListJobsResponse = mpb.rpc(
     nbox_grpc_stub.ListJobs,
     ListJobsRequest(auth_info = auth_info_pb()),
     "Could not get job list",
@@ -794,7 +819,7 @@ class Job:
     """
     logger.debug(f"Updating job '{self.job_proto.id}'")
     self.job_proto.schedule.MergeFrom(new_schedule.get_message())
-    rpc(
+    mpb.rpc(
       nbox_grpc_stub.UpdateJob,
       UpdateJobRequest(auth_info=self.auth_info, job=self.job_proto, update_mask=FieldMask(paths=["schedule"])),
       "Could not update job schedule",
@@ -814,7 +839,7 @@ class Job:
   def logs(self, f = sys.stdout):
     """Stream logs of the job, `f` can be anything has a `.write/.flush` methods"""
     logger.debug(f"Streaming logs of job '{self.job_proto.id}'")
-    for job_log in streaming_rpc(
+    for job_log in mpb.streaming_rpc(
       nbox_grpc_stub.GetJobLogs,
       JobRequest(auth_info=self.auth_info ,job = self.job_proto),
       f"Could not get logs of job {self.job_proto.id}, is your job complete?",
@@ -827,7 +852,7 @@ class Job:
   def delete(self):
     """Delete this job"""
     logger.info(f"Deleting job '{self.job_proto.id}'")
-    rpc(nbox_grpc_stub.DeleteJob, JobRequest(auth_info=self.auth_info, job = self.job_proto,), "Could not delete job")
+    mpb.rpc(nbox_grpc_stub.DeleteJob, JobRequest(auth_info=self.auth_info, job = self.job_proto,), "Could not delete job")
     logger.info(f"Deleted job '{self.job_proto.id}'")
     self.refresh()
 
@@ -839,7 +864,7 @@ class Job:
     if self.id == None:
       return
 
-    self.job_proto: JobProto = rpc(
+    self.job_proto: JobProto = mpb.rpc(
       nbox_grpc_stub.GetJob,
       JobRequest(auth_info=self.auth_info, job = self.job_proto),
       f"Could not get job {self.job_proto.id}"
@@ -858,7 +883,7 @@ class Job:
     logger.debug(f"Triggering job '{self.job_proto.id}'")
     if tag:
       self.job_proto.feature_gates.update({"SetRunMetadata": tag})
-    rpc(nbox_grpc_stub.TriggerJob, JobRequest(auth_info=self.auth_info, job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
+    mpb.rpc(nbox_grpc_stub.TriggerJob, JobRequest(auth_info=self.auth_info, job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
     logger.info(f"Triggered job '{self.job_proto.id}'")
     self.refresh()
 
@@ -870,7 +895,7 @@ class Job:
     logger.info(f"Pausing job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.PAUSED
-    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(auth_info=self.auth_info, job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
+    mpb.rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(auth_info=self.auth_info, job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not pause job {self.job_proto.id}", True)
     logger.debug(f"Paused job '{self.job_proto.id}'")
     self.refresh()
 
@@ -879,7 +904,7 @@ class Job:
     logger.info(f"Resuming job '{self.job_proto.id}'")
     job: JobProto = self.job_proto
     job.status = JobProto.Status.SCHEDULED
-    rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(auth_info=self.auth_info, job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
+    mpb.rpc(nbox_grpc_stub.UpdateJob, UpdateJobRequest(auth_info=self.auth_info, job=job, update_mask=FieldMask(paths=["status", "paused"])), f"Could not resume job {self.job_proto.id}", True)
     logger.debug(f"Resumed job '{self.job_proto.id}'")
     self.refresh()
 

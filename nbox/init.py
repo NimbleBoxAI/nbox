@@ -22,7 +22,7 @@ except ImportError:
 
 
 from nbox.auth import secret, AuthConfig
-from nbox.utils import logger, env
+from nbox.utils import logger, env, hard_exit_program
 from nbox.subway import Sub30
 from nbox.hyperloop.jobs.nbox_ws_pb2_grpc import WSJobServiceStub
 from nbox.hyperloop.deploy.serve_pb2_grpc import ServingServiceStub, ModelServiceStub
@@ -110,6 +110,7 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
   except Exception as e:
     logger.error(f"Could not connect to webserver at {secret('nbx_url')}")
     logger.error(e)
+    
     return None
 
   spec = r.json()

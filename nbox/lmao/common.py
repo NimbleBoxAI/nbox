@@ -182,21 +182,20 @@ class LiveConfig:
     resource: Resource,
     cli_comm: str,
     enable_system_monitoring: bool = False,
+    extra_kwargs: Dict[str, Any] = {},
   ):
     self.resource = resource
     self.cli_comm = cli_comm
     self.enable_system_monitoring = enable_system_monitoring
-    self.keys = set()
+    self.extra_kwargs = extra_kwargs
 
   def to_dict(self):
-    out = {
+    return {
       "resource": mpb.message_to_dict(self.resource),
       "cli_comm": self.cli_comm,
       "enable_system_monitoring": self.enable_system_monitoring,
+      "extra_kwargs": self.extra_kwargs,
     }
-    for k in self.keys:
-      out[k] = getattr(self, k)
-    return out
   
   def to_json(self):
     return json.dumps(self.to_dict())
@@ -206,16 +205,7 @@ class LiveConfig:
     d = json.loads(json_str)
     d["resource"] = resource_from_dict(d["resource"])
     _cls = cls(**d)
-    for k in d:
-      if k not in ["resource", "cli_comm", "enable_system_monitoring"]:
-        _cls.add(k, d[k])
-  
-  def add(self, key, value):
-    setattr(self, key, value)
-    self.keys.add(key)
-
-  def get(self, key):
-    return getattr(self, key)
+    return _cls
 
 
 """

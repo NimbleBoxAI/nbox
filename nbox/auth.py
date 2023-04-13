@@ -213,6 +213,9 @@ def init_secret():
       token_present = len(secret.access_token) > 0,
       nbx_url = secret.nbx_url,
     ))
+
+    if not secret.workspace_id:
+      raise Exception("Workspace ID not found. Please run `nbox login` to login to NimbleBox.")
     return secret
   else:
     logger.info(f"Skipping authentication as NBOX_NO_AUTH is set to True")
