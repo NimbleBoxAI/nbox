@@ -171,6 +171,7 @@ def upload_job_folder(
   trigger: bool = False,
   deploy: bool = True,
   pin: bool = False,
+  feature_gates: dict = {},
 
   # all the things for resources
   resource_cpu: str = "",
@@ -380,6 +381,7 @@ def upload_job_folder(
       init_folder = init_folder,
       job_id = job_proto.id,
       job_name = job_proto.name,
+      feature_gates = feature_gates,
       dag = DAGProto(),
       workspace_id = workspace_id,
       schedule = None,
@@ -416,7 +418,7 @@ def upload_job_folder(
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
     if deploy:
-      out.deploy()
+      out.deploy(feature_gates = feature_gates)
     if trigger:
       out.pin()
   else:
@@ -630,14 +632,15 @@ class Serve:
         f.write(log)
         f.flush()
 
-  def deploy(self, tag: str = ""):
+  def deploy(self, tag: str = "", feature_gates: Dict[str, str] = {}):
     model = ModelProto(
       id = self.model_id,
       serving_group_id = self.serving_id,
     )
     if tag:
       model.feature_gates.update({
-        "SetModelMetadata": tag
+        "SetModelMetadata": tag,
+        **feature_gates,
       })
     response: ModelProto = mpb.rpc(
       nbox_model_service_stub.Deploy,
@@ -874,7 +877,7 @@ class Job:
 
     self.status = self.job_proto.Status.keys()[self.job_proto.status]
 
-  def trigger(self, tag: str = ""):
+  def trigger(self, tag: str = "", feature_gates: dict = {}):
     """Manually triger this job.
     
     Args:
@@ -882,6 +885,7 @@ class Job:
     """
     logger.debug(f"Triggering job '{self.job_proto.id}'")
     if tag:
+      self.job_proto.feature_gates.update(feature_gates)
       self.job_proto.feature_gates.update({"SetRunMetadata": tag})
     mpb.rpc(nbox_grpc_stub.TriggerJob, JobRequest(auth_info=self.auth_info, job = self.job_proto), f"Could not trigger job '{self.job_proto.id}'")
     logger.info(f"Triggered job '{self.job_proto.id}'")

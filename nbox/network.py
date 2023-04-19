@@ -209,6 +209,7 @@ Function related to batch processing of any model.
 def deploy_job(
   init_folder: str,
   job_name: str,
+  feature_gates: Dict[str, str],
   dag: DAG,
   schedule: Schedule,
   resource: Resource,
@@ -256,7 +257,8 @@ def deploy_job(
     created_at = SimplerTimes.get_now_pb(),
     schedule = schedule.get_message() if schedule is not None else None, # JobProto.Schedule(cron = "0 0 24 2 0"),
     dag = dag,
-    resource = resource
+    resource = resource,
+    feature_gates = feature_gates,
   )
   job_proto_fp = U.join(gettempdir(), "job_proto.msg")
   mpb.write_binary_to_file(job_proto, job_proto_fp)

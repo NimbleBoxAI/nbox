@@ -263,9 +263,8 @@ class Relics():
       raise ValueError("Relic does not exist, pass create=True")
     logger.debug(f"Getting '{local_path}' from '{remote_path}'")
 
-    files = self.list_files(remote_path)
     file_ = list(filter(
-      lambda x: x.name == remote_path, files
+      lambda x: x.name == remote_path, self.ls(remote_path)
     ))
     if not file_:
       raise ValueError(f"File {remote_path} does not exist in the relic")
