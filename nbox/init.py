@@ -29,6 +29,27 @@ from nbox.hyperloop.deploy.serve_pb2_grpc import ServingServiceStub, ModelServic
 from nbox.version import __version__
 
 
+class WorkspaceIdInjectInterceptor(grpc.UnaryUnaryClientInterceptor):
+  def intercept_unary_unary(self, continuation, client_call_details, request):
+    if hasattr(request, "workspace_id"):
+      request.workspace_id = secret.workspace_id
+    return continuation(client_call_details, request)
+
+
+class MetadataInjectInterceptor(grpc.UnaryUnaryClientInterceptor):
+  def intercept_unary_unary(self, continuation, client_call_details, request):
+    newdet = grpc.ClientCallDetails()
+    newdet.method = client_call_details.method
+    newdet.timeout = client_call_details.timeout
+    newdet.metadata = [
+      ("authorization", f"Bearer {secret.access_token}")
+    ]
+    newdet.credentials = client_call_details.credentials
+    newdet.wait_for_ready = client_call_details.wait_for_ready
+    newdet.compression = client_call_details.compression
+    return continuation(newdet, request)
+
+
 def __create_channel(channel_name) -> grpc.Channel:
   """Create a gRPC channel with the Webserver, this will return `webserver_channel` with credentials and ssl.
   

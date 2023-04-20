@@ -6,6 +6,7 @@
 
 import os
 import sys
+import grpc
 import tabulate
 from typing import Tuple, List, Dict
 from functools import lru_cache, partial
@@ -15,7 +16,7 @@ from google.protobuf.field_mask_pb2 import FieldMask
 
 import nbox.utils as U
 from nbox.auth import secret, AuthConfig, auth_info_pb
-from nbox.utils import logger
+from nbox.utils import logger, lo
 from nbox.version import __version__
 from nbox import messages as mpb
 # from nbox.messages import rpc, streaming_rpc
@@ -355,6 +356,7 @@ def upload_job_folder(
   # creation of resources, we first need to check if any resource arguments are passed, if they are
   def __common_resource(db: Resource) -> Resource:
     # get a common resource based on what the user has said, what the db has and defaults if nothing is given
+    logger.debug(lo("db resources", **mpb.message_to_dict(db)))
     resource = Resource(
       cpu = str(resource_cpu) or db.cpu or ospec.DEFAULT_RESOURCE.cpu,
       memory = str(resource_memory) or db.memory or ospec.DEFAULT_RESOURCE.memory,
@@ -377,6 +379,7 @@ def upload_job_folder(
       )
     )
     resource = __common_resource(job_proto.resource)
+    logger.debug(lo("resources", **mpb.message_to_dict(resource)))
     out: Job = deploy_job(
       init_folder = init_folder,
       job_id = job_proto.id,
@@ -395,7 +398,7 @@ def upload_job_folder(
   elif method == ospec.OperatorType.SERVING:
     model_name = model_name or U.get_random_name().replace("-", "_")
     logger.info(f"Model name: {model_name}")
-    
+
     # serving_id, serving_name = _get_deployment_data(name = name, id = id, workspace_id = workspace_id)
     serving_proto: Serving = nbox_serving_service_stub.GetServing(
       ServingRequest(
@@ -404,6 +407,7 @@ def upload_job_folder(
       )
     )
     resource = __common_resource(serving_proto.resource)
+    logger.debug(lo("resources", **mpb.message_to_dict(resource)))
     out: Serve = deploy_serving(
       init_folder = init_folder,
       serving_id = serving_proto.id,
@@ -638,19 +642,18 @@ class Serve:
       serving_group_id = self.serving_id,
     )
     if tag:
-      model.feature_gates.update({
-        "SetModelMetadata": tag,
-        **feature_gates,
-      })
-    response: ModelProto = mpb.rpc(
-      nbox_model_service_stub.Deploy,
-      ModelRequest(
-        model = model,
-        auth_info = auth_info_pb(),
-      ),
-      "Could not deploy model",
-      raise_on_error=True
-    )
+      model.feature_gates.update({"SetModelMetadata": tag})
+    if feature_gates:
+      model.feature_gates.update(feature_gates)
+    logger.info(f"Deploying model {self.model_id} to deployment {self.serving_id} with tag: '{tag}' and feature gates: {feature_gates}")
+    try:
+      nbox_model_service_stub.Deploy(ModelRequest(model = model, auth_info = auth_info_pb()))
+    except grpc.RpcError as e:
+      logger.error(lo(
+        f"Could not deploy model {self.model_id} to deployment {self.serving_id}\n",
+        f"gRPC Code: {e.code()}\n"
+        f"    Error: {e.details()}",
+      ))
 
 
 ################################################################################
