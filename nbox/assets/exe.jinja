@@ -14,6 +14,8 @@ from functools import lru_cache, partial
 @lru_cache(1)
 def get_op(cloud = False):
   # The beauty of this function is that it ensures that the operator class is loaded only once
+
+  # first try except is to catch any issues during the import itself
   try:
     # import user code, add this to the try/except because if the code does not exit and there
     # is an infinite loop, there can be a whole bunch of side effects, ex: 100s of LMAO live trackers
@@ -21,9 +23,20 @@ def get_op(cloud = False):
 
     # we still want to ensure that user initialises `nbox` first so their environment variables are
     # always going to hold true
-    from nbox import Operator, logger
     import nbox.utils as U
+    from nbox import Operator, logger
 
+  except Exception as e:
+    # again import the nbox things so that we can log the traceback and exit the program
+    import nbox.utils as U
+    from nbox import Operator, logger
+    
+    U.log_traceback()
+    logger.error(f"Failed to load operator: {e}")
+    U.hard_exit_program(1)
+
+  # second is to initialise it as an Operator 
+  try:
     # load the operator
     obj = {{ init_code }}
     if not type(obj) == Operator and {{ load_operator }}:
@@ -36,7 +49,6 @@ def get_op(cloud = False):
         obj = Operator.from_fn(obj)
       else:
         raise ValueError("{{ fn_name }} is not an Operator or class or function")
-
     # at this point there is a guarantee that obj is an Operator
     op: Operator = obj
   except Exception as e:
