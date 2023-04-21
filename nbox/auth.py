@@ -11,11 +11,13 @@ global.workspace_id = '' # this will set the default workspace id for all comman
 """
 import os
 import json
+import socket
 import requests
 import webbrowser
 from typing import Dict
 from getpass import getpass
 from functools import lru_cache
+from dataclasses import dataclass
 
 import nbox.utils as U
 from nbox.utils import join, logger, lo
@@ -45,6 +47,23 @@ ConfigString = AuthConfig
 class JobDetails(object):
   job_id: str
   run_id: str
+
+class DeployDetails(object):
+  deployment_id: str
+  model_id: str
+
+
+@dataclass
+class AgentDetails():
+  group_id: str
+  instance_id: str
+  nbx_type: str
+
+
+NBX_JOB_TYPE = "job"
+NBX_DEPLOY_TYPE = "deploy"
+NBX_LOCAL_TYPE = "local"
+
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -187,16 +206,40 @@ class NBXClient:
   def username(self) -> str:
     return self.get(AuthConfig.username, "")
 
-  def get_agent_details(self) -> Dict[str, str]:
-    if ConfigString.nbx_pod_run in self.secrets:
+  @property
+  def inside_pod(self) -> bool:
+    return self.inside_job_pod or self.inside_deploy_pod
+
+  @property
+  def inside_job_pod(self) -> bool:
+    return ConfigString.nbx_pod_run in self.secrets
+  
+  @property
+  def inside_deploy_pod(self) -> bool:
+    return ConfigString.nbx_pod_deploy in self.secrets
+
+  def get_agent_details(self) -> AgentDetails:
+    if self.inside_job_pod():
       run_data = self.secrets[ConfigString.nbx_pod_run]
-      jd = JobDetails()
-      jd.job_id = run_data.get("job_id", None)
-      jd.run_id = run_data.get("token", None)
-      return jd
-    # elif ConfigString.nbx_pod_deploy in self.secrets:
-    #   return self.secrets[ConfigString.nbx_pod_deploy]
-    return {}
+      out = AgentDetails(
+        group_id = run_data.get("job_id", None),
+        instance_id = run_data.get("token", None),
+        type = NBX_JOB_TYPE
+      )
+    elif self.inside_deploy_pod():
+      deploy_data = self.secrets[ConfigString.nbx_pod_deploy]
+      out = AgentDetails(
+        group_id = deploy_data.get("deployment_id", None),
+        instance_id = deploy_data.get("model_id", None),
+        type = NBX_DEPLOY_TYPE
+      )
+    else:
+      out = AgentDetails(
+        group_id = f"local-{socket.gethostname()}",
+        instance_id = f"{socket.gethostbyname(socket.gethostname())}-{os.getpid()}",
+        type = NBX_LOCAL_TYPE
+      )
+    return out
 
 
 def init_secret():
@@ -238,4 +281,6 @@ def auth_info_pb():
   )
 
 def inside_pod():
-  return secret(AuthConfig.nbx_pod_run, False) or secret(AuthConfig.nbx_pod_deploy, False)
+  if secret is None:
+    raise Exception("Secrets not initialized. Cannot determine where am I.")
+  return secret.inside_pod

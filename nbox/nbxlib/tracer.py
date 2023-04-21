@@ -67,12 +67,18 @@ class Tracer:
     self.job_id = run_data.get("job_id", None)
     self.run_id = run_data.get("token", None)
 
-    # grandfather old messages (<v0.9.14rc13)
+    # @yashbonde (21/4/23): There is a particular reason why we should not remove the following code
+    #   and only feth from DB because, this solves the race condition between user who can change the
+    #   rapidly evolving proto and the delta in action (trigger) and effect (running). This provides
+    #   a neat interface that if you have put in the effort to create a job_proto.msg file, then
+    #   we will treat it with priviledge.
+    # 
     fp_bin = U.join(init_folder, "job_proto.msg")
     fp_str = U.join(init_folder, "job_proto.pbtxt")
     if os.path.exists(fp_bin):
       self.job_proto: JobProto = read_file_to_binary(fp_bin, JobProto())
     elif os.path.exists(fp_str):
+      # grandfather old messages (<v0.9.14rc13)
       self.job_proto: JobProto = read_file_to_string(fp_str, JobProto())
     else:
       logger.warning(f"Could not find job_proto.msg or job_proto.pbtxt in {init_folder}, fetching from database")

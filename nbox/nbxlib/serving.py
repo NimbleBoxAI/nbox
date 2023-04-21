@@ -27,7 +27,7 @@ from typing import Any, Dict, Callable
 from nbox.version import __version__
 from nbox.operator import Operator
 from nbox.nbxlib.operator_spec import OperatorType
-from nbox.utils import py_from_bs64, py_to_bs64, logger
+from nbox.utils import py_from_bs64, py_to_bs64, logger, lo
 
 class SupportedServingTypes():
   NBOX = "nbox"
@@ -106,6 +106,8 @@ def serve_operator(
   else:
     raise ValueError(f"op_or_app must be an Operator or FastAPI app, got: {op_or_app}")
 
+  # print all the endpoints
+  logger.info(lo("Here are all the endpoints:\n", "\n".join([f"  {route.path}" for route in app.routes])))
   uvicorn.run(app, host = host, port = port)
 
 

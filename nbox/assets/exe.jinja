@@ -11,18 +11,19 @@ import fire
 import inspect
 from functools import lru_cache, partial
 
-from nbox import Operator, logger
-import nbox.utils as U
-from nbox.lib.dist import NBXLet
-
 @lru_cache(1)
-def get_op(cloud = False) -> Operator:
+def get_op(cloud = False):
   # The beauty of this function is that it ensures that the operator class is loaded only once
   try:
     # import user code, add this to the try/except because if the code does not exit and there
     # is an infinite loop, there can be a whole bunch of side effects, ex: 100s of LMAO live trackers
     from {{ file_name }} import {{ fn_name }}
-    
+
+    # we still want to ensure that user initialises `nbox` first so their environment variables are
+    # always going to hold true
+    from nbox import Operator, logger
+    import nbox.utils as U
+
     # load the operator
     obj = {{ init_code }}
     if not type(obj) == Operator and {{ load_operator }}:
@@ -52,10 +53,14 @@ def get_op(cloud = False) -> Operator:
       U.log_traceback()
       logger.error(f"Failed to remote initialise operator: {e}")
       U.hard_exit_program(1)
-  return op
+  
+  # now import the class as well and return a builder function
+  from nbox.lib.dist import NBXLet
+  return lambda : NBXLet(op = op)
 
 if __name__ == "__main__":
-  nbxlet = NBXLet(op = get_op(cloud = True))
+  builder = get_op(cloud = True)
+  nbxlet = builder()
   fire.Fire({
     "run": nbxlet.run,     # NBX-Jobs
     "serve": partial(
