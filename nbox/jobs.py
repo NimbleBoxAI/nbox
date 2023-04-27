@@ -435,7 +435,7 @@ def upload_job_folder(
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
     if deploy:
-      out.deploy(feature_gates = feature_gates, resources = resource)
+      out.deploy(feature_gates = feature_gates, resource = resource)
     if trigger:
       out.pin()
   else:
@@ -610,9 +610,9 @@ class Serve:
     if not self.model_id:
       raise ValueError("Model ID is required")
 
-    if type(resource, Resource):
+    if type(resource) == Resource:
       pass
-    elif type(resource, dict):
+    elif type(resource) == dict:
       resource = mpb.dict_to_message(resource, Resource())
     else:
       raise TypeError(f"resource must be of type dict or Resource, not {type(resource)}")
