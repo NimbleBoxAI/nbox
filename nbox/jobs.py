@@ -8,7 +8,7 @@ import os
 import sys
 import grpc
 import tabulate
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Any
 from functools import lru_cache, partial
 from datetime import datetime, timedelta, timezone
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -27,8 +27,21 @@ from nbox.hyperloop.jobs.nbox_ws_pb2 import JobRequest
 from nbox.hyperloop.jobs.job_pb2 import Job as JobProto
 from nbox.hyperloop.jobs.dag_pb2 import DAG as DAGProto
 from nbox.hyperloop.common.common_pb2 import Resource
-from nbox.hyperloop.jobs.nbox_ws_pb2 import ListJobsRequest, ListJobsResponse, UpdateJobRequest
-from nbox.hyperloop.deploy.serve_pb2 import ServingListResponse, ServingRequest, Serving, ServingListRequest, ModelRequest, Model as ModelProto, UpdateModelRequest
+from nbox.hyperloop.jobs.nbox_ws_pb2 import (
+  ListJobsRequest,
+  ListJobsResponse,
+  UpdateJobRequest
+)
+from nbox.hyperloop.deploy.serve_pb2 import (
+  ServingListResponse,
+  ServingRequest,
+  Serving,
+  ServingListRequest,
+  UpdateServingRequest,
+  ModelRequest,
+  Model as ModelProto,
+  UpdateModelRequest,
+)
 
 
 DEFAULT_RESOURCE = Resource(
@@ -422,7 +435,7 @@ def upload_job_folder(
       exe_jinja_kwargs = exe_jinja_kwargs,
     )
     if deploy:
-      out.deploy(feature_gates = feature_gates)
+      out.deploy(feature_gates = feature_gates, resources = resource)
     if trigger:
       out.pin()
   else:
@@ -542,6 +555,87 @@ class Serve:
     x += ")"
     return x
 
+  # there are things that are on the serving group level
+  
+  def logs(self, f = sys.stdout):
+    """Get the logs of the model deployment
+
+    Args:
+      f (file, optional): File to write the logs to. Defaults to sys.stdout.
+    """
+    logger.debug(f"Streaming logs of model '{self.model_id}'")
+    for model_log in mpb.streaming_rpc(
+      nbox_model_service_stub.ModelLogs,
+      ModelRequest(
+        model = ModelProto(
+          id = self.model_id,
+          serving_group_id = self.serving_id
+        ),
+        auth_info = auth_info_pb(),
+      ),
+      f"Could not get logs of model {self.model_id}, only live logs are available",
+      False
+    ):
+      for log in model_log.log:
+        f.write(log)
+        f.flush()
+
+  def change_serving_resources(self, resource: Dict[str, Any]):
+    if type(resource, Resource):
+      pass
+    elif type(resource, dict):
+      resource = mpb.dict_to_message(resource, Resource())
+    else:
+      raise TypeError(f"resource must be of type dict or Resource, not {type(resource)}")
+
+    logger.info(f"Updating resources of a serving group: {self.serving_id}")
+    mpb.rpc(
+      nbox_serving_service_stub.UpdateServing,
+      UpdateServingRequest(
+        model=Serving(
+          id=self.model_id,
+          resource=resource
+        ),
+        update_mask=FieldMask(paths=["resource"]),
+        auth_info = auth_info_pb()
+      ),
+      "Could not change resources of serving group",
+      raise_on_error = True
+    )
+    pass
+
+  # there are things on the model level
+
+  def deploy(self, tag: str = "", feature_gates: Dict[str, str] = {}, resource: Dict[str, Any] = {}):
+    if not self.model_id:
+      raise ValueError("Model ID is required")
+
+    if type(resource, Resource):
+      pass
+    elif type(resource, dict):
+      resource = mpb.dict_to_message(resource, Resource())
+    else:
+      raise TypeError(f"resource must be of type dict or Resource, not {type(resource)}")
+
+    model = ModelProto(
+      id = self.model_id,
+      serving_group_id = self.serving_id,
+      resource = resource
+    )
+    if tag:
+      model.feature_gates.update({"SetModelMetadata": tag})
+    if feature_gates:
+      model.feature_gates.update(feature_gates)
+    logger.info(f"Deploying model {self.model_id} to deployment {self.serving_id} with tag: '{tag}' and feature gates: {feature_gates}")
+    try:
+      nbox_model_service_stub.Deploy(ModelRequest(model = model, auth_info = auth_info_pb()))
+    except grpc.RpcError as e:
+      logger.error(lo(
+        f"Could not deploy model {self.model_id} to deployment {self.serving_id}\n",
+        f"gRPC Code: {e.code()}\n"
+        f"    Error: {e.details()}",
+      ))
+
   def pin(self) -> bool:
     """Pin a model to the deployment
 
@@ -549,6 +643,9 @@ class Serve:
       model_id (str, optional): Model ID. Defaults to None.
       workspace_id (str, optional): Workspace ID. Defaults to "".
     """
+    if not self.model_id:
+      raise ValueError("Model ID is required")
+
     logger.info(f"Pin model {self.model_id} to deployment {self.serving_id}")
     mpb.rpc(
       nbox_model_service_stub.SetModelPin,
@@ -571,6 +668,9 @@ class Serve:
       model_id (str, optional): Model ID. Defaults to None.
       workspace_id (str, optional): Workspace ID. Defaults to "".
     """
+    if not self.model_id:
+      raise ValueError("Model ID is required")
+
     logger.info(f"Unpin model {self.model_id} to deployment {self.serving_id}")
     mpb.rpc(
       nbox_model_service_stub.SetModelPin,
@@ -612,48 +712,30 @@ class Serve:
       "Could not scale deployment",
       raise_on_error = True
     )
-  
-  def logs(self, f = sys.stdout):
-    """Get the logs of the model deployment
 
-    Args:
-      f (file, optional): File to write the logs to. Defaults to sys.stdout.
-    """
-    logger.debug(f"Streaming logs of model '{self.model_id}'")
-    for model_log in mpb.streaming_rpc(
-      nbox_model_service_stub.ModelLogs,
-      ModelRequest(
-        model = ModelProto(
-          id = self.model_id,
-          serving_group_id = self.serving_id
+  def change_model_resources(self, resource: Dict[str, Any]):
+    if type(resource, Resource):
+      pass
+    elif type(resource, dict):
+      resource = mpb.dict_to_message(resource, Resource())
+    else:
+      raise TypeError(f"resource must be of type dict or Resource, not {type(resource)}")
+
+    logger.warn(f"Updating resources of a running model '{self.model_id}', this will result in a restart!")
+    mpb.rpc(
+      nbox_model_service_stub.UpdateModel,
+      UpdateModelRequest(
+        model=ModelProto(
+          id=self.model_id,
+          serving_group_id=self.serving_id,
+          resource=resource
         ),
-        auth_info = auth_info_pb(),
+        update_mask=FieldMask(paths=["resource"]),
+        auth_info = auth_info_pb()
       ),
-      f"Could not get logs of model {self.model_id}, only live logs are available",
-      False
-    ):
-      for log in model_log.log:
-        f.write(log)
-        f.flush()
-
-  def deploy(self, tag: str = "", feature_gates: Dict[str, str] = {}):
-    model = ModelProto(
-      id = self.model_id,
-      serving_group_id = self.serving_id,
+      "Could not change resources of a running model",
+      raise_on_error = True
     )
-    if tag:
-      model.feature_gates.update({"SetModelMetadata": tag})
-    if feature_gates:
-      model.feature_gates.update(feature_gates)
-    logger.info(f"Deploying model {self.model_id} to deployment {self.serving_id} with tag: '{tag}' and feature gates: {feature_gates}")
-    try:
-      nbox_model_service_stub.Deploy(ModelRequest(model = model, auth_info = auth_info_pb()))
-    except grpc.RpcError as e:
-      logger.error(lo(
-        f"Could not deploy model {self.model_id} to deployment {self.serving_id}\n",
-        f"gRPC Code: {e.code()}\n"
-        f"    Error: {e.details()}",
-      ))
 
 
 ################################################################################

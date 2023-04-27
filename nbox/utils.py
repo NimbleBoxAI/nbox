@@ -35,6 +35,7 @@ This has a couple of cool things:
 import os
 import sys
 import json
+import uuid
 import hashlib
 import requests
 import tempfile
@@ -273,6 +274,17 @@ def get_assets_folder():
   return join(folder(__file__), "assets")
 
 # /path
+
+# checks/
+
+def is_valid_uuid(x):
+  try:
+    uuid.UUID(x)
+    return True
+  except ValueError:
+    return False
+
+# /checks
 
 # misc/
 

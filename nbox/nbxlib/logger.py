@@ -43,7 +43,7 @@ from datetime import date, datetime, time, timezone
 
 
 def get_logger(env):
-  logger = logging.getLogger("utils")
+  logger = logging.getLogger("nbox")
   lvl = env.NBOX_LOG_LEVEL("info").upper()
   logger.setLevel(getattr(logging, lvl))
 

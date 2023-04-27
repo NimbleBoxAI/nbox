@@ -219,25 +219,25 @@ class NBXClient:
     return ConfigString.nbx_pod_deploy in self.secrets
 
   def get_agent_details(self) -> AgentDetails:
-    if self.inside_job_pod():
+    if self.inside_job_pod:
       run_data = self.secrets[ConfigString.nbx_pod_run]
       out = AgentDetails(
         group_id = run_data.get("job_id", None),
         instance_id = run_data.get("token", None),
-        type = NBX_JOB_TYPE
+        nbx_type = NBX_JOB_TYPE
       )
-    elif self.inside_deploy_pod():
+    elif self.inside_deploy_pod:
       deploy_data = self.secrets[ConfigString.nbx_pod_deploy]
       out = AgentDetails(
         group_id = deploy_data.get("deployment_id", None),
         instance_id = deploy_data.get("model_id", None),
-        type = NBX_DEPLOY_TYPE
+        nbx_type = NBX_DEPLOY_TYPE
       )
     else:
       out = AgentDetails(
         group_id = f"local-{socket.gethostname()}",
         instance_id = f"{socket.gethostbyname(socket.gethostname())}-{os.getpid()}",
-        type = NBX_LOCAL_TYPE
+        nbx_type = NBX_LOCAL_TYPE
       )
     return out
 
