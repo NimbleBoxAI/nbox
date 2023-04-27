@@ -21,7 +21,6 @@ from shutil import rmtree
 from typing import Dict, Any
 
 import nbox.utils as U
-from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
 from nbox.auth import init_secret, AuthConfig, secret
 from nbox.instance import Instance
@@ -32,6 +31,9 @@ from nbox.version import __version__ as V
 from nbox.projects import Project
 from nbox.utils import logger, lo
 from nbox.plugins.base import PluginCLI
+
+# from nbox.jobs import Job, Serve
+from nbox.jd_core import JobsCli, ServeCli
 
 class Config(object):
   def update(self, workspace_id: str):
@@ -178,14 +180,16 @@ def main():
     "build"    : Instance,
     "config"   : Config,
     "get"      : get,
-    "jobs"     : Job,
+    # "jobs"     : Job,
+    "jobs"     : JobsCli,
     "lmao"     : LmaoCLI,
     "login"    : login,
     "open"     : open_home,
     "plugins"  : PluginCLI,
     "projects" : Project,
     "relics"   : Relics,
-    "serve"    : Serve,
+    # "serve"    : Serve,
+    "serve"    : ServeCli,
     "tunnel"   : tunnel,
     "version"  : version,
     "why"      : why,
