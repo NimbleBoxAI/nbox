@@ -39,7 +39,7 @@ functional components of LMAO
 
 def get_lmao_stub() -> LMAO_Stub:
   # lmao_stub = LMAO_Stub(url = "http://localhost:8080/monitoring", session = nbox_ws_v1._session)
-  lmao_stub = LMAO_Stub(url = secret(AuthConfig.url) + "/monitoring", session = nbox_ws_v1._session)
+  lmao_stub = LMAO_Stub(url = secret.nbx_url + "/monitoring", session = nbox_ws_v1._session)
   return lmao_stub
 
 def get_record(k: str, v: Union[int, float, str]) -> Record:
@@ -105,7 +105,7 @@ def get_git_details(folder):
 def get_project(project_id: str) -> ProjectProto:
   lmao_stub = get_lmao_stub()
   project: ProjectProto = lmao_stub.get_project(ListProjectsRequest(
-    workspace_id = secret(AuthConfig.workspace_id),
+    workspace_id = secret.workspace_id,
     project_id_or_name = project_id
   ))
   return project

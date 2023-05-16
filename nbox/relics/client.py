@@ -59,7 +59,7 @@ class Relics():
       raise ValueError("Only one of relic_name or id must be provided")
 
     self.relic_name = relic_name
-    self.username = secret("username") # if its in the job then this part will automatically be filled
+    self.username = secret.username # if its in the job then this part will automatically be filled
     self.prefix = prefix.strip("/")
     self.stub = get_relics_stub()
     rp = RelicProto(workspace_id=self.workspace_id)

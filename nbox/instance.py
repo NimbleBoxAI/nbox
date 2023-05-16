@@ -59,7 +59,6 @@ def print_status(fields: List[str] = [], *, workspace_id: str = ""):
     fields (List[str], optional): fields to print. Defaults to []. If not provided all fields will be printed.
   """
   logger.info("Getting NBX-Build details")
-  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
   stub_projects = nbox_ws_v1.projects
 
   fields = fields or Instance.useful_keys
@@ -100,7 +99,7 @@ class Instance():
     # simply add useful keys to the instance
     self.project_id: str = None
     self.project_name: str = None
-    self.workspace_id: str = workspace_id or secret(AuthConfig.workspace_id)
+    self.workspace_id: str = workspace_id or secret.workspace_id
     self.size_used: float = None
     self.size: float = None
     self.state: str = None
@@ -110,7 +109,7 @@ class Instance():
 
     # create a new subway for webserver
     sess = Session()
-    sess.headers.update({"Authorization": f"Bearer {secret('access_token')}"})
+    sess.headers.update({"Authorization": f"Bearer {secret.access_token}"})
     stub_ws_instance = create_webserver_subway("v1", sess)
     stub_projects = stub_ws_instance.instances
 
@@ -184,7 +183,7 @@ class Instance():
     Returns:
       Instance: The newly created instance.
     """
-    workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+    workspace_id = workspace_id or secret.workspace_id
     stub_all_projects = nbox_ws_v1.projects
 
     kwargs_dict = {
@@ -224,15 +223,15 @@ class Instance():
     self._unopened_error()
 
     build = "build"
-    if "app.c." in secret("nbx_url"):
+    if "app.c." in secret.nbx_url:
       build = "build.c"
-    elif "app.rc" in secret("nbx_url"):
+    elif "app.rc" in secret.nbx_url:
       build = "build.rc"
     url = f"https://{subdomain}-{self.open_data['url']}.{build}.nimblebox.ai/",
     session = Session(
       headers = {
         "NBX-TOKEN": self.open_data["token"],
-        "X-NBX-USERNAME": secret("username"),
+        "X-NBX-USERNAME": secret.username,
       }
     )
     r = session.get(url + "openapi.json")
@@ -412,7 +411,7 @@ class Instance():
 
     conman = ConnectionManager(
       file_logger = file_logger,
-      user = secret("username"), 
+      user = secret.username, 
       subdomain = self.open_data.get("url"),
       auth = self.open_data.get("token"),
     )

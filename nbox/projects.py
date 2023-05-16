@@ -199,7 +199,7 @@ class Project:
       resource_max_retries (int, optional): The maximum number of retries for a run. It can be found on your NimbleBox dashboard.
       **run_kwargs: These are the kwargs that will be passed to your function.
     """
-    workspace_id = secret(AuthConfig.workspace_id)
+    workspace_id = secret.workspace_id
 
     # fix data type conversion caused by the CLI
     resource_cpu = str(resource_cpu)
@@ -319,7 +319,7 @@ class Project:
     job.trigger(tag)
 
     # finally print the location of the run where the users can track this
-    logger.info(f"Run location: {secret(AuthConfig.url)}/workspace/{run.workspace_id}/projects/{run.project_id}#Experiments")
+    logger.info(f"Run location: {secret.nbx_url}/workspace/{run.workspace_id}/projects/{run.project_id}#Experiments")
 
   def serve(
     self,
@@ -339,7 +339,7 @@ class Project:
     # all the things for serving kwargs
     **serving_kwargs,
   ):
-    workspace_id = secret(AuthConfig.workspace_id)
+    workspace_id = secret.workspace_id
 
     # fix data type conversion caused by the CLI
     resource_cpu = str(resource_cpu)

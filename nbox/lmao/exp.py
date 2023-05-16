@@ -94,7 +94,7 @@ class Lmao():
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
     self.store_git_details = store_git_details
-    self.workspace_id = secret(AuthConfig.workspace_id)
+    self.workspace_id = secret.workspace_id
 
     self.agent = secret.get_agent_details()
 
@@ -197,7 +197,7 @@ class Lmao():
       f"{action} experiment tracker\n"
       f" project: {project_id}\n"
       f"      id: {run_details.experiment_id}\n"
-      f"    link: {secret(AuthConfig.url)}/workspace/{self.workspace_id}/projects/{project_id}#Experiments\n"
+      f"    link: {secret.nbx_url}/workspace/{self.workspace_id}/projects/{project_id}#Experiments\n"
     )
 
     return run_details

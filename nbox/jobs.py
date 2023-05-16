@@ -313,7 +313,7 @@ from nbox.jd_core import (
 #   _curdir = os.getcwd()
 #   os.chdir(init_folder)
 
-#   workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+#   workspace_id = workspace_id or secret.workspace_id
 
 #   # Now that we have the init_folder and function name, we can throw relevant errors
 #   perform_tea = True
@@ -485,7 +485,7 @@ from nbox.jd_core import (
 #     logger.warning("Must provide either name or id")
 #     return None, None
 #   # filter and get "id" and "name"
-#   workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+#   workspace_id = workspace_id or secret.workspace_id
 
 #   # get the deployment
 #   serving: Serving = mpb.rpc(
@@ -510,7 +510,7 @@ from nbox.jd_core import (
 #   def _get_time(t):
 #     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
 
-#   workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+#   workspace_id = workspace_id or secret.workspace_id
 #   all_deployments: ServingListResponse = mpb.rpc(
 #     nbox_serving_service_stub.ListServings,
 #     ServingListRequest(
@@ -551,7 +551,7 @@ from nbox.jd_core import (
 #     """
 #     self.id = serving_id
 #     self.model_id = model_id
-#     self.workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+#     self.workspace_id = workspace_id or secret.workspace_id
 #     if workspace_id is None:
 #       raise DeprecationWarning("Personal workspace does not support serving")
 #     else:
@@ -776,7 +776,7 @@ from nbox.jd_core import (
 #     logger.info(f"Please either pass job_id '{id}' or name '{name}'")
 #     return None, None
 #   # get stub
-#   workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+#   workspace_id = workspace_id or secret.workspace_id
 #   if workspace_id == None:
 #     workspace_id = "personal"
 
@@ -803,7 +803,7 @@ from nbox.jd_core import (
 #   Args:
 #     sort (str, optional): Sort key. Defaults to "name".
 #   """
-#   workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+#   workspace_id = workspace_id or secret.workspace_id
 
 #   def _get_time(t):
 #     return datetime.fromtimestamp(int(float(t))).strftime("%Y-%m-%d %H:%M:%S")
@@ -858,7 +858,7 @@ from nbox.jd_core import (
 #       return
 
 #     self.id, self.name = _get_job_data(job_name, job_id)
-#     self.workspace_id = secret(AuthConfig.workspace_id)
+#     self.workspace_id = secret.workspace_id
 #     self.auth_info = auth_info_pb()
 #     self.job_proto = JobProto(id = self.id)
 

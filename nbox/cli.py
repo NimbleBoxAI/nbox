@@ -43,7 +43,7 @@ class Config(object):
     redo = not data or (workspace_id not in data)
     if redo:
       workspaces = requests.get(
-        secret(AuthConfig.url) + f"/api/v1/workspace",
+        secret.nbx_url + f"/api/v1/workspace",
         headers = nbox_ws_v1._session.headers
       ).json()["data"]
       # workspaces = nbox_ws_v1.workspace()
@@ -72,9 +72,9 @@ class Config(object):
     """Pretty print global config for `nbox`"""
     logger.info(lo(
       "nbox config:",
-      workspace_name = secret(AuthConfig.workspace_name),
+      workspace_name = secret.workspace_id,
       workspace_id = secret.workspace_id,
-      username = secret(AuthConfig.username),
+      username = secret.username,
       nbox = V,
       URL = secret.nbx_url,
     ))

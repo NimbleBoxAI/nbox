@@ -62,7 +62,7 @@ def get_serving_log(
   """
   lmao = get_lmao_stub()
   req = ServingLogRequest(
-    workspace_id = secret(AuthConfig.workspace_id),
+    workspace_id = secret.workspace_id,
     project_id = project_id,
     serving_id = serving_id,
     key = key,
@@ -91,7 +91,7 @@ class LmaoLive():
     Client module for LMAO Live monitoring pipeline, eventually this will be merged with the LMAO client
     which is used for experiment tracking, into a single combined client.
     """
-    self.workspace_id = secret(AuthConfig.workspace_id)
+    self.workspace_id = secret.workspace_id
     self.project_id = project_id
     self.serving_id = serving_id
     
@@ -140,7 +140,7 @@ class LmaoLive():
       f"{action} live tracker\n"
       f" project: {project_id}\n"
       f"      id: {s.serving_id}\n"
-      f"    link: {secret(AuthConfig.url)}/workspace/{self.workspace_id}/projects/{project_id}/#Live\n"
+      f"    link: {secret.nbx_url}/workspace/{self.workspace_id}/projects/{project_id}/#Live\n"
     )
 
     self.serving = s

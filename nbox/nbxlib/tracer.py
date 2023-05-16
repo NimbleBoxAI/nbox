@@ -31,7 +31,7 @@ class Tracer:
     if local:
       pass
     else:
-      run_data = secret(AuthConfig.nbx_pod_run) # user should never have "run" on their local
+      run_data = secret.run_details # user should never have "run" on their local
       if run_data is not None:
         self.init(run_data, start_heartbeat)
 
@@ -88,7 +88,7 @@ class Tracer:
       ))
 
     self.job_proto.id = self.job_id # because when creating a new job, client does not know the ID
-    self.workspace_id = secret(AuthConfig._workspace_id)
+    self.workspace_id = secret.workspace_id
     self.network_tracer = True
 
     # logger.debug(f"Username: {self.job_proto.auth_info.username}")

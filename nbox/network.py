@@ -188,7 +188,7 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
   # _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
   # _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
   # _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
-  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/deploy/{serving_id}"
+  _webpage = f"{secret.nbx_url}/workspace/{workspace_id}/deploy/{serving_id}"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
   # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
@@ -245,7 +245,7 @@ def deploy_job(
   logger.info(f"Job ID: {job_id}")
 
   # intialise the console logger
-  URL = secret("nbx_url")
+  URL = secret.nbx_url
   logger.debug(f"Schedule: {schedule}")
   logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
@@ -378,12 +378,12 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
   # _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
-  # _curl = f"curl -X POST {secret(AuthConfig.url)}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  # _curl = f"curl -X POST {secret.nbx_url}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
 
-  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/jobs/{job_proto.id}"
+  _webpage = f"{secret.nbx_url}/workspace/{workspace_id}/jobs/{job_proto.id}"
   logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things

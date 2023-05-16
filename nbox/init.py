@@ -59,10 +59,10 @@ def __create_channel(channel_name) -> grpc.Channel:
   Returns:
     grpc.Channel: A gRPC channel with credentials and ssl.
   """
-  token_cred = grpc.access_token_call_credentials(secret("access_token"))
+  token_cred = grpc.access_token_call_credentials(secret.access_token)
   ssl_creds = grpc.ssl_channel_credentials()
   creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
-  channel = grpc.secure_channel(secret("nbx_url").replace("https://", "dns:/") + ":443", creds)
+  channel = grpc.secure_channel(secret.nbx_url.replace("https://", "dns:/") + ":443", creds)
   future = grpc.channel_ready_future(channel)
   future.add_done_callback(lambda _: logger.debug(f"NBX '{channel_name}' gRPC stub is ready!"))
 
@@ -123,13 +123,13 @@ def create_webserver_subway(version: str = "v1", session: requests.Session = Non
   Returns:
     Sub30: A Subway object for the NBX Webserver.
   """
-  _version_specific_url = secret(AuthConfig.url) + f"/api/{version}"
+  _version_specific_url = secret.nbx_url + f"/api/{version}"
   session = session if session != None else nbox_session  # select correct session
   r = session.get(_version_specific_url + "/openapi.json")
   try:
     r.raise_for_status()
   except Exception as e:
-    logger.error(f"Could not connect to webserver at {secret('nbx_url')}")
+    logger.error(f"Could not connect to webserver at {secret.nbx_url}")
     logger.error(e)
     
     return None
@@ -185,7 +185,7 @@ if env.NBOX_NO_LOAD_WS():
   nbox_ws_v1 = None
 else:
   nbox_session = requests.Session()
-  nbox_session.headers.update({"Authorization": f"Bearer {secret('access_token')}"})
+  nbox_session.headers.update({"Authorization": f"Bearer {secret.access_token}"})
   nbox_ws_v1: Sub30 = create_webserver_subway(version="v1", session=nbox_session)
 
 if not env.NBOX_NO_CHECK_VERSION():

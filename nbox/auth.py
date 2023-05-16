@@ -195,6 +195,10 @@ class NBXClient:
     return self.get(AuthConfig.workspace_id, "") or self.get(AuthConfig._workspace_id, "")
 
   @property
+  def workspace_name(self) -> str:
+    return self(AuthConfig.workspace_name, "")
+
+  @property
   def nbx_url(self) -> str:
     return self.get(AuthConfig.url, "")
 
@@ -205,6 +209,10 @@ class NBXClient:
   @property
   def username(self) -> str:
     return self.get(AuthConfig.username, "")
+
+  @property
+  def run_details(self):
+    return secret(AuthConfig.nbx_pod_run, {})
 
   @property
   def inside_pod(self) -> bool:
@@ -252,7 +260,7 @@ def init_secret():
     logger.info(lo(
       f"workspace details",
       workspace_id = secret.workspace_id,
-      workspace_name = secret(AuthConfig.workspace_name, ""),
+      workspace_name = secret.workspace_name,
       token_present = len(secret.access_token) > 0,
       nbx_url = secret.nbx_url,
     ))
@@ -275,9 +283,9 @@ def auth_info_pb():
   from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 
   return NBXAuthInfo(
-    username = secret(AuthConfig.username),
-    workspace_id = secret(AuthConfig.workspace_id) or secret(AuthConfig._workspace_id),
-    access_token = secret(AuthConfig.access_token),
+    username = secret.username,
+    workspace_id = secret.workspace_id,
+    access_token = secret.access_token,
   )
 
 def inside_pod():
