@@ -81,7 +81,7 @@ class Tracer:
       # grandfather old messages (<v0.9.14rc13)
       self.job_proto: JobProto = read_file_to_string(fp_str, JobProto())
     else:
-      logger.warning(f"Could not find job_proto.msg or job_proto.pbtxt in {init_folder}, fetching from database")
+      logger.info(f"Could not find job_proto.msg or job_proto.pbtxt in {init_folder}, fetching from database")
       self.job_proto = nbox_grpc_stub.GetJob(JobRequest(
         auth_info=auth_info_pb(),
         job = JobProto(id = self.job_id)
@@ -91,7 +91,6 @@ class Tracer:
     self.workspace_id = secret.workspace_id
     self.network_tracer = True
 
-    # logger.debug(f"Username: {self.job_proto.auth_info.username}")
     logger.info(f"Job Id (Run Id) [Workspace ID]: {self.job_id} ({self.run_id}) [{self.workspace_id}]")
     self.job_proto.status = JobProto.Status.ACTIVE # automatically first run will
 

@@ -46,6 +46,10 @@ class NBXLet(Operator):
 
   def run(self):
     """Run this as a batch process"""
+    # get the user defined tag 
+    run_tag = os.getenv("NBOX_RUN_METADATA", "")
+    logger.info(f"Run Tag: {run_tag}")
+
     status = Job.Status.ERROR
     try:
       tracer = Tracer()
@@ -60,10 +64,6 @@ class NBXLet(Operator):
 
       job_id = tracer.job_id
       self.op.propagate(_tracer = tracer)
-
-      # get the user defined tag 
-      run_tag = os.getenv("NBOX_RUN_METADATA", "")
-      logger.info(f"Run Tag: {run_tag}")
 
       # in the NimbleBox system we provide tags for each key which essentially tells what is the behaviour
       # of the job. For example if it contains the string LMAO which means we need to initialise a couple

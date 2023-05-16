@@ -12,7 +12,7 @@ authors = [
 homepage = "https://github.com/NimbleBoxAI/nbox"
 repository = "https://github.com/NimbleBoxAI/nbox"
 documentation = "https://nimbleboxai.github.io/nbox/"
-license = "Apache-v2"
+license = "Apache License 2.0"
 readme = "README.md"
 
 [tool.poetry.dependencies]
