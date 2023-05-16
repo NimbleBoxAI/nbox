@@ -5,7 +5,7 @@ import requests
 from hashlib import md5
 
 from subprocess import Popen
-from nbox.auth import secret, AuthConfig
+from nbox.auth import secret
 from nbox.utils import logger, env, get_files_in_folder
 from nbox.relics.proto.relics_rpc_pb2 import (
   CreateRelicRequest,
@@ -48,11 +48,10 @@ class Relics():
 
     Args:
       relic_name (str): The name of the relic.
-      workspace_id (str): The workspace ID, if not provided, will be one in global config.
       create (bool): Create the relic if it does not exist.
       prefix (str): The prefix to use for all files in this relic. If provided all the files are uploaded and downloaded with this prefix.
     """
-    self.workspace_id = secret(AuthConfig.workspace_id)
+    self.workspace_id = secret.workspace_id
 
     if not relic_name and not id:
       raise ValueError("Either relic_name or id must be provided")
