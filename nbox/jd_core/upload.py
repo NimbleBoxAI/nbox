@@ -49,9 +49,11 @@ def upload_job_folder(
 
   # X-type
   serving_type: str = "nbox",
+  exe: str = "",
 
   # there's no more need to pass the workspace_id anymore
   workspace_id: str = "",
+
 
   # some extra things for functionality
   _ret: bool = False,
@@ -87,6 +89,9 @@ def upload_job_folder(
     workspace_id (str, optional): Workspace ID, if None uses the one from config. Defaults to "".
     init_kwargs (dict): kwargs to pass to the `init` function / class, if possible
   """
+  if exe:
+    logger.warning(f"--exe is a new feature, please report any bugs to the nbox team")
+
   from nbox.network import deploy_job, deploy_serving
   import nbox.nbxlib.operator_spec as ospec
   from nbox.nbxlib.serving import SupportedServingTypes as SST
@@ -251,6 +256,7 @@ def upload_job_folder(
       schedule = None,
       resource = resource,
       exe_jinja_kwargs = exe_jinja_kwargs,
+      exe_path = exe,
     )
     if trigger:
       logger.info(f"Triggering job: {job_proto.name} ({job_proto.id})")
@@ -281,6 +287,7 @@ def upload_job_folder(
         "serving_type": serving_type
       },
       exe_jinja_kwargs = exe_jinja_kwargs,
+      exe_path = exe,
     )
     if deploy:
       out.deploy(feature_gates = feature_gates, resource = resource)

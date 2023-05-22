@@ -55,6 +55,7 @@ def deploy_serving(
   wait_for_deployment: bool = False,
   model_metadata: Dict[str, str] = {},
   exe_jinja_kwargs: Dict[str, str] = {},
+  exe_path: str = "",
   *,
   _only_zip: bool = False,
 ):
@@ -97,8 +98,10 @@ def deploy_serving(
     workspace_id = workspace_id,
     type = OT.SERVING,
     files_to_copy = {model_proto_fp: "model_proto.msg"},
+    exe_path = exe_path,
     **exe_jinja_kwargs,
   )
+  # TODO: @yashbonde log what file size the zip is
   if _only_zip:
     logger.info(f"Zip file created at: {zip_path}")
     return zip_path
@@ -216,6 +219,7 @@ def deploy_job(
   workspace_id: str = None,
   job_id: str = None,
   exe_jinja_kwargs = {},
+  exe_path: str = "",
   *,
   _only_zip: bool = False,
   _unittest: bool = False
@@ -273,6 +277,7 @@ def deploy_job(
     workspace_id = workspace_id,
     type = OT.JOB,
     files_to_copy = {job_proto_fp: "job_proto.msg"},
+    exe_path = exe_path,
     **exe_jinja_kwargs,
   )
   return _upload_job_zip(zip_path, job_proto,workspace_id)
@@ -404,6 +409,7 @@ def zip_to_nbox_folder(
   workspace_id: str,
   type: Union[OT.JOB, OT.SERVING],
   files_to_copy: Dict[str, str] = {},
+  exe_path: str = "",
   **jinja_kwargs
 ):
   """
@@ -470,27 +476,31 @@ def zip_to_nbox_folder(
       logger.debug(f"Zipping {f} => {arcname}")
       zip_file.write(f, arcname = arcname)
 
-    # create the exe.py file
-    exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
-    exe_path = U.join(gettempdir(), "exe.py")
-    logger.debug(f"Writing exe to: {exe_path}")
-    with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
-      # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
-      _ct = datetime.now(timezone.utc)
-      _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
-      created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+    # create the exe.py file if not provided by the user
+    if not exe_path:
+      exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
+      exe_path = U.join(gettempdir(), "exe.py")
+      logger.debug(f"Writing exe to: {exe_path}")
+      with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
+        # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
+        _ct = datetime.now(timezone.utc)
+        _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+        created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
 
-      # fill up the jinja template
-      code = jinja2.Template(f.read()).render({
-        "created_time": created_time,
-        "nbox_version": __version__,
-        **jinja_kwargs
-      })
-      f2.write(code)
-    # print(os.stat(exe_path))
+        # fill up the jinja template
+        code = jinja2.Template(f.read()).render({
+          "created_time": created_time,
+          "nbox_version": __version__,
+          **jinja_kwargs
+        })
+        f2.write(code)
 
+    # finally add this to the zip file
     zip_file.write(exe_path, arcname = "exe.py")
     for src, trg in files_to_copy.items():
       zip_file.write(src, arcname = trg)
+
+  # log the filesize of the zip
+  logger.info(f"Zip file size: {os.stat(zip_path).st_size / (1024 ** 2):0.3f} MB")
 
   return zip_path

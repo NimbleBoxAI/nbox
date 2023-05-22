@@ -62,6 +62,7 @@ def __create_channel(channel_name) -> grpc.Channel:
   token_cred = grpc.access_token_call_credentials(secret.access_token)
   ssl_creds = grpc.ssl_channel_credentials()
   creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
+  # https://app.nimblebox.ai -> dns:/app.nimblebox.ai:443
   channel = grpc.secure_channel(secret.nbx_url.replace("https://", "dns:/") + ":443", creds)
   future = grpc.channel_ready_future(channel)
   future.add_done_callback(lambda _: logger.debug(f"NBX '{channel_name}' gRPC stub is ready!"))
