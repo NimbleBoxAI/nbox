@@ -101,7 +101,7 @@ class RSockClient:
     Connects to RSockServer.
     """
     self.log('Connecting to RSockServer', "DEBUG")
-    token_cred = grpc.access_token_call_credentials(secret("access_token"))
+    token_cred = grpc.access_token_call_credentials(secret.access_token)
     ssl_cred = grpc.ssl_channel_credentials()
     creds = grpc.composite_channel_credentials(ssl_cred, token_cred)
     channel = grpc.secure_channel(f'{self.launch_url.replace("https://","").replace(self.subdomain,"rsock")}:443', creds)
@@ -314,7 +314,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   # conman runs threads internally for multiple connections
   conman = ConnectionManager(
     file_logger = file_logger,
-    user = secret("username"), 
+    user = secret.username, 
     subdomain = instance.open_data.get("url"),
     auth = instance.open_data.get("token"),
     launch_url = instance.open_data.get("launch_url"),
@@ -336,7 +336,7 @@ def tunnel(port: int, *apps_to_ports: List[str], i: str, workspace_id: str = "")
     *apps_to_ports: A tuple of values `buildport:localport`. For example, `jupyter:8888` or `2001:8002`
     i(str): The instance to connect to
   """
-  workspace_id: str = workspace_id or secret(AuthConfig.workspace_id)
+  workspace_id: str = workspace_id or secret.workspace_id
   connection = _create_threads(port, *apps_to_ports, i = i, workspace_id = workspace_id)
 
   try:

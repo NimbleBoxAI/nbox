@@ -263,7 +263,7 @@ class Operator():
     # implement this when we have the client-server that allows us to get the metadata for the job
     if (not job_name and not job_id) or (job_name and job_id):
       raise ValueError("Either job_name or job_id must be specified")
-    workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+    workspace_id = workspace_id or secret.workspace_id
     if not workspace_id:
       raise DeprecationWarning("workspace_id cannot be none. Reauth yourself with `nbx login`")
     job_id, job_name = _get_job_data(
@@ -364,7 +364,7 @@ class Operator():
       # this is deployment on a Build instance, there's a catch though without knowing the
       session.headers.update({
         "NBX-TOKEN": token,
-        "X-NBX-USERNAME": secret("username"),
+        "X-NBX-USERNAME": secret.username,
       })
       serving_id = url
     else:
@@ -769,7 +769,7 @@ class Operator():
     """
 
     if not workspace_id:
-      workspace_id = secret(AuthConfig.workspace_id)
+      workspace_id = secret.workspace_id
       logger.info(f"Using workspace_id: {workspace_id}")
 
     # go over reasonable checks for deployment

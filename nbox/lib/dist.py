@@ -46,6 +46,10 @@ class NBXLet(Operator):
 
   def run(self):
     """Run this as a batch process"""
+    # get the user defined tag 
+    run_tag = os.getenv("NBOX_RUN_METADATA", "")
+    logger.info(f"Run Tag: {run_tag}")
+
     status = Job.Status.ERROR
     try:
       tracer = Tracer()
@@ -60,10 +64,6 @@ class NBXLet(Operator):
 
       job_id = tracer.job_id
       self.op.propagate(_tracer = tracer)
-
-      # get the user defined tag 
-      run_tag = os.getenv("NBOX_RUN_METADATA", "")
-      logger.info(f"Run Tag: {run_tag}")
 
       # in the NimbleBox system we provide tags for each key which essentially tells what is the behaviour
       # of the job. For example if it contains the string LMAO which means we need to initialise a couple
@@ -88,8 +88,8 @@ class NBXLet(Operator):
         proj = Project()
         logger.info(lo("Project data:", **proj.data))
         exp_tracker = proj.get_exp_tracker()
-        lmao_run = exp_tracker.run
-        exp_config = ExperimentConfig.from_json(lmao_run.config)
+        tracker_pb = exp_tracker.tracker_pb
+        exp_config = ExperimentConfig.from_dict(U.from_struct_pb(tracker_pb.config)) # convert struct_pb -> dict tracker_pb.config
         kwargs = exp_config.run_kwargs
 
       elif run_tag.startswith(RAW_DIST_RM_PREFIX):
@@ -133,20 +133,23 @@ class NBXLet(Operator):
 
   def serve(self, **serve_kwargs):
     """Run a serving API endpoint"""
-    # run_tag = os.getenv("NBOX_RUN_METADATA", "")
-    # logger.info(f"Run Tag: {run_tag}")
-
-    # while we prepare to ship run_tag for serving, we can leverage the existing code to provide the exact
-    # same functionality
-    if os.path.exists(LMAO_SERVING_FILE):
-      logger.info(f"Found {LMAO_SERVING_FILE}")
-      with open(LMAO_SERVING_FILE, "r") as f:
-        cfg = LiveConfig.from_json(f.read())
-        ProjectState.project_id = cfg.get("project_id")
-        ProjectState.serving_id = cfg.get("serving_id")
-        logger.info(lo("Project data:", **ProjectState.data))
+    run_tag = os.getenv("NBOX_MODEL_METADATA", "")
+    logger.info(f"Run Tag: {run_tag}")
 
     try:
+      if run_tag.startswith(LMAO_RM_PREFIX):
+        project_id, tracker_id = run_tag[len(LMAO_RM_PREFIX):].split("/")
+        logger.info(f"Project name (Tracker ID): {project_id} ({tracker_id})")
+        ProjectState.project_id = project_id
+        ProjectState.serving_id = tracker_id
+
+        # create the central project class and get the experiment tracker
+        proj = Project()
+        logger.info(lo("Project data:", **proj.data))
+        # live_tracker = proj.get_live_tracker()
+        # tracker_config = LiveConfig.from_json(live_tracker.serving.config)
+
+      # now start serving
       serve_operator(op_or_app = self.op, **serve_kwargs)
     except Exception as e:
       U.log_traceback()

@@ -11,11 +11,13 @@ global.workspace_id = '' # this will set the default workspace id for all comman
 """
 import os
 import json
+import socket
 import requests
 import webbrowser
 from typing import Dict
 from getpass import getpass
 from functools import lru_cache
+from dataclasses import dataclass
 
 import nbox.utils as U
 from nbox.utils import join, logger, lo
@@ -46,7 +48,22 @@ class JobDetails(object):
   job_id: str
   run_id: str
 
-# class DeployDetails(object):
+class DeployDetails(object):
+  deployment_id: str
+  model_id: str
+
+
+@dataclass
+class AgentDetails():
+  group_id: str
+  instance_id: str
+  nbx_type: str
+
+
+NBX_JOB_TYPE = "job"
+NBX_DEPLOY_TYPE = "deploy"
+NBX_LOCAL_TYPE = "local"
+
 
 class NBXClient:
   def __init__(self, nbx_url = "https://app.nimblebox.ai"):
@@ -175,30 +192,62 @@ class NBXClient:
 
   @property
   def workspace_id(self) -> str:
-    return self.get(AuthConfig.workspace_id) or self.get(AuthConfig._workspace_id)
+    return self.get(AuthConfig.workspace_id, "") or self.get(AuthConfig._workspace_id, "")
+
+  @property
+  def workspace_name(self) -> str:
+    return self(AuthConfig.workspace_name, "")
 
   @property
   def nbx_url(self) -> str:
-    return self.get(AuthConfig.url)
+    return self.get(AuthConfig.url, "")
 
   @property
   def access_token(self) -> str:
-    return self.get(AuthConfig.access_token)
+    return self.get(AuthConfig.access_token, "")
   
   @property
   def username(self) -> str:
-    return self.get(AuthConfig.username)
+    return self.get(AuthConfig.username, "")
 
-  def get_agent_details(self) -> Dict[str, str]:
-    if ConfigString.nbx_pod_run in self.secrets:
+  @property
+  def run_details(self):
+    return secret(AuthConfig.nbx_pod_run, {})
+
+  @property
+  def inside_pod(self) -> bool:
+    return self.inside_job_pod or self.inside_deploy_pod
+
+  @property
+  def inside_job_pod(self) -> bool:
+    return ConfigString.nbx_pod_run in self.secrets
+  
+  @property
+  def inside_deploy_pod(self) -> bool:
+    return ConfigString.nbx_pod_deploy in self.secrets
+
+  def get_agent_details(self) -> AgentDetails:
+    if self.inside_job_pod:
       run_data = self.secrets[ConfigString.nbx_pod_run]
-      jd = JobDetails()
-      jd.job_id = run_data.get("job_id", None)
-      jd.run_id = run_data.get("token", None)
-      return jd
-    # elif ConfigString.nbx_pod_deploy in self.secrets:
-    #   return self.secrets[ConfigString.nbx_pod_deploy]
-    return {}
+      out = AgentDetails(
+        group_id = run_data.get("job_id", None),
+        instance_id = run_data.get("token", None),
+        nbx_type = NBX_JOB_TYPE
+      )
+    elif self.inside_deploy_pod:
+      deploy_data = self.secrets[ConfigString.nbx_pod_deploy]
+      out = AgentDetails(
+        group_id = deploy_data.get("deployment_id", None),
+        instance_id = deploy_data.get("model_id", None),
+        nbx_type = NBX_DEPLOY_TYPE
+      )
+    else:
+      out = AgentDetails(
+        group_id = f"local-{socket.gethostname()}",
+        instance_id = f"{socket.gethostbyname(socket.gethostname())}-{os.getpid()}",
+        nbx_type = NBX_LOCAL_TYPE
+      )
+    return out
 
 
 def init_secret():
@@ -211,10 +260,13 @@ def init_secret():
     logger.info(lo(
       f"workspace details",
       workspace_id = secret.workspace_id,
-      workspace_name =  AuthConfig.workspace_name,
+      workspace_name = secret.workspace_name,
       token_present = len(secret.access_token) > 0,
       nbx_url = secret.nbx_url,
     ))
+
+    if not secret.workspace_id:
+      raise Exception("Workspace ID not found. Please run `nbox login` to login to NimbleBox.")
     return secret
   else:
     logger.info(f"Skipping authentication as NBOX_NO_AUTH is set to True")
@@ -231,10 +283,12 @@ def auth_info_pb():
   from nbox.hyperloop.common.common_pb2 import NBXAuthInfo
 
   return NBXAuthInfo(
-    username = secret(AuthConfig.username),
-    workspace_id = secret(AuthConfig.workspace_id) or secret(AuthConfig._workspace_id),
-    access_token = secret(AuthConfig.access_token),
+    username = secret.username,
+    workspace_id = secret.workspace_id,
+    access_token = secret.access_token,
   )
 
 def inside_pod():
-  return secret(AuthConfig.nbx_pod_run, False) or secret(AuthConfig.nbx_pod_deploy, False)
+  if secret is None:
+    raise Exception("Secrets not initialized. Cannot determine where am I.")
+  return secret.inside_pod

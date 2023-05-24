@@ -21,18 +21,20 @@ from shutil import rmtree
 from typing import Dict, Any
 
 import nbox.utils as U
-from nbox.jobs import Job, Serve
 from nbox.init import nbox_ws_v1
 from nbox.auth import init_secret, AuthConfig, secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import Relics
 from nbox.lmao import LmaoCLI
+from nbox.lmao_v4 import LmaoCLI as Lmaov4CLI
 from nbox.version import __version__ as V
-from nbox.nbxlib.fire import NBXFire
 from nbox.projects import Project
 from nbox.utils import logger, lo
 from nbox.plugins.base import PluginCLI
+
+# from nbox.jobs import Job, Serve
+from nbox.jd_core import JobsCli, ServeCli
 
 class Config(object):
   def update(self, workspace_id: str):
@@ -42,7 +44,7 @@ class Config(object):
     redo = not data or (workspace_id not in data)
     if redo:
       workspaces = requests.get(
-        secret(AuthConfig.url) + f"/api/v1/workspace",
+        secret.nbx_url + f"/api/v1/workspace",
         headers = nbox_ws_v1._session.headers
       ).json()["data"]
       # workspaces = nbox_ws_v1.workspace()
@@ -71,11 +73,11 @@ class Config(object):
     """Pretty print global config for `nbox`"""
     logger.info(lo(
       "nbox config:",
-      workspace_name = secret(AuthConfig.workspace_name),
-      workspace_id = secret(AuthConfig.workspace_id),
-      username = secret(AuthConfig.username),
+      workspace_name = secret.workspace_id,
+      workspace_id = secret.workspace_id,
+      username = secret.username,
       nbox = V,
-      URL = secret(AuthConfig.url),
+      URL = secret.nbx_url,
     ))
 
   def clear(self):
@@ -86,7 +88,7 @@ class Config(object):
 
 def open_home():
   """Open current NBX platform"""
-  webbrowser.open(secret(AuthConfig.url))
+  webbrowser.open(secret.nbx_url)
 
 
 def get(api_end: str, no_pp: bool = False, **kwargs):
@@ -179,14 +181,17 @@ def main():
     "build"    : Instance,
     "config"   : Config,
     "get"      : get,
-    "jobs"     : Job,
-    "lmao"     : LmaoCLI,
+    # "jobs"     : Job,
+    "jobs"     : JobsCli,
+    # "lmao"     : LmaoCLI,
+    "lmao"     : Lmaov4CLI,
     "login"    : login,
     "open"     : open_home,
     "plugins"  : PluginCLI,
     "projects" : Project,
     "relics"   : Relics,
-    "serve"    : Serve,
+    # "serve"    : Serve,
+    "serve"    : ServeCli,
     "tunnel"   : tunnel,
     "version"  : version,
     "why"      : why,
@@ -194,7 +199,6 @@ def main():
   }
 
   fire.Fire(component)
-  # NBXFire(component)
 
 if __name__ == "__main__":
   main()

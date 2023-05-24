@@ -50,7 +50,7 @@ class LmaoCLI:
     """
     stub = common.get_lmao_stub()
     req = ServingLogRequest(
-      workspace_id = secret(AuthConfig.workspace_id),
+      workspace_id = secret.workspace_id,
       project_id = project_id,
       serving_id = serving_id,
       key = key,

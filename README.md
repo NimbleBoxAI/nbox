@@ -19,6 +19,12 @@ pip install nbox
 pip install nbox
 ```
 
+# Stability and Compatibility
+
+Status: The library is currently undergoing heavy development.
+
+☝️ Important Note: Current major version is zero (v0.x.x) to accommodate rapid development and fast iteration while getting early feedback from users (feedback on APIs are appreciated!). **The public API need not change** without a major version update before v1.0.0 release.
+
 # 🤷Why NimbleBox
 
 - Write and execute code in Python

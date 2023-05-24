@@ -16,7 +16,7 @@ from nbox.relics import Relics
 from nbox.lmao.lmao_rpc_client import (
   AgentDetails,
   RunLog,
-  Run,
+  Run as RunProto,
   InitRunRequest
 )
 from nbox.observability.system import SystemMetricsLogger
@@ -94,7 +94,7 @@ class Lmao():
     self.save_to_relic = save_to_relic
     self.enable_system_monitoring = enable_system_monitoring
     self.store_git_details = store_git_details
-    self.workspace_id = secret(AuthConfig.workspace_id)
+    self.workspace_id = secret.workspace_id
 
     self.agent = secret.get_agent_details()
 
@@ -111,7 +111,7 @@ class Lmao():
       raise Exception(f"Project with id {self.project_id} does not exist")
 
     self.config = self._get_config(metadata = metadata)
-    self.run = self._init_experiment(
+    self.run: RunProto = self._init_experiment(
       project_id = project_id,
       config = self.config,
       experiment_id = experiment_id
@@ -148,7 +148,7 @@ class Lmao():
       log_config["git"] = get_git_details("./")
     return log_config
 
-  def _init_experiment(self, project_id, config: Dict[str, Any] = {}, experiment_id: str = ""):
+  def _init_experiment(self, project_id, config: Dict[str, Any] = {}, experiment_id: str = "") -> RunProto:
     # update the server or create new experiment
     agent_details = AgentDetails(
       workspace_id = self.workspace_id,
@@ -163,7 +163,7 @@ class Lmao():
 
     if experiment_id:
       action = "Updated"
-      run_details = self.lmao.get_run_details(Run(
+      run_details = self.lmao.get_run_details(RunProto(
         workspace_id = self.workspace_id,
         project_id = project_id,
         experiment_id = experiment_id,
@@ -173,7 +173,7 @@ class Lmao():
         raise Exception("Server Side exception has occurred, Check the log for details")
       if run_details.experiment_id:
         # means that this run already exists so we need to make an update call
-        ack = self.lmao.update_run_status(Run(
+        ack = self.lmao.update_run_status(RunProto(
           workspace_id = self.workspace_id,
           project_id = project_id,
           experiment_id = run_details.experiment_id,
@@ -197,12 +197,16 @@ class Lmao():
       f"{action} experiment tracker\n"
       f" project: {project_id}\n"
       f"      id: {run_details.experiment_id}\n"
-      f"    link: {secret(AuthConfig.url)}/workspace/{self.workspace_id}/projects/{project_id}#Experiments\n"
+      f"    link: {secret.nbx_url}/workspace/{self.workspace_id}/projects/{project_id}#Experiments\n"
     )
 
     return run_details
 
   """The functions below are the ones supposed to be used."""
+
+  @property
+  def run_config(self) -> Dict[str, Any]:
+    return loads(self.run.config)
 
   @lru_cache(maxsize=1)
   def get_relic(self):
@@ -285,3 +289,4 @@ class Lmao():
       relic = self.get_relic()
       for f in all_files:
         relic.put(f)
+    return all_files

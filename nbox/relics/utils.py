@@ -11,7 +11,7 @@ from nbox.relics.proto.relics_pb2 import RelicFile
 from nbox.relics.relics_rpc_client import RelicStore_Stub
 
 def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
-  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+  workspace_id = workspace_id or secret.workspace_id
   # assert os.path.exists(fpath), f"File {fpath} does not exist"
   # assert os.path.isfile(fpath), f"File {fpath} is not a file"
 
@@ -41,7 +41,7 @@ def get_relic_file(fpath: str, username: str, workspace_id: str = ""):
 @lru_cache()
 def get_relics_stub():
   # url = "http://0.0.0.0:8081/relics" # debug mode
-  url = secret("nbx_url") + "/relics"
+  url = secret.nbx_url + "/relics"
   logger.debug("Connecting to RelicStore at: " + url)
   session = deepcopy(nbox_ws_v1._session)
   stub = RelicStore_Stub(url, session)
@@ -50,7 +50,7 @@ def get_relics_stub():
 
 def print_relics(workspace_id: str = ""):
   stub = get_relics_stub()
-  workspace_id = workspace_id or secret(AuthConfig.workspace_id)
+  workspace_id = workspace_id or secret.workspace_id
   req = ListRelicsRequest(workspace_id = workspace_id,)
   out = stub.list_relics(req)
   headers = ["relic_id", "relic_name",]

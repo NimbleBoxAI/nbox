@@ -62,7 +62,7 @@ def get_serving_log(
   """
   lmao = get_lmao_stub()
   req = ServingLogRequest(
-    workspace_id = secret(AuthConfig.workspace_id),
+    workspace_id = secret.workspace_id,
     project_id = project_id,
     serving_id = serving_id,
     key = key,
@@ -91,7 +91,7 @@ class LmaoLive():
     Client module for LMAO Live monitoring pipeline, eventually this will be merged with the LMAO client
     which is used for experiment tracking, into a single combined client.
     """
-    self.workspace_id = secret(AuthConfig.workspace_id)
+    self.workspace_id = secret.workspace_id
     self.project_id = project_id
     self.serving_id = serving_id
     
@@ -101,7 +101,6 @@ class LmaoLive():
       workspace_id = self.workspace_id,
       project_id = self.project_id
     )
-    print(p)
     self.project = self.lmao.get_project(p)
     if self.project is None:
       raise Exception("Could not connect to LMAO, please check your credentials")
@@ -141,11 +140,16 @@ class LmaoLive():
       f"{action} live tracker\n"
       f" project: {project_id}\n"
       f"      id: {s.serving_id}\n"
-      f"    link: {secret(AuthConfig.url)}/workspace/{self.workspace_id}/projects/{project_id}/#Live\n"
+      f"    link: {secret.nbx_url}/workspace/{self.workspace_id}/projects/{project_id}/#Live\n"
     )
 
     self.serving = s
     self._total_logged_elements  = 0 # total number of elements logged
+
+  @property
+  def serving_config(self) -> Dict[str, Any]:
+    return loads(self.serving.config)
+
 
   def log(self, y: Dict[str, Union[int, float, str]]):
     run_log = RunLog(

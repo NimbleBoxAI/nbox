@@ -55,6 +55,7 @@ def deploy_serving(
   wait_for_deployment: bool = False,
   model_metadata: Dict[str, str] = {},
   exe_jinja_kwargs: Dict[str, str] = {},
+  exe_path: str = "",
   *,
   _only_zip: bool = False,
 ):
@@ -97,8 +98,10 @@ def deploy_serving(
     workspace_id = workspace_id,
     type = OT.SERVING,
     files_to_copy = {model_proto_fp: "model_proto.msg"},
+    exe_path = exe_path,
     **exe_jinja_kwargs,
   )
+  # TODO: @yashbonde log what file size the zip is
   if _only_zip:
     logger.info(f"Zip file created at: {zip_path}")
     return zip_path
@@ -167,28 +170,28 @@ def _upload_serving_zip(zip_path: str, workspace_id: str, serving_id: str, model
       return
 
   # model is uploaded successfully, now we need to deploy it
-  logger.info(f"Model uploaded successfully, deploying ...")
-  response: Model = mpb.rpc(
-    nbox_model_service_stub.Deploy,
-    ModelRequest(
-      model = Model(
-        id = model_id,
-        serving_group_id = deployment_id,
-        resource = model_proto.resource,
-        # feature_gates = {"SetRunMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
-      ),
-      auth_info = auth_info_pb(),
-    ),
-    "Could not deploy model",
-    raise_on_error=True
-  )
+  # logger.info(f"Model uploaded successfully, deploying ...")
+  # response: Model = mpb.rpc(
+  #   nbox_model_service_stub.Deploy,
+  #   ModelRequest(
+  #     model = Model(
+  #       id = model_id,
+  #       serving_group_id = deployment_id,
+  #       resource = model_proto.resource,
+  #       # feature_gates = {"SetModelMetadata": "yoyoyooyyooyyooyoyoyoy-tag"}
+  #     ),
+  #     auth_info = auth_info_pb(),
+  #   ),
+  #   "Could not deploy model",
+  #   raise_on_error=True
+  # )
 
   # write out all the commands for this deployment
   # logger.info("API will soon be hosted, here's how you can use it:")
   # _api = f"Operator.from_serving('{serving_id}', $NBX_TOKEN, '{workspace_id}')"
   # _cli = f"python3 -m nbox serve forward --id_or_name '{serving_id}' --workspace_id '{workspace_id}'"
   # _curl = f"curl https://api.nimblebox.ai/{serving_id}/forward"
-  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/deploy/{serving_id}"
+  _webpage = f"{secret.nbx_url}/workspace/{workspace_id}/deploy/{serving_id}"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli} --token $NBX_TOKEN --args")
   # logger.info(f"   [curl] - {_curl} -H 'NBX-KEY: $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
@@ -209,12 +212,14 @@ Function related to batch processing of any model.
 def deploy_job(
   init_folder: str,
   job_name: str,
+  feature_gates: Dict[str, str],
   dag: DAG,
   schedule: Schedule,
   resource: Resource,
   workspace_id: str = None,
   job_id: str = None,
   exe_jinja_kwargs = {},
+  exe_path: str = "",
   *,
   _only_zip: bool = False,
   _unittest: bool = False
@@ -244,7 +249,7 @@ def deploy_job(
   logger.info(f"Job ID: {job_id}")
 
   # intialise the console logger
-  URL = secret("nbx_url")
+  URL = secret.nbx_url
   logger.debug(f"Schedule: {schedule}")
   logger.debug("-" * 30 + " NBX Jobs " + "-" * 30)
   logger.debug(f"Deploying on URL: {URL}")
@@ -256,7 +261,8 @@ def deploy_job(
     created_at = SimplerTimes.get_now_pb(),
     schedule = schedule.get_message() if schedule is not None else None, # JobProto.Schedule(cron = "0 0 24 2 0"),
     dag = dag,
-    resource = resource
+    resource = resource,
+    feature_gates = feature_gates,
   )
   job_proto_fp = U.join(gettempdir(), "job_proto.msg")
   mpb.write_binary_to_file(job_proto, job_proto_fp)
@@ -271,6 +277,7 @@ def deploy_job(
     workspace_id = workspace_id,
     type = OT.JOB,
     files_to_copy = {job_proto_fp: "job_proto.msg"},
+    exe_path = exe_path,
     **exe_jinja_kwargs,
   )
   return _upload_job_zip(zip_path, job_proto,workspace_id)
@@ -376,12 +383,12 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")
   # _api = f"nbox.Job(id = '{job_proto.id}', workspace_id='{job_proto.auth_info.workspace_id}').trigger()"
   # _cli = f"python3 -m nbox jobs --job_id {job_proto.id} --workspace_id {workspace_id} trigger"
-  # _curl = f"curl -X POST {secret(AuthConfig.url)}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
+  # _curl = f"curl -X POST {secret.nbx_url}/api/v1/workspace/{job_proto.auth_info.workspace_id}/job/{job_proto.id}/trigger"
   # logger.info(f" [python] - {_api}")
   # logger.info(f"    [CLI] - {_cli}")
   # logger.info(f"   [curl] - {_curl} -H 'authorization: Bearer $NBX_TOKEN' -H 'Content-Type: application/json' -d " + "'{}'")
 
-  _webpage = f"{secret(AuthConfig.url)}/workspace/{workspace_id}/jobs/{job_proto.id}"
+  _webpage = f"{secret.nbx_url}/workspace/{workspace_id}/jobs/{job_proto.id}"
   logger.info(f"   [page] - {_webpage}")
 
   # create a Job object and return so CLI can do interesting things
@@ -402,6 +409,7 @@ def zip_to_nbox_folder(
   workspace_id: str,
   type: Union[OT.JOB, OT.SERVING],
   files_to_copy: Dict[str, str] = {},
+  exe_path: str = "",
   **jinja_kwargs
 ):
   """
@@ -468,27 +476,31 @@ def zip_to_nbox_folder(
       logger.debug(f"Zipping {f} => {arcname}")
       zip_file.write(f, arcname = arcname)
 
-    # create the exe.py file
-    exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
-    exe_path = U.join(gettempdir(), "exe.py")
-    logger.debug(f"Writing exe to: {exe_path}")
-    with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
-      # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
-      _ct = datetime.now(timezone.utc)
-      _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
-      created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
+    # create the exe.py file if not provided by the user
+    if not exe_path:
+      exe_jinja_path = U.join(U.folder(__file__), "assets", "exe.jinja")
+      exe_path = U.join(gettempdir(), "exe.py")
+      logger.debug(f"Writing exe to: {exe_path}")
+      with open(exe_jinja_path, "r") as f, open(exe_path, "w") as f2:
+        # get a timestamp like this: Monday W34 [UTC 12 April, 2022 - 12:00:00]
+        _ct = datetime.now(timezone.utc)
+        _day = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][_ct.weekday()]
+        created_time = f"{_day} W{_ct.isocalendar()[1]} [ UTC {_ct.strftime('%d %b, %Y - %H:%M:%S')} ]"
 
-      # fill up the jinja template
-      code = jinja2.Template(f.read()).render({
-        "created_time": created_time,
-        "nbox_version": __version__,
-        **jinja_kwargs
-      })
-      f2.write(code)
-    # print(os.stat(exe_path))
+        # fill up the jinja template
+        code = jinja2.Template(f.read()).render({
+          "created_time": created_time,
+          "nbox_version": __version__,
+          **jinja_kwargs
+        })
+        f2.write(code)
 
+    # finally add this to the zip file
     zip_file.write(exe_path, arcname = "exe.py")
     for src, trg in files_to_copy.items():
       zip_file.write(src, arcname = trg)
+
+  # log the filesize of the zip
+  logger.info(f"Zip file size: {os.stat(zip_path).st_size / (1024 ** 2):0.3f} MB")
 
   return zip_path
