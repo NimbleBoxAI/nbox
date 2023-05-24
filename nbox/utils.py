@@ -43,7 +43,7 @@ import traceback
 import randomname
 import cloudpickle
 from uuid import uuid4
-from typing import List, Any
+from typing import List, Any, Dict
 from contextlib import contextmanager
 from base64 import b64encode, b64decode
 from datetime import datetime, timezone
@@ -51,6 +51,7 @@ from functools import partial, lru_cache
 from importlib.util import spec_from_file_location, module_from_spec
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor, as_completed
 from google.protobuf.timestamp_pb2 import Timestamp as Timestamp_pb
+from google.protobuf.struct_pb2 import Struct
 
 from nbox.nbxlib.logger import get_logger, lo
 
@@ -269,6 +270,21 @@ def from_json(x: str):
       return json.load(f)
   else:
     return json.loads(x)
+
+def to_struct_pb(data: Dict) -> Struct:
+  s = Struct()
+  s.update(data)
+  return s
+
+def from_struct_pb(struct: Struct, out: Dict = None) -> Dict:
+  if not out:
+    out = {}
+  for key, value in struct.items():
+    if isinstance(value, Struct):
+      out[key] = from_struct_pb(value)
+    else:
+      out[key] = value
+  return out
 
 def get_assets_folder():
   return join(folder(__file__), "assets")

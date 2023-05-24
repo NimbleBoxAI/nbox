@@ -88,8 +88,8 @@ class NBXLet(Operator):
         proj = Project()
         logger.info(lo("Project data:", **proj.data))
         exp_tracker = proj.get_exp_tracker()
-        lmao_run = exp_tracker.run
-        exp_config = ExperimentConfig.from_json(lmao_run.config)
+        tracker_pb = exp_tracker.tracker_pb
+        exp_config = ExperimentConfig.from_dict(U.from_struct_pb(tracker_pb.config)) # convert struct_pb -> dict tracker_pb.config
         kwargs = exp_config.run_kwargs
 
       elif run_tag.startswith(RAW_DIST_RM_PREFIX):

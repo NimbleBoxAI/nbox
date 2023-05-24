@@ -27,6 +27,7 @@ from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import Relics
 from nbox.lmao import LmaoCLI
+from nbox.lmao_v4 import LmaoCLI as Lmaov4CLI
 from nbox.version import __version__ as V
 from nbox.projects import Project
 from nbox.utils import logger, lo
@@ -182,7 +183,8 @@ def main():
     "get"      : get,
     # "jobs"     : Job,
     "jobs"     : JobsCli,
-    "lmao"     : LmaoCLI,
+    # "lmao"     : LmaoCLI,
+    "lmao"     : Lmaov4CLI,
     "login"    : login,
     "open"     : open_home,
     "plugins"  : PluginCLI,

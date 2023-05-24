@@ -6,11 +6,13 @@ from nbox.jd_core.serving import print_serving_list, Serve
 
 JobsCli = {
   "status": get_job_list,
-  "upload": partial(upload_job_folder, "job")
+  "upload": partial(upload_job_folder, "job"),
+  "get": Job,
 }
 
 
 ServeCli = {
   "status": print_serving_list,
-  "upload": partial(upload_job_folder, "serving")
+  "upload": partial(upload_job_folder, "serving"),
+  "get": Serve,
 }

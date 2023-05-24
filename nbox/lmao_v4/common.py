@@ -1,64 +1,74 @@
-"""
-NimbleBox LMAO is our general purpose observability tool for any kind of computation you might have.
-"""
-
-# drift detection and all
-# run.log_dataset(
-#     dataset_name='train',
-#     features=X_train,
-#     predictions=y_pred_train,
-#     actuals=y_train,
-# )
-# run.log_dataset(
-#     dataset_name='test',
-#     features=X_test,
-#     predictions=y_pred_test,
-#     actuals=y_test,
-# )
-
 import re
+import grpc
 import json
+import collections
 from git import Repo
+from functools import lru_cache
 from typing import Union, Dict, Any
 
-from nbox.utils import logger
-from nbox.auth import secret, AuthConfig
-from nbox.init import nbox_ws_v1
-from nbox.lmao.lmao_rpc_client import (
-  LMAO_Stub, # main stub class
-  Record,
-  ListProjectsRequest,
-  Project as ProjectProto,
-)
-from nbox.hyperloop.common.common_pb2 import Resource
+from nbox.auth import inside_pod, secret
+from nbox.init import MetadataInjectInterceptor, WorkspaceIdInjectInterceptor
+from nbox.utils import logger, lo
 from nbox import messages as mpb
+from nbox.hyperloop.common.common_pb2 import Resource
 
-"""
-functional components of LMAO
-"""
+from nbox.lmao_v4.proto.lmao_service_pb2_grpc import LMAOStub
+from nbox.lmao_v4.proto.logs_pb2 import TrackerLog
+from nbox.lmao_v4.proto.project_pb2 import Project as ProjectProto
 
-def get_lmao_stub() -> LMAO_Stub:
-  # lmao_stub = LMAO_Stub(url = "http://localhost:8080/monitoring", session = nbox_ws_v1._session)
-  lmao_stub = LMAO_Stub(url = secret.nbx_url + "/monitoring", session = nbox_ws_v1._session)
-  return lmao_stub
+@lru_cache(1)
+def get_lmao_stub() -> LMAOStub:
+  token_cred = grpc.access_token_call_credentials(secret.access_token)
+  ssl_creds = grpc.ssl_channel_credentials()
+  creds = grpc.composite_channel_credentials(ssl_creds, token_cred)
+  channel = grpc.secure_channel(secret.nbx_url.replace("https://", "dns:/") + ":443", creds)
 
-def get_record(k: str, v: Union[int, float, str]) -> Record:
-  """Function to create a Record protobuf object from a key and value."""
-  _tv = type(v)
-  assert _tv in [int, float, str], f"[key = {k}] '{_tv}' is not a valid type"
-  _vt = {
-    int: Record.DataType.INTEGER,
-    float: Record.DataType.FLOAT,
-    str: Record.DataType.STRING,
-  }[_tv]
-  record = Record(key = k, value_type = _vt)
-  if _tv == int:
-    record.integer_data.append(v)
-  elif _tv == float:
-    record.float_data.append(v)
-  elif _tv == str:
-    record.string_data.append(v)
-  return record
+  # channel = grpc.insecure_channel("dns:/0.0.0.0:50051") # debug mode
+
+  future = grpc.channel_ready_future(channel)
+  future.add_done_callback(lambda _: logger.debug(f"NBX 'LMAO' gRPC stub is ready!"))
+  interceptors = [
+    MetadataInjectInterceptor(),
+    WorkspaceIdInjectInterceptor(),
+  ]
+  channel = grpc.intercept_channel(channel, *interceptors)
+  stub = LMAOStub(channel)
+  return stub
+
+valid_key_regex = re.compile(r'[a-zA-Z0-9_\-\.]+$') 
+
+def flatten(d, parent_key='', sep='.'):
+  """flatten a dictionary with prefix and seperator, if """
+  items = []
+  for k, v in d.items():
+    if sep in k:
+      raise ValueError(f"Key '{k}' contains the seperator '{sep}', this can cause issue during rebuilding")
+    new_key = parent_key + sep + k if parent_key else k
+    if isinstance(v, collections.abc.MutableMapping):
+      items.extend(flatten(v, new_key, sep=sep).items())
+    else:
+      items.append((new_key, v))
+  return dict(items)
+
+
+def get_tracker_log(log: dict) -> TrackerLog:
+  items = flatten(log).items()
+  out = TrackerLog()
+  for k,v in items:
+    if valid_key_regex.match(k) is None:
+      raise ValueError(f"Invalid key '{k}', allowed letters digits and '_-'")
+    if type(v) in (float, int):
+      out.number_keys.append(k)
+      out.number_values.append(v)
+    elif type(v) == str:
+      out.text_keys.append(k)
+      out.text_values.append(v)
+    else:
+      raise ValueError(f"Invalid type '{type(v)}' for key '{k}'")
+  return out
+
+
+# there are some legacy functions that were built for lmao_v2, in some cases retrofitted for v4
 
 def get_git_details(folder):
   """If there is a `.git` folder in the folder, return some details for that."""
@@ -104,23 +114,22 @@ def get_git_details(folder):
 
 def get_project(project_id: str) -> ProjectProto:
   lmao_stub = get_lmao_stub()
-  project: ProjectProto = lmao_stub.get_project(ListProjectsRequest(
-    workspace_id = secret.workspace_id,
-    project_id_or_name = project_id
-  ))
+  project: ProjectProto = lmao_stub.GetProject(ProjectProto(id=project_id))
   return project
 
 
 def resource_from_dict(d: Dict[str, Any]):
   return Resource(
-    cpu = str(d["cpu"]),
-    memory = str(d["memory"]),
-    disk_size = str(d["disk_size"]),
-    gpu = str(d["gpu"]),
-    gpu_count = str(d["gpu_count"]),
-    timeout = int(d["timeout"]),
-    max_retries = int(d["max_retries"]),
+    cpu = str(d.get("cpu", "")),
+    memory = str(d.get("memory", "")),
+    disk_size = str(d.get("disk_size", "")),
+    gpu = str(d.get("gpu", "")),
+    gpu_count = str(d.get("gpu_count", "")),
+    timeout = int(d.get("timeout", 0)),
+    max_retries = int(d.get("max_retries", 0)),
   )
+
+
 
 """
 Common structs
@@ -164,12 +173,6 @@ class ExperimentConfig:
       "save_to_relic": self.save_to_relic,
       "enable_system_monitoring": self.enable_system_monitoring,
     }
-
-  @classmethod
-  def from_dict(cls, data):
-    if not isinstance(data, Resource):
-      data["resource"] = resource_from_dict(data["resource"])
-    return cls(**data)
 
   def to_json(self):
     return json.dumps(self.to_dict())

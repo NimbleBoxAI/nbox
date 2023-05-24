@@ -140,28 +140,10 @@ cython_debug/
 
 # our ignores
 .DS_Store
-*.cfg
 notebooks/
-__ignore/
 .vscode/
-serve_fp.py
-*.pt
-*.onnx
-*.pb
-
-# you have recipes, and then you have dark magic!
-__dark_magic/
-__secret/
 
 # not need to add / in symlink 
 .nbx
-nbox-kernel
-yolov4-trainer-nbox
-example_jobs/gperc_model/
 ex_jobs
-hyperloop
 scripts
-konark/
-_modules/
-nbox/_jobs
-lmao_v4/
