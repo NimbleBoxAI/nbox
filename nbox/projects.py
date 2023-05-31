@@ -111,7 +111,7 @@ class Project:
     self.project_pb = self.lmao_stub.GetProject(_p)
     if self.project_pb is None:
       raise ValueError("Could not connect to Monitoring backend.")
-    self.relic = Relics(id = self.project_pb.relic_id)
+    self.artifact = Relics(id = self.project_pb.relic_id)
     self.workspace_id = secret.workspace_id
 
   def __repr__(self) -> str:
@@ -147,8 +147,8 @@ class Project:
   def get_lmao_stub(self) -> LMAOStub:
     return self.lmao_stub
   
-  def get_relic(self) -> Relics:
-    return self.relic
+  def get_artifact(self) -> Relics:
+    return self.artifact
 
   def get_job_id(self) -> str:
     return self.data["job_list"][0]
@@ -311,7 +311,7 @@ class Project:
             zip_file.write(f, arcname = f)
 
       # upload the patch file to relics
-      self.relic.put_to(_zf, f"{tracker_pb.id}/git.zip")
+      self.artifact.put_to(_zf, f"{tracker_pb.id}/git.zip")
       os.remove(_zf)
       os.remove(patch_file)
 
@@ -357,7 +357,7 @@ class Project:
 #     ))
 #     if self.project is None:
 #       raise ValueError("Could not connect to Monitoring backend.")
-#     self.relic = Relics(id = self.project.relic_id)
+#     self.artifact = Relics(id = self.project.relic_id)
 #     self.workspace_id = secret.workspace_id
 
 #   def __repr__(self) -> str:
@@ -402,7 +402,7 @@ class Project:
 #     return lmao
 
 #   def get_relic(self) -> Relics:
-#     return self.relic
+#     return self.artifact
 
 #   def get_job_id(self) -> str:
 #     return self.data["job_list"][0]
@@ -559,7 +559,7 @@ class Project:
 #             zip_file.write(f, arcname = f)
 
 #       # upload the patch file to relics
-#       self.relic.put_to(_zf, f"{run.experiment_id}/git.zip")
+#       self.artifact.put_to(_zf, f"{run.experiment_id}/git.zip")
 #       os.remove(_zf)
 #       os.remove(patch_file)
 

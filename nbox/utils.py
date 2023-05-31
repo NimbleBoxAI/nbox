@@ -94,11 +94,8 @@ class env:
 
 # logger /
 logger = get_logger(env) # package wide logger
-# logger = NBXUnifiedLogger(env) # package wide logger
 
 def log_traceback():
-  # for l in traceback.format_exc().splitlines():
-  #   logger.error(l)
   logger.error(traceback.format_exc())
 
 @contextmanager
@@ -421,7 +418,7 @@ class SimplerTimes:
   def get_now_str() -> str:
     return SimplerTimes.get_now_datetime().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-  def get_now_pb():
+  def get_now_pb() -> Timestamp_pb:
     ts = Timestamp_pb()
     ts.GetCurrentTime()
     return ts
