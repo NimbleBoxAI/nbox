@@ -353,7 +353,10 @@ class Instance():
       return
 
     logger.debug(f"Stopping instance {self.project_name} ({self.project_id})")
-    message = self.stub_ws_instance.stop_instance("post", data = {"instance_id":self.project_id})["msg"]
+    message = self.stub_ws_instance.stop(
+      "post",
+      data = {"workspace_id": secret.workspace_id, "instance_id": self.project_id}
+    )["msg"]
     if not message == "success":
       raise ValueError(message)
 
