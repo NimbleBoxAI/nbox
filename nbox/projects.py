@@ -1,25 +1,26 @@
 import os
 import sys
 import ast
-import json
 import shlex
 import zipfile
-from pprint import pformat
 from subprocess import Popen
 from typing import Tuple, Dict
 
-from google.protobuf import field_mask_pb2
-
-from nbox.utils import logger
 from nbox import utils as U
-from nbox.auth import secret, AuthConfig, auth_info_pb
-from nbox.init import nbox_ws_v1, nbox_model_service_stub
-from nbox import messages as mpb
+from nbox.auth import secret
+from nbox.utils import logger
 from nbox.relics import Relics
+from nbox import messages as mpb
+from nbox.init import nbox_ws_v1
 from nbox.jd_core import Job, Serve, upload_job_folder
-from nbox.hyperloop.deploy import serve_pb2
-from nbox.hyperloop.common.common_pb2 import Resource
+
 from nbox.nbxlib.astea import Astea
+
+from nbox.hyperloop.common.common_pb2 import Resource
+from nbox.lmao_v4 import get_lmao_stub, get_git_details, LMAO_RM_PREFIX, ExperimentConfig, Tracker
+from nbox.lmao_v4.proto.lmao_service_pb2_grpc import LMAOStub
+from nbox.lmao_v4.proto import tracker_pb2 as t_pb
+from nbox.lmao_v4.proto import project_pb2 as p_pb
 
 
 def _parse_job_code(init_path: str, run_kwargs) -> Tuple[str, Dict]:
@@ -59,17 +60,9 @@ def _parse_job_code(init_path: str, run_kwargs) -> Tuple[str, Dict]:
 
 ### ---------------
 # this will be eventually merged with the project in the root scope
-from nbox.init import nbox_ws_v1
-from nbox.utils import logger
-from nbox.auth import secret
-from nbox.relics import Relics
-from nbox import messages as mpb
 
-from nbox.lmao_v4 import get_lmao_stub, get_git_details, LMAO_RM_PREFIX, ExperimentConfig, Tracker
-from nbox.lmao_v4.proto.lmao_service_pb2_grpc import LMAOStub
-from nbox.lmao_v4.proto import tracker_pb2 as t_pb
-from nbox.lmao_v4.proto import project_pb2 as p_pb
 
+_SUPPORTED_SERVER_TYPES = ["fastapi"]
 
 class ProjectState:
   project_id: str = ""
@@ -305,7 +298,7 @@ class Project:
     upload_job_folder(
       method = "job",
       init_folder = init_path,
-      id = job.id,
+      project_id = self.project_pb.id,
 
       # pass along the resource requirements
       resource_cpu = resource_cpu,
@@ -325,3 +318,19 @@ class Project:
     # finally print the location of the run where the users can track this
     logger.info(f"Run location: {secret.nbx_url}/workspace/{secret.workspace_id}/projects/{self.project_pb.id}#Experiments")
 
+  def serve(
+    self,
+    init_path: str,
+    server_type: str = "fastapi",
+
+    # all the things for resources
+    resource_cpu: str = "",
+    resource_memory: str = "",
+    resource_disk_size: str = "",
+    resource_gpu: str = "",
+    resource_gpu_count: str = "",
+    resource_max_retries: int = 0,
+  ):
+    raise NotImplementedError("This is not implemented yet")
+    if server_type not in _SUPPORTED_SERVER_TYPES:
+      raise ValueError(f"server_type must be one of {_SUPPORTED_SERVER_TYPES}")

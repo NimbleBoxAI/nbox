@@ -364,20 +364,18 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   auth_info = auth_info_pb()
   if new_job:
     logger.info("Creating a new job")
-    mpb.rpc(
-      stub = nbox_grpc_stub.CreateJob,
-      message = JobRequest(job = job_proto, auth_info = auth_info),
-      err_msg = "Failed to create job"
-    )
+    nbox_grpc_stub.CreateJob(JobRequest(
+      job = job_proto,
+      auth_info = auth_info
+    ))
 
   if not old_job_proto.feature_gates:
     logger.info("Updating feature gates")
-    mpb.rpc(
-      stub = nbox_grpc_stub.UpdateJob,
-      message = UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths = ["feature_gates"]), auth_info = auth_info),
-      err_msg = "Failed to update job",
-      raise_on_error = False
-    )
+    nbox_grpc_stub.UpdateJob(UpdateJobRequest(
+      job = job_proto,
+      update_mask = FieldMask(paths = ["feature_gates"]),
+      auth_info = auth_info
+    ))
 
   # write out all the commands for this job
   # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")

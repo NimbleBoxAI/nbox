@@ -17,7 +17,7 @@ from nbox.nbxlib.tracer import Tracer
 from nbox.hyperloop.jobs.job_pb2 import Job
 from nbox.nbxlib.serving import serve_operator
 
-from nbox.lmao import ExperimentConfig, LiveConfig, LMAO_RM_PREFIX, LMAO_SERVING_FILE
+from nbox.lmao_v4 import ExperimentConfig, LMAO_RM_PREFIX
 from nbox.projects import Project, ProjectState
 
 # Manager
