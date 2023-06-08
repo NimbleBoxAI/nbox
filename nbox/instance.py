@@ -83,21 +83,25 @@ class Instance():
   status = staticmethod(print_status)
 
   # each instance has a lot of data against it, we need to store only a few as attributes
-  useful_keys = ["project_id", "project_name", "size_used", "size", "state"]
+  useful_keys = ["instance_id", "project_name", "size_used", "size", "state"]
 
   def __init__(self, i: str, *, workspace_id: str = ""):
     """NBX-Build Instance class manages the both individual instance, but provides webserver functionality using
     `nbox_ws_v1`, such as starting and stopping, deletion and more.
 
     Args:
-      i (str): name or `project_id` of the instance
+      i (str): name or `instance_id` of the instance
     """
     if not i:
       raise ValueError("Instance id must be provided, try --i='1023'")
+    
+    # if user provided a number we assume that they gave an instance ID, this is a weak assumption because
+    # people usually use names.
+    _instance_id = isinstance(i, int)
     i = str(i)
 
     # simply add useful keys to the instance
-    self.project_id: str = None
+    self.instance_id: str = None
     self.project_name: str = None
     self.workspace_id: str = workspace_id or secret.workspace_id
     self.size_used: float = None
@@ -113,31 +117,36 @@ class Instance():
     stub_ws_instance = create_webserver_subway("v1", sess)
     stub_projects = stub_ws_instance.instances
 
-    # filter and get the data
-    project_details = stub_projects()["project_details"]
-    # print(project_details)
-    if i not in project_details:
-      by_name = list(filter(lambda x: x[1]['project_name'] == i, list(project_details.items())))
-      if len(by_name) == 0:
-        raise ValueError(f"Instance '{i}' not found")
-      elif len(by_name) > 1:
-        raise ValueError(f"Multiple instances with name '{i}' found")
-      data = by_name[0]
-      project_id = data[0]
-      data = data[1]
+    if _instance_id:
+      # if user provided an instance id, we can directly get the data
+      data = stub_projects.u(i)()
+      instance_id = i
     else:
-      data = project_details[i]
-      project_id = i
-    data["project_id"] = project_id
-    logger.info(f"Found instance '{data['project_name']}' ({data['project_id']})")
+      # else filter and get the data
+      project_details = stub_projects()["project_details"]
+      if i not in project_details:
+        by_name = list(filter(lambda x: x[1]['project_name'] == i, list(project_details.items())))
+        if len(by_name) == 0:
+          raise ValueError(f"Instance '{i}' not found")
+        elif len(by_name) > 1:
+          raise ValueError(f"Multiple instances with name '{i}' found")
+        data = by_name[0]
+        instance_id = data[0]
+        data = data[1]
+      else:
+        data = project_details[i]
+        instance_id = i
+
+    data["instance_id"] = instance_id
+    logger.info(f"Found instance '{data['project_name']}' ({data['instance_id']})")
     # print(data)
-    for x in self.useful_keys:
+    for x in Instance.useful_keys:
       setattr(self, x, data[x])
     
     # some data points require extra processing before usage
     self.custom_ports: Dict[str, int] = loads(data["custom_ports"]) if data["custom_ports"] is not None else {}
     self.exposed_ports: Dict[str, int] = loads(data["exposed_ports"]) if data["exposed_ports"] is not None else {}
-    self.stub_ws_instance = stub_projects.u(self.project_id)
+    self.stub_ws_instance = stub_projects.u(self.instance_id)
     logger.debug(f"WS: {self.stub_ws_instance}")
 
     # set values
@@ -257,13 +266,13 @@ class Instance():
 
   def refresh(self):
     """Update the data, get latest state"""
-    self.data = self.stub_ws_instance() # GET /user/projects/{project_id}
+    self.data = self.stub_ws_instance() # GET /user/projects/{instance_id}
     for k in self.useful_keys:
       setattr(self, k, self.data[k])
 
   def _start(self, cpu, gpu, gpu_count, auto_shutdown, dedicated_hw, zone):
     """Turn on the the unserlying compute"""
-    logger.info(f"Starting instance {self.project_name} ({self.project_id})")
+    logger.info(f"Starting instance {self.project_name} ({self.instance_id})")
     hw_config = {
       "cpu":f"n1-standard-{cpu}"
     }
@@ -283,7 +292,7 @@ class Instance():
       region = zone
     )
 
-    logger.info(f"Waiting for instance {self.project_name} ({self.project_id}) to start ...")
+    logger.info(f"Waiting for instance {self.project_name} ({self.instance_id}) to start ...")
     _i = 0
     while self.state != "RUNNING":
       time.sleep(5)
@@ -291,13 +300,13 @@ class Instance():
       _i += 1
       if _i > TIMEOUT_CALLS:
         raise TimeoutError("Instance did not start within timeout, please check dashboard")
-    logger.info(f"Instance {self.project_name} ({self.project_id}) started")
+    logger.info(f"Instance {self.project_name} ({self.instance_id}) started")
 
   def _open(self):
     # now the instance is running, we can open it, opening will assign a bunch of cookies and
     # then get us the exact location of the instance
     if not self.__opened:
-      logger.debug(f"Opening instance {self.project_name} ({self.project_id})")
+      logger.debug(f"Opening instance {self.project_name} ({self.instance_id})")
       launch_data = self.stub_ws_instance.launch(_method = "post")
       base_domain = launch_data['base_domain']
       self.open_data = {
@@ -340,7 +349,7 @@ class Instance():
       self._start(cpu, gpu, gpu_count, auto_shutdown, dedicated_hw, zone)
     else:
       # TODO: @yashbonde: inform user in case of hardware mismatch?
-      logger.info(f"Instance {self.project_name} ({self.project_id}) is already running")
+      logger.info(f"Instance {self.project_name} ({self.instance_id}) is already running")
 
     # prevent rate limiting
     if not self.__opened:
@@ -349,18 +358,18 @@ class Instance():
   def stop(self):
     """Stop the Instance"""
     if self.state == "STOPPED":
-      logger.info(f"Instance {self.project_name} ({self.project_id}) is already stopped")
+      logger.info(f"Instance {self.project_name} ({self.instance_id}) is already stopped")
       return
 
-    logger.debug(f"Stopping instance {self.project_name} ({self.project_id})")
+    logger.debug(f"Stopping instance {self.project_name} ({self.instance_id})")
     message = self.stub_ws_instance.stop(
       "post",
-      data = {"workspace_id": secret.workspace_id, "instance_id": self.project_id}
+      data = {"workspace_id": secret.workspace_id, "instance_id": self.instance_id}
     )["msg"]
     if not message == "success":
       raise ValueError(message)
 
-    logger.debug(f"Waiting for instance {self.project_name} ({self.project_id}) to stop")
+    logger.debug(f"Waiting for instance {self.project_name} ({self.instance_id}) to stop")
     _i = 0 # timeout call counter
     while self.state != "STOPPED":
       time.sleep(5)
@@ -368,7 +377,7 @@ class Instance():
       _i += 1
       if _i > TIMEOUT_CALLS:
         raise TimeoutError("Instance did not stop within timeout, please check dashboard")
-    logger.debug(f"Instance {self.project_name} ({self.project_id}) stopped")
+    logger.debug(f"Instance {self.project_name} ({self.instance_id}) stopped")
 
     self.__opened = False
 
@@ -376,7 +385,7 @@ class Instance():
     """With great power comes great responsibility."""
     if self.__opened and not force:
       raise ValueError("Instance is still opened, please call .stop() first")
-    logger.warning(f"Deleting instance {self.project_name} ({self.project_id})")
+    logger.warning(f"Deleting instance {self.project_name} ({self.instance_id})")
     if input(f"> Are you sure you want to delete '{self.project_name}'? (y/N): ") == "y":
       self.stub_ws_instance("delete")
     else:
@@ -393,8 +402,8 @@ class Instance():
   def _unopened_error(self):
     if not self.__opened:
       logger.error(f"You are trying to move files to a {self.state} instance, you will have to start the instance first:")
-      logger.error(f'    - nbox.Instance("{self.project_id}", "{self.workspace_id}").start(...)')
-      logger.error(f'    - python3 -m nbox build --i "{self.project_id}" --workspace_id "{self.workspace_id}" start --help')
+      logger.error(f'    - nbox.Instance("{self.instance_id}", "{self.workspace_id}").start(...)')
+      logger.error(f'    - python3 -m nbox build --i "{self.instance_id}" --workspace_id "{self.workspace_id}" start --help')
       raise ValueError("Instance is not opened, please call .open() first")
 
   def __create_connection(self, *, port: int = 6174):
@@ -404,7 +413,7 @@ class Instance():
     # create logging for RSock
     folder = U.join(U.env.NBOX_HOME_DIR(), "tunnel_logs")
     os.makedirs(folder, exist_ok=True)
-    filepath = U.join(folder, f"tunnel_{self.project_id}.log") # consistency with IDs instead of names
+    filepath = U.join(folder, f"tunnel_{self.instance_id}.log") # consistency with IDs instead of names
     file_logger = FileLogger(filepath)
     logger.debug(f"Logging RSock server to {filepath}")
 

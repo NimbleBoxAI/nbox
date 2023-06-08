@@ -304,7 +304,7 @@ def _create_threads(port: int, *apps_to_ports: List[str], i: str, workspace_id: 
   # create logging for RSock
   folder = U.join(U.env.NBOX_HOME_DIR(), "tunnel_logs")
   os.makedirs(folder, exist_ok=True)
-  filepath = U.join(folder, f"tunnel_{instance.project_id}.log") # consistency with IDs instead of names
+  filepath = U.join(folder, f"tunnel_{instance.instance_id}.log") # consistency with IDs instead of names
   file_logger = FileLogger(filepath)
   nbx_logger.info(f"Logging to {filepath}")
 
