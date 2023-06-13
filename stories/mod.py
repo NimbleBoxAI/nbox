@@ -33,8 +33,8 @@ class JobsModule:
     sleep(2)
     hr(f"nbx jobs pick --job_id '{job.id}' get_run_log '{rid}' - logs")
     out = Job(job_id=job.id).get_run_log(rid)
-    logs = [json.dumps(x) for x in out["logs"]][:10]
-    print("LOG ITEMS:", len(logs))
+    print("LOG ITEMS:", len(out["logs"]))
+    logs = [json.dumps(x) for x in out["logs"][:10]]
     print("LOGS:\n", "\n".join(logs))
 
     # ---
