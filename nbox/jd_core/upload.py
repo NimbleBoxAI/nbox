@@ -26,8 +26,8 @@ from nbox.jd_core.serving import Serve
 def upload_job_folder(
   method: str,
   init_folder: str,
-  project_id: str,
-  # id: str = "",
+  project_id: str = "",
+  id: str = "",
 
   # job / deploy rpc things
   trigger: bool = False,
@@ -108,11 +108,15 @@ def upload_job_folder(
     raise ValueError(f"model_name can only be used with '{OT.SERVING}'")
   
   # get the correct Job ID based on the project_id
-  p = Project(project_id)
-  if method == OT.JOB:
-    id = p.get_job_id()
-  else:
-    id = p.get_deployment_id()
+
+  if (id and project_id) and not (id or project_id):
+    raise ValueError("Either id or project_id is required")
+  if not id:
+    project = Project(project_id)
+    if method == OT.JOB:
+      id = project.get_job_id()
+    else:
+      id = project.get_deployment_id()
   logger.info(f"Using project_id: {project_id}, found id: {id}")
 
   if ":" not in init_folder:

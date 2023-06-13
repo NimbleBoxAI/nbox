@@ -317,11 +317,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   ))
 
   # UploadJobCode is responsible for uploading the code of the job
-  response: JobProto = mpb.rpc(
-    nbox_grpc_stub.UploadJobCode,
-    JobRequest(job = job_proto, auth_info=auth_info_pb()),
-    f"Failed to upload job: {job_proto.id} | {job_proto.name}"
-  )
+  response: JobProto = nbox_grpc_stub.UploadJobCode(JobRequest(job = job_proto, auth_info=auth_info_pb()))
   job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta

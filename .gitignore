@@ -147,3 +147,5 @@ notebooks/
 .nbx
 ex_jobs
 scripts
+.nboxignore
+stories/requirements.txt

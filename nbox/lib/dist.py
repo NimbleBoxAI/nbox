@@ -80,16 +80,16 @@ class NBXLet(Operator):
         #   inferred.
 
         project_id, exp_id = run_tag[len(LMAO_RM_PREFIX):].split("/")
-        logger.info(f"Project name (Experiment ID): {project_id} ({exp_id})")
+        logger.info(f"Project ID (Experiment ID): {project_id} ({exp_id})")
         ProjectState.project_id = project_id
         ProjectState.experiment_id = exp_id
 
         # create the central project class and get the experiment tracker
         proj = Project()
-        logger.info(lo("Project data:", **proj.data))
         exp_tracker = proj.get_exp_tracker()
         tracker_pb = exp_tracker.tracker_pb
-        exp_config = ExperimentConfig.from_dict(U.from_struct_pb(tracker_pb.config)) # convert struct_pb -> dict tracker_pb.config
+        config_dict = U.dict_from_struct_pb(tracker_pb.config)
+        exp_config = ExperimentConfig.from_dict(config_dict)
         kwargs = exp_config.run_kwargs
 
       elif run_tag.startswith(RAW_DIST_RM_PREFIX):

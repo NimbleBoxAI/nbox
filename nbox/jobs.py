@@ -57,7 +57,7 @@ DEFAULT_RESOURCE = Resource(
 from nbox.jd_core import (
     Schedule,
     _get_job_data,
-    get_job_list,
+    print_job_list,
     Job,
     _get_deployment_data,
     print_serving_list,

@@ -8,7 +8,7 @@ from typing import Tuple, Dict
 
 from nbox import utils as U
 from nbox.auth import secret
-from nbox.utils import logger
+from nbox.utils import logger, lo
 from nbox.relics import Relics
 from nbox import messages as mpb
 from nbox.init import nbox_ws_v1
@@ -22,6 +22,24 @@ from nbox.lmao_v4.proto.lmao_service_pb2_grpc import LMAOStub
 from nbox.lmao_v4.proto import tracker_pb2 as t_pb
 from nbox.lmao_v4.proto import project_pb2 as p_pb
 
+
+def evaluate_unary_op(node):
+  if isinstance(node.op, ast.USub):  # Unary negation
+    return -evaluate_node(node.operand)
+  elif isinstance(node.op, ast.UAdd):  # Unary positive
+    return evaluate_node(node.operand)
+  elif isinstance(node.op, ast.Not):  # Logical not
+    return not evaluate_node(node.operand)
+  else:
+    raise ValueError("Unsupported unary operator")
+
+def evaluate_node(node):
+  if isinstance(node, ast.Constant):
+    return node.value
+  elif isinstance(node, ast.UnaryOp):
+    return evaluate_unary_op(node)
+  else:
+    raise ValueError("Unsupported node type")
 
 def _parse_job_code(init_path: str, run_kwargs) -> Tuple[str, Dict]:
   # analyse the input file and function, extract the types and build the run_kwargs
@@ -40,9 +58,20 @@ def _parse_job_code(init_path: str, run_kwargs) -> Tuple[str, Dict]:
   _default_kwarg = {}
   for k,v in zip(args[::-1], defaults[::-1]):
     _k = k.arg
-    if not type(v) == ast.Constant:
-      raise Exception(f"Default value for {_k} is not a primitive type [int, float, str, bool] but {type(v)}")
-    _default_kwarg[_k] = v.value
+    if type(v) == ast.UnaryOp:
+      logger.warning(f"Default value for var '{_k}' is a UnaryOp, cannot validate the type")
+      try:
+        evaluate_node(v)
+      except:
+        raise Exception(f"Default value for var '{_k}' is not a primitive type [int, float, str, bool, None] but {type(v)}")
+      _default_kwarg[_k] = evaluate_node(v)
+    elif not type(v) == ast.Constant:
+      raise Exception(f"Default value for var '{_k}' is not a primitive type [int, float, str, bool, None] but {type(v)}")
+    else:
+      try:
+        _default_kwarg[_k] = v.value
+      except:
+        raise Exception(f"Default value for var '{_k}' is not a primitive type [int, float, str, bool, None] but {type(v)}")
   args_set = set([x.arg for x in args])
   args_na = args_set - set(_default_kwarg.keys())
   args_not_passed = set(args_na) - set(run_kwargs.keys())
@@ -52,8 +81,14 @@ def _parse_job_code(init_path: str, run_kwargs) -> Tuple[str, Dict]:
   if len(extra_args) and not fn.node.args.kwarg:
     raise Exception(f"Following arguments are passed but not consumed by {fn_name}: {extra_args}")
   final_dict = {}
-  for k,v in _default_kwarg.items():
-    final_dict[k] = type(v)(run_kwargs.get(k, v))
+
+  # left merge the two dicts: default_kwargs <- run_kwargs
+  merged = {**_default_kwarg, **run_kwargs}
+  for k,v in merged.items():
+    if type(v) == type(None):
+      final_dict[k] = run_kwargs.get(k, v)
+    else:
+      final_dict[k] = type(v)(run_kwargs.get(k, v))
   return final_dict, init_folder
 
 
@@ -74,6 +109,8 @@ class ProjectState:
 
 
 # aka Project_v4
+# TODO: @yashbonde: all the jobs are Job gRPC stubs
+# TODO: @yashbonde: all the experiments are Experiment gRPC stubs
 class Project:
   def __init__(self, id: str = ""):
     id = id or ProjectState.project_id
@@ -175,6 +212,7 @@ class Project:
 
     # all the arguments for the git files
     untracked: bool = False,
+    upload_git: bool = False,
     untracked_no_limit: bool = False,
 
     # all the things for resources
@@ -229,6 +267,12 @@ class Project:
     for k, v in run_kwargs.items():
       if type(v) == bool:
         reconstructed_cli_comm += f" --{k}"
+      elif type(v) == str:
+        reconstructed_cli_comm += f" --{k} '{v}'"
+      elif isinstance(v, (int, float)):
+        reconstructed_cli_comm += f" --{k} {v}"
+      elif isinstance(v, (list, tuple)):
+        reconstructed_cli_comm += f" --{k} \"[{v}]\""
       else:
         reconstructed_cli_comm += f" --{k} '{v}'"
     logger.debug(f"command: {reconstructed_cli_comm}")
@@ -252,21 +296,21 @@ class Project:
       git_det = {}
 
     # initialise the run with the big object and get the experiment_id
-    exp_tracker = self.get_exp_tracker(
-      metadata = ExperimentConfig(
-        run_kwargs = run_kwargs,
-        git = git_det,
-        resource = job.job_proto.resource,
-        cli_comm = reconstructed_cli_comm,
-        save_to_relic = True,
-        enable_system_monitoring = False,
-      ).to_dict(),
-    )
+    exp_config = ExperimentConfig(
+      run_kwargs = run_kwargs,
+      git = git_det,
+      resource = job.job_proto.resource,
+      cli_comm = reconstructed_cli_comm,
+      save_to_relic = True,
+      enable_system_monitoring = False,
+    ).to_dict()
+    logger.debug(lo("Experiment Config", **exp_config))
+    exp_tracker = self.get_exp_tracker(metadata = exp_config)
     tracker_pb = exp_tracker.tracker_pb
     logger.info(f"Created new tracker ID: {tracker_pb.id}")
 
     # create a git patch and upload it to relics, this is unique to LMAO Run
-    if git_det:
+    if git_det and upload_git:
       _zf = U.join(init_folder, "untracked.zip")
       zip_file = zipfile.ZipFile(_zf, "w", zipfile.ZIP_DEFLATED)
       patch_file = U.join(init_folder, "nbx_auto_patch.diff")
@@ -278,14 +322,12 @@ class Project:
         untracked_files = git_det["untracked_files"] # what to do with these?
         if untracked_files:
           # see if any file is larger than 10MB and if so, warn the user
-          warn_once = False
           for f in untracked_files:
             if os.path.getsize(f) > 1e7 and not untracked_no_limit:
               logger.warning(f"File: {f} is larger than 10MB and will not be available in sync")
               logger.warning("  Fix: use git to track small files, avoid large files")
               logger.warning("  Fix: nbox.Relics can be used to store large files")
               logger.warning("  Fix: use --untracked-no-limit to upload all files")
-              warn_once = True
               continue
             zip_file.write(f, arcname = f)
 
