@@ -317,11 +317,7 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   ))
 
   # UploadJobCode is responsible for uploading the code of the job
-  response: JobProto = mpb.rpc(
-    nbox_grpc_stub.UploadJobCode,
-    JobRequest(job = job_proto, auth_info=auth_info_pb()),
-    f"Failed to upload job: {job_proto.id} | {job_proto.name}"
-  )
+  response: JobProto = nbox_grpc_stub.UploadJobCode(JobRequest(job = job_proto, auth_info=auth_info_pb()))
   job_proto.MergeFrom(response)
   s3_url = job_proto.code.s3_url
   s3_meta = job_proto.code.s3_meta
@@ -364,20 +360,18 @@ def _upload_job_zip(zip_path: str, job_proto: JobProto, workspace_id: str):
   auth_info = auth_info_pb()
   if new_job:
     logger.info("Creating a new job")
-    mpb.rpc(
-      stub = nbox_grpc_stub.CreateJob,
-      message = JobRequest(job = job_proto, auth_info = auth_info),
-      err_msg = "Failed to create job"
-    )
+    nbox_grpc_stub.CreateJob(JobRequest(
+      job = job_proto,
+      auth_info = auth_info
+    ))
 
   if not old_job_proto.feature_gates:
     logger.info("Updating feature gates")
-    mpb.rpc(
-      stub = nbox_grpc_stub.UpdateJob,
-      message = UpdateJobRequest(job = job_proto, update_mask = FieldMask(paths = ["feature_gates"]), auth_info = auth_info),
-      err_msg = "Failed to update job",
-      raise_on_error = False
-    )
+    nbox_grpc_stub.UpdateJob(UpdateJobRequest(
+      job = job_proto,
+      update_mask = FieldMask(paths = ["feature_gates"]),
+      auth_info = auth_info
+    ))
 
   # write out all the commands for this job
   # logger.info("Run is now created, to 'trigger' programatically, use the following commands:")

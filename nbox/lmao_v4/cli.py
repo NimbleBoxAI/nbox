@@ -15,7 +15,10 @@ from nbox.lmao_v4.proto.project_pb2 import ListProjectsRequest, ListProjectsResp
 from nbox.lmao_v4.proto.logs_pb2 import TrackerLogRequest, TrackerLogResponse
 from nbox.lmao_v4 import common
 
-class Project:
+class ProjectRpc:
+  """LMAO Project RPC as CLI. Work in progress"""
+
+  # TODO: @yashbonde
   def list(self):
     lmao_stub = common.get_lmao_stub()
     out: ListProjectsResponse = lmao_stub.ListProjects(ListProjectsRequest())
@@ -99,7 +102,6 @@ def serving_logs(
     _f.write(logs_json)
 
 # add all the CLIs at the bottom here:
-LmaoCLI = {
-  "project": Project, 
-  "serving": serving_logs,
-}
+class LmaoCLI:
+  rpc = ProjectRpc
+  serving = serving_logs

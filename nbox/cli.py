@@ -26,12 +26,11 @@ from nbox.auth import init_secret, AuthConfig, secret
 from nbox.instance import Instance
 from nbox.sub_utils.ssh import tunnel
 from nbox.relics import Relics
-from nbox.lmao import LmaoCLI
 from nbox.lmao_v4 import LmaoCLI as Lmaov4CLI
 from nbox.version import __version__ as V
 from nbox.projects import Project
 from nbox.utils import logger, lo
-from nbox.plugins.base import PluginCLI
+# from nbox.plugins.base import PluginCLI
 
 # from nbox.jobs import Job, Serve
 from nbox.jd_core import JobsCli, ServeCli
@@ -181,16 +180,13 @@ def main():
     "build"    : Instance,
     "config"   : Config,
     "get"      : get,
-    # "jobs"     : Job,
     "jobs"     : JobsCli,
-    # "lmao"     : LmaoCLI,
     "lmao"     : Lmaov4CLI,
     "login"    : login,
     "open"     : open_home,
-    "plugins"  : PluginCLI,
+    # "plugins"  : PluginCLI,
     "projects" : Project,
     "relics"   : Relics,
-    # "serve"    : Serve,
     "serve"    : ServeCli,
     "tunnel"   : tunnel,
     "version"  : version,

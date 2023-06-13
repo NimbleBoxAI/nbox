@@ -94,11 +94,8 @@ class env:
 
 # logger /
 logger = get_logger(env) # package wide logger
-# logger = NBXUnifiedLogger(env) # package wide logger
 
 def log_traceback():
-  # for l in traceback.format_exc().splitlines():
-  #   logger.error(l)
   logger.error(traceback.format_exc())
 
 @contextmanager
@@ -113,6 +110,10 @@ def deprecation_warning(msg, remove, replace_by: str = None, help: str = None):
   if help:
     msg += f"\n  help: {help}"
   logger.warning(msg)
+
+
+class DeprecationError(Exception):
+  """Deprecation Error"""
 
 class FileLogger:
   """Flush logs to a file, useful when we don't want to mess with current logging"""
@@ -271,17 +272,22 @@ def from_json(x: str):
   else:
     return json.loads(x)
 
-def to_struct_pb(data: Dict) -> Struct:
+def dict_to_struct_pb(data: Dict) -> Struct:
   s = Struct()
   s.update(data)
   return s
 
-def from_struct_pb(struct: Struct, out: Dict = None) -> Dict:
+def dict_from_struct_pb(struct: Struct, out: Dict = None) -> Dict:
   if not out:
     out = {}
   for key, value in struct.items():
     if isinstance(value, Struct):
-      out[key] = from_struct_pb(value)
+      out[key] = dict_from_struct_pb(value)
+    elif isinstance(value, float):
+      if value.is_integer():
+        out[key] = int(value)
+      else:
+        out[key] = value
     else:
       out[key] = value
   return out
@@ -421,7 +427,7 @@ class SimplerTimes:
   def get_now_str() -> str:
     return SimplerTimes.get_now_datetime().strftime("%Y-%m-%d %H:%M:%S.%f")
 
-  def get_now_pb():
+  def get_now_pb() -> Timestamp_pb:
     ts = Timestamp_pb()
     ts.GetCurrentTime()
     return ts

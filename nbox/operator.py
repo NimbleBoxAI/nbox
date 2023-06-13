@@ -692,27 +692,13 @@ class Operator():
     elif self._op_type == ospec.OperatorType.WRAP_CLS:
       raise ValueError(f"Cannot call class wrappers directly, will interfere with nbox")
 
-    # input_dict = {}
     logger.debug(f"Calling operator '{self.__class__.__name__}'")
-    # _ts = SimplerTimes.get_now_pb()
-    # if self._tracer != None:
-    #   self._tracer(self.node)
     # ---- USER SEPERATION BOUNDARY ---- #
-
-    # with log_latency(f"{self.__class__.__name__}-forward"):
-    #   out = self.forward(*args, **kwargs)
 
     out = self.forward(*args, **kwargs)
 
     # ---- USER SEPERATION BOUNDARY ---- #
-    # outputs = {}
     logger.debug(f"Ending operator '{self.__class__.__name__}'")
-    # _ts = SimplerTimes.get_now_pb()
-    # self.node.run_status.MergeFrom(RunStatus(end = _ts, outputs = {k: str(type(v)) for k, v in outputs.items()}))
-    # if self._tracer != None:
-    #   self._tracer(self.node)
-
-    # if user has enabled _tracking, then we will store the input, output values as well
     return out
 
   def forward(self):

@@ -26,8 +26,8 @@ from nbox.jd_core.serving import Serve
 def upload_job_folder(
   method: str,
   init_folder: str,
-  id: str = "",
   project_id: str = "",
+  id: str = "",
 
   # job / deploy rpc things
   trigger: bool = False,
@@ -53,7 +53,6 @@ def upload_job_folder(
 
   # there's no more need to pass the workspace_id anymore
   workspace_id: str = "",
-
 
   # some extra things for functionality
   _ret: bool = False,
@@ -108,16 +107,17 @@ def upload_job_folder(
   if model_name and method != OT.SERVING:
     raise ValueError(f"model_name can only be used with '{OT.SERVING}'")
   
-  # get the correct ID based on the project_id
-  if (not project_id and not id) or (project_id and id):
-    raise ValueError("Either --project-id or --id must be present")
-  if project_id:
-    p = Project(project_id)
+  # get the correct Job ID based on the project_id
+
+  if (id and project_id) and not (id or project_id):
+    raise ValueError("Either id or project_id is required")
+  if not id:
+    project = Project(project_id)
     if method == OT.JOB:
-      id = p.get_job_id()
+      id = project.get_job_id()
     else:
-      id = p.get_deployment_id()
-    logger.info(f"Using project_id: {project_id}, found id: {id}")
+      id = project.get_deployment_id()
+  logger.info(f"Using project_id: {project_id}, found id: {id}")
 
   if ":" not in init_folder:
     # this means we are uploading a traditonal folder that contains a `nbx_user.py` file
@@ -236,6 +236,7 @@ def upload_job_folder(
 
   # common to both, kept out here because these two will eventually merge
   nbx_auth_info = auth_info_pb()
+  nbx_auth_info.project_id = project_id
   if method == ospec.OperatorType.JOB:
     # since user has not passed any arguments, we will need to check if the job already exists
     job_proto: JobProto = nbox_grpc_stub.GetJob(

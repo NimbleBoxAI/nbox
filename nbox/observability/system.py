@@ -7,8 +7,6 @@ import psutil
 import threading
 from queue import Queue
 
-from nbox.lmao.proto.lmao_v2_pb2 import *
-
 import GPUtil
 HAS_GPU = len(GPUtil.getGPUs())
 

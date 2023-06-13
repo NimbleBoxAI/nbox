@@ -3,6 +3,7 @@ import time
 import cloudpickle
 import requests
 from hashlib import md5
+from tqdm import trange
 
 from subprocess import Popen
 from nbox.auth import secret
@@ -14,6 +15,7 @@ from nbox.relics.proto.relics_rpc_pb2 import (
 )
 from nbox.relics.proto.relics_pb2 import (
   RelicFile,
+  RelicFiles,
   Relic as RelicProto,
   BucketMetadata,
 )
@@ -94,14 +96,14 @@ class Relics():
         raise ValueError(f"Relic {relic_name} does not exist")
     else:
       self.relic = _relic
-    
+
     self.uat = UserAgentType.PYTHON_REQUESTS
     self.relic_name = self.relic.name
 
   def set_user_agent(self, user_agent_type: str):
     if user_agent_type not in UserAgentType.all():
       raise ValueError(f"Invalid user agent type: {user_agent_type}")
-    logger.info(f"Setting user agent to {user_agent_type} from {self.uat}")
+    logger.debug(f"Setting user agent to {user_agent_type} from {self.uat}")
     self.uat = user_agent_type
 
   def __repr__(self):
@@ -114,7 +116,7 @@ class Relics():
       relic_file.name = f"{self.prefix}/{relic_file.name}"
 
     # ideally this is a lot like what happens in nbox
-    logger.info(f"Uploading {local_path} to {relic_file.name}")
+    logger.debug(f"Uploading {local_path} to {relic_file.name}")
     for _ in range(2):
       out = self.stub.create_file(_RelicFile = relic_file,)
       if out != None:
@@ -130,8 +132,8 @@ class Relics():
     uat = self.uat
     old_uat = uat
     if out.size > ten_mb:
-      logger.warning(f"File {local_path} is larger than 10 MiB ({out.size} bytes), this might take a while")
-      logger.warning(f"Switching to user/agent: cURL for this upload")
+      logger.debug(f"File {local_path} is larger than 10 MiB ({out.size} bytes)")
+      logger.debug(f"Switching to user/agent: cURL for this upload")
       uat = UserAgentType.CURL
 
     if uat == UserAgentType.PYTHON_REQUESTS:
@@ -142,7 +144,7 @@ class Relics():
         data = out.body,
         files = {"file": (out.body["key"], open(local_path, "rb"))}
       )
-      logger.info(f"Upload status: {r.status_code}")
+      logger.debug(f"Upload status: {r.status_code}")
       r.raise_for_status()
     elif uat == UserAgentType.CURL:
       # TIL: https://stackoverflow.com/a/58237351
@@ -159,7 +161,7 @@ class Relics():
       Popen(shlex.split(shell_com)).wait()
 
     if old_uat != uat:
-      logger.warning(f"Restoring user/agent to {old_uat}")
+      logger.debug(f"Restoring user/agent to {old_uat}")
       self.set_user_agent(old_uat)
 
   def _download_relic_file(self, local_path: str, relic_file: RelicFile):
@@ -187,7 +189,7 @@ class Relics():
       logger.warning(f"Switching to user/agent: cURL for this download")
       uat = UserAgentType.CURL
 
-    if uat == UserAgentType.PYTHON_REQUESTS:    
+    if uat == UserAgentType.PYTHON_REQUESTS:
       # do not perform merge here because "url" might get stored in MongoDB
       # relic_file.MergeFrom(out)
       logger.debug(f"URL: {out.url}")
@@ -195,10 +197,10 @@ class Relics():
         r.raise_for_status()
         total_size = 0
         with open(local_path, 'wb') as f:
-          for chunk in r.iter_content(chunk_size=8192): 
+          for chunk in r.iter_content(chunk_size=8192):
             # If you have chunk encoded response uncomment if
             # and set chunk_size parameter to None.
-            #if chunk: 
+            #if chunk:
             f.write(chunk)
             total_size += len(chunk)
     elif uat == UserAgentType.CURL:
@@ -233,16 +235,22 @@ class Relics():
       raise ValueError("Relic does not exist, pass create=True")
     logger.debug(f"Putting '{local_path}' to '{remote_path}'")
     if os.path.isdir(local_path):
-      all_f = get_files_in_folder(local_path, abs_path=False)
+      all_f = {}
+      for lp in get_files_in_folder(local_path, abs_path=False):
+        all_f[lp] = os.path.join(remote_path, lp).strip("./")
     else:
-      all_f = [local_path]
+      all_f = {local_path: remote_path}
+    all_f = list(all_f.items())
     logger.info(f"Found {len(all_f)} files, starting upload ...")
-    # TODO: @yashbonde work upload for folders as well! works for download
 
-    relic_file = get_relic_file(local_path, self.username, self.workspace_id)
-    relic_file.relic_name = self.relic_name
-    relic_file.name = remote_path # override the name
-    self._upload_relic_file(local_path, relic_file)
+    pbar = trange(len(all_f))
+    for i in pbar:
+      lp, rp = all_f[i]
+      relic_file = get_relic_file(lp, self.username, self.workspace_id)
+      relic_file.relic_name = self.relic_name
+      relic_file.name = rp # override the name
+      pbar.set_description(f"{lp} => {rp}, ({relic_file.size//1000} KiB)")
+      self._upload_relic_file(lp, relic_file)
 
   def get(self, local_path: str):
     """Get the file at this path from the relic"""
@@ -298,11 +306,15 @@ class Relics():
     relic_file = get_relic_file(remote_path, self.username, self.workspace_id)
     relic_file.relic_name = self.relic_name
     for _ in range(2):
-      out = self.stub.delete_relic_file(relic_file)
+      rf = RelicFiles(
+        workspace_id=self.workspace_id,
+      )
+      rf.files.append(relic_file)
+      out = self.stub.delete_multi_files(rf)
       if out != None:
         break
       time.sleep(1)
-    
+
     if not out.success:
       logger.error(out.message)
       raise ValueError("Could not delete file")
@@ -366,7 +378,7 @@ class Relics():
       raise ValueError("Relic does not exist, nothing to delete")
     logger.warning(f"Deleting relic {self.relic_name}")
     self.stub.delete_relic(self.relic)
-  
+
   def ls(self, path: str = "", recurse: bool = False):
     """Iterate over all the files at the path"""
     if self.relic is None:
@@ -387,7 +399,7 @@ class Relics():
 
     for f in out.files:
       yield f
-    
+
     if recurse:
       for f in out.files:
         if f.name == path:

@@ -173,6 +173,12 @@ class ExperimentConfig:
       "save_to_relic": self.save_to_relic,
       "enable_system_monitoring": self.enable_system_monitoring,
     }
+  
+  @classmethod
+  def from_dict(cls, data):
+    if not isinstance(data, Resource):
+      data["resource"] = resource_from_dict(data["resource"])
+    return cls(**data)
 
   def to_json(self):
     return json.dumps(self.to_dict())
